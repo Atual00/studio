@@ -1,3 +1,4 @@
+// src/app/clientes/[id]/page.tsx
 'use client'; // Required for state, effects, and client-side interactions
 
 import {useState, useEffect} from 'react';
@@ -9,6 +10,7 @@ import {Separator} from '@/components/ui/separator';
 import {Loader2, Edit, ArrowLeft, Building, User, Banknote, MapPin, Mail, Phone, FileText} from 'lucide-react';
 import Link from 'next/link';
 import { type ClientFormValues } from '@/components/clientes/client-form'; // Import type from form
+import { Badge } from '@/components/ui/badge'; // Import Badge component
 import { z } from 'zod'; // Import Zod
 
 // --- Mock Data and Types ---
@@ -266,9 +268,7 @@ export default function ClienteDetalhesPage() {
 }
 
 
-// Define the type based on form schema
-// This schema is only used here to define the type `ClientDetails` via ClientFormValues
-// It's not used for validation on this page, but ensures type consistency.
+// Define Zod schema here only if not importing (ensure consistency)
 const clientFormSchema = z.object({
   razaoSocial: z.string(),
   nomeFantasia: z.string().optional(),
