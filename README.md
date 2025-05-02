@@ -10,6 +10,7 @@ To run this application locally, follow these steps:
 
 *   Node.js (Version 18 or later recommended)
 *   npm or yarn package manager
+*   Google Generative AI API Key (for AI features)
 
 **Installation:**
 
@@ -27,6 +28,13 @@ To run this application locally, follow these steps:
     ```bash
     yarn install
     ```
+3.  **Configure Environment Variables:**
+    *   Create a file named `.env.local` in the root directory of the project (or modify the existing `.env` file, but **be careful not to commit secrets**).
+    *   Add your Google Generative AI API key to the file:
+        ```env
+        GOOGLE_GENAI_API_KEY="YOUR_API_KEY_HERE"
+        ```
+        Replace `"YOUR_API_KEY_HERE"` with your actual API key. You can obtain one from [Google AI Studio](https://aistudio.google.com/app/apikey).
 
 **Running the Development Server:**
 
