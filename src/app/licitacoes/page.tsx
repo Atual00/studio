@@ -1,3 +1,4 @@
+// src/app/licitacoes/page.tsx
 import {Button} from '@/components/ui/button';
 import {Card, CardHeader, CardTitle, CardDescription, CardContent} from '@/components/ui/card';
 import {Table, TableHeader, TableRow, TableHead, TableBody, TableCell} from '@/components/ui/table';
@@ -80,7 +81,26 @@ export default function LicitacoesPage() {
   // In a real app, fetch licitacoes from your data source with filtering/pagination
   const licitacoes = mockLicitacoes;
 
-  // TODO: Implement filtering state and logic
+  // TODO: Implement filtering state and logic (using useState and useEffect)
+  // Example state:
+  // const [filteredLicitacoes, setFilteredLicitacoes] = useState(mockLicitacoes);
+  // const [filterCliente, setFilterCliente] = useState('');
+  // const [filterProtocolo, setFilterProtocolo] = useState('');
+  // const [filterStatus, setFilterStatus] = useState('all_status'); // Initial value for 'Todos Status'
+  // const [filterDate, setFilterDate] = useState('');
+
+  // Example filter application logic in useEffect:
+  // useEffect(() => {
+  //   let result = mockLicitacoes;
+  //   if (filterCliente) { ... }
+  //   if (filterProtocolo) { ... }
+  //   if (filterStatus !== 'all_status') {
+  //      result = result.filter(lic => lic.status === filterStatus);
+  //   }
+  //   if (filterDate) { ... }
+  //   setFilteredLicitacoes(result);
+  // }, [filterCliente, filterProtocolo, filterStatus, filterDate]);
+
 
   return (
     <div className="space-y-6">
@@ -103,20 +123,33 @@ export default function LicitacoesPage() {
         </CardHeader>
         <CardContent className="pt-0">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Input placeholder="Filtrar por Cliente ou CNPJ..." />
-            <Input placeholder="Filtrar por Protocolo..." />
-            <Select>
+            <Input
+              placeholder="Filtrar por Cliente ou CNPJ..."
+              // onChange={(e) => setFilterCliente(e.target.value)} value={filterCliente}
+            />
+            <Input
+              placeholder="Filtrar por Protocolo..."
+              // onChange={(e) => setFilterProtocolo(e.target.value)} value={filterProtocolo}
+            />
+            <Select
+              // onValueChange={setFilterStatus} value={filterStatus}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Filtrar por Status..." />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="todos">Todos Status</SelectItem>
+                {/* Changed value from "todos" to "all_status" */}
+                <SelectItem value="all_status">Todos Status</SelectItem>
                 {Object.entries(statusMap).map(([key, {label}]) => (
                   <SelectItem key={key} value={key}>{label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            <Input type="date" placeholder="Filtrar por Data..." />
+            <Input
+              type="date"
+              placeholder="Filtrar por Data..."
+              // onChange={(e) => setFilterDate(e.target.value)} value={filterDate}
+             />
             {/* Consider adding platform, modality filters */}
              <Button variant="outline" className="sm:col-span-2 lg:col-span-1">Aplicar Filtros</Button>
           </div>
@@ -145,6 +178,7 @@ export default function LicitacoesPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
+              {/* Use filteredLicitacoes here instead of licitacoes when filtering is implemented */}
               {licitacoes.length > 0 ? (
                 licitacoes.map(lic => (
                   <TableRow key={lic.id}>

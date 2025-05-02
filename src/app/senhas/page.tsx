@@ -154,7 +154,7 @@ export default function SenhasPage() {
   const [filteredCredenciais, setFilteredCredenciais] = useState<Credencial[]>([]);
   const [clientes, setClientes] = useState<ClienteSimple[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterCliente, setFilterCliente] = useState('');
+  const [filterCliente, setFilterCliente] = useState('todos'); // Initial state for "Todos os Clientes"
   const [filterPortal, setFilterPortal] = useState('');
   const [showPasswordId, setShowPasswordId] = useState<string | null>(null); // Track which password to show
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -185,6 +185,7 @@ export default function SenhasPage() {
         ]);
         setCredenciais(credsData);
         setClientes(clientesData);
+        setFilteredCredenciais(credsData); // Initialize filtered list
       } catch (err) {
         console.error("Erro ao carregar dados de senhas:", err);
         toast({ title: "Erro", description: "Falha ao carregar credenciais ou clientes.", variant: "destructive" });
@@ -198,7 +199,8 @@ export default function SenhasPage() {
   // Filter logic
   useEffect(() => {
     let result = credenciais;
-    if (filterCliente) {
+    // Updated filter logic for Cliente
+    if (filterCliente && filterCliente !== 'todos') {
       result = result.filter(c => c.clienteId === filterCliente);
     }
     if (filterPortal) {
@@ -330,7 +332,8 @@ export default function SenhasPage() {
                 <SelectValue placeholder="Filtrar por Cliente..." />
               </SelectTrigger>
               <SelectContent>
-                 <SelectItem value="">Todos os Clientes</SelectItem>
+                 {/* Changed value from "" to "todos" */}
+                 <SelectItem value="todos">Todos os Clientes</SelectItem>
                  {clientes.map(c => (
                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                  ))}

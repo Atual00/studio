@@ -1,3 +1,4 @@
+// src/app/documentos/page.tsx
 'use client'; // For state and effects
 
 import {useState, useEffect} from 'react';
@@ -109,7 +110,7 @@ export default function DocumentosPage() {
   const [filteredDocumentos, setFilteredDocumentos] = useState<Documento[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterCliente, setFilterCliente] = useState('');
-  const [filterTipo, setFilterTipo] = useState('');
+  const [filterTipo, setFilterTipo] = useState('todos'); // Initial state set to 'todos'
   const [filterStatus, setFilterStatus] = useState<'todos' | 'vencido' | 'vence_15d' | 'vence_30d' | 'valido'>('todos');
 
    // Fetch data on mount
@@ -119,6 +120,7 @@ export default function DocumentosPage() {
       try {
         const data = await fetchDocumentos();
         setDocumentos(data);
+        setFilteredDocumentos(data); // Initialize filtered list
       } catch (err) {
         console.error('Erro ao buscar documentos:', err);
         // Add toast notification for error
@@ -139,7 +141,8 @@ export default function DocumentosPage() {
         d.clienteNome.toLowerCase().includes(filterCliente.toLowerCase())
       );
     }
-    if (filterTipo) {
+    // Updated filter logic for Tipo
+    if (filterTipo && filterTipo !== 'todos') {
        result = result.filter(d =>
         d.tipoDocumento.toLowerCase().includes(filterTipo.toLowerCase())
       );
@@ -159,7 +162,8 @@ export default function DocumentosPage() {
                 case 'vence_30d':
                      return venc ? !isBefore(venc, today) && differenceInDays(venc, today) > 15 && differenceInDays(venc, today) <= 30 : false;
                  case 'valido':
-                     return venc ? !isBefore(venc, today) && differenceInDays(venc, today) > 30 : (statusInfo.label === 'Não Aplicável');
+                     // Ensure N/A documents are included in 'valido' filter
+                     return venc ? (!isBefore(venc, today) && differenceInDays(venc, today) > 30) : (statusInfo.label === 'Não Aplicável');
                 default:
                     return true;
             }
@@ -222,7 +226,8 @@ export default function DocumentosPage() {
                 <SelectValue placeholder="Filtrar por Tipo..." />
               </SelectTrigger>
               <SelectContent>
-                 <SelectItem value="">Todos os Tipos</SelectItem>
+                 {/* Changed value from "" to "todos" */}
+                 <SelectItem value="todos">Todos os Tipos</SelectItem>
                  {uniqueTipos.sort().map(tipo => (
                    <SelectItem key={tipo} value={tipo}>{tipo}</SelectItem>
                  ))}
