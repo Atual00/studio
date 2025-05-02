@@ -8,7 +8,8 @@ import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Separator} from '@/components/ui/separator';
 import {Loader2, Edit, ArrowLeft, Building, User, Banknote, MapPin, Mail, Phone, FileText} from 'lucide-react';
 import Link from 'next/link';
-import { ClientFormValues } from '@/components/clientes/client-form'; // Import type from form
+import { type ClientFormValues } from '@/components/clientes/client-form'; // Import type from form
+import { z } from 'zod'; // Import Zod
 
 // --- Mock Data and Types ---
 // Assuming ClientFormValues covers all necessary fields for display
@@ -264,10 +265,10 @@ export default function ClienteDetalhesPage() {
   );
 }
 
-// Define the type based on form schema
-type ClientFormValues = z.infer<typeof clientFormSchema>;
 
-// Define Zod schema here only if not importing (ensure consistency)
+// Define the type based on form schema
+// This schema is only used here to define the type `ClientDetails` via ClientFormValues
+// It's not used for validation on this page, but ensures type consistency.
 const clientFormSchema = z.object({
   razaoSocial: z.string(),
   nomeFantasia: z.string().optional(),
@@ -297,3 +298,6 @@ const clientFormSchema = z.object({
   socioEnderecoCep: z.string().optional(),
   observacoes: z.string().optional(),
 });
+
+// Define the type based on the schema above
+type ClientFormValues = z.infer<typeof clientFormSchema>;
