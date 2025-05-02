@@ -1,3 +1,4 @@
+
 'use client'; // Required for state, effects, and client-side interactions
 
 import {useState, useEffect} from 'react';
@@ -28,7 +29,7 @@ import {Badge} from '@/components/ui/badge';
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Separator} from '@/components/ui/separator';
 import {FileCheck2, FileX2, HelpCircle, Upload, Bot, Loader2, CheckCircle, XCircle, Send} from 'lucide-react';
-import {validateBidDocuments, type ValidateBidDocumentsOutput} from '@/ai/flows/document-validator'; // Import AI flow
+import {validateBidDocuments, type ValidateBidDocumentsOutput, filesToValidateInput} from '@/ai/flows/document-validator'; // Import AI flow and helper
 import {useToast} from '@/hooks/use-toast'; // Import useToast hook
 
 // --- Mock Data and Types ---
@@ -302,51 +303,45 @@ export default function LicitacaoDetalhesPage() {
     setValidationResult(null); // Clear previous results
 
     try {
-       const fileDataUris = await Promise.all(
-          uploadedFiles.map(file => {
-            return new Promise<string>((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onload = () => resolve(reader.result as string);
-              reader.onerror = reject;
-              reader.readAsDataURL(file);
-            });
-          })
-       );
+      // Use the helper function to convert files to the required input format
+      const input = await filesToValidateInput(uploadedFiles, bidCriteria);
 
-      const input = {
-        documents: fileDataUris,
-        bidCriteria: bidCriteria,
-      };
-
-      console.log("Sending to AI:", input); // Log input for debugging
+      console.log("Sending to AI:", JSON.stringify(input, null, 2)); // Log input for debugging
 
       const result = await validateBidDocuments(input);
       setValidationResult(result);
-      console.log("AI Result:", result);
+      console.log("AI Result:", JSON.stringify(result, null, 2));
 
         // Automatically update checklist based on AI result (optional)
-       if (result.validity) {
+       if (result.validityDetails) {
          const updatedChecklist = { ...checklist };
          let allRequiredPresentAndValid = true;
 
-         requiredDocuments.forEach(docInfo => {
-           const docFileName = uploadedFiles.find(f => f.name.toLowerCase().includes(docInfo.label.toLowerCase()))?.name;
-           const isValid = docFileName ? result.validity[docFileName] ?? false : false; // Check validity by filename, default to false if not found
+         // Map AI results by document name for easier lookup
+         const validityMap = new Map(result.validityDetails.map(detail => [detail.documentName.toLowerCase(), detail.isValid]));
 
-           // Update checklist only if the document exists in the result validity map
-           if (docFileName && result.validity.hasOwnProperty(docFileName)) {
-             updatedChecklist[docInfo.id] = isValid;
+         requiredDocuments.forEach(docInfo => {
+           const docLabelLower = docInfo.label.toLowerCase();
+           // Find *any* uploaded file whose name contains the required doc label (case-insensitive)
+           const uploadedFile = uploadedFiles.find(f => f.name.toLowerCase().includes(docLabelLower));
+           const docFileNameLower = uploadedFile?.name.toLowerCase();
+
+           let isConsideredValid = false;
+           if (docFileNameLower && validityMap.has(docFileNameLower)) {
+             isConsideredValid = validityMap.get(docFileNameLower) ?? false;
            }
 
+           // Update checklist based on whether a matching file was found and considered valid by the AI
+           updatedChecklist[docInfo.id] = !!uploadedFile && isConsideredValid;
+
+
            // Check if this required doc is missing or invalid
-           if (!docFileName || !isValid) {
-                // Check if it's listed as missing, handle cases where AI might miss it but file isn't uploaded
-                const isMissing = result.missingDocuments?.some(missing => missing.toLowerCase().includes(docInfo.label.toLowerCase()));
-                if (!docFileName || isMissing || !isValid) {
-                     allRequiredPresentAndValid = false;
-                     // Optionally keep checklist false if invalid or missing
-                     updatedChecklist[docInfo.id] = false;
-                }
+           const isMissing = result.missingDocuments?.some(missing => missing.toLowerCase().includes(docLabelLower));
+
+           if (!uploadedFile || !isConsideredValid || isMissing) {
+                allRequiredPresentAndValid = false;
+                // Ensure checklist is false if invalid or missing
+                updatedChecklist[docInfo.id] = false;
            }
          });
 
@@ -360,7 +355,10 @@ export default function LicitacaoDetalhesPage() {
          } else {
               // Revert checklist changes if backend update fails (optional)
               toast({ title: "Erro", description: "Falha ao salvar checklist atualizado pela IA.", variant: "destructive" });
-               // Consider reverting `checklist` state here if needed
+               // Consider reverting `checklist` state here if needed by refetching or storing original
+               const originalData = await fetchLicitacaoDetails(id); // Refetch to revert
+               if (originalData) setChecklist(originalData.checklist || {});
+
          }
 
 
@@ -376,7 +374,7 @@ export default function LicitacaoDetalhesPage() {
 
     } catch (error) {
       console.error('Erro na validação por IA:', error);
-      toast({title: "Erro de Validação", description: "Falha ao validar documentos com IA.", variant: "destructive"});
+      toast({title: "Erro de Validação", description: `Falha ao validar documentos com IA. ${error instanceof Error ? error.message : ''}`, variant: "destructive"});
     } finally {
       setIsValidating(false);
     }
@@ -493,26 +491,34 @@ export default function LicitacaoDetalhesPage() {
                     <CardDescription>Marque os documentos obrigatórios conforme o edital.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                    {requiredDocuments.map(doc => (
-                        <div key={doc.id} className="flex items-center space-x-3">
-                            <Checkbox
-                                id={`chk-${doc.id}`}
-                                checked={checklist[doc.id] || false}
-                                onCheckedChange={(checked) => handleChecklistChange(doc.id, !!checked)}
-                                disabled={isSavingChecklist}
-                            />
-                            <Label htmlFor={`chk-${doc.id}`} className="flex-1 text-sm font-normal">
-                                {doc.label}
-                            </Label>
-                             {/* Indicate AI validation status if available */}
-                            {validationResult?.validity && uploadedFiles.some(f => f.name.toLowerCase().includes(doc.label.toLowerCase())) && (
-                                validationResult.validity[uploadedFiles.find(f => f.name.toLowerCase().includes(doc.label.toLowerCase()))!.name]
-                                    ? <CheckCircle className="h-4 w-4 text-green-600" title="Validado pela IA" />
-                                    : <XCircle className="h-4 w-4 text-red-600" title="Inválido/Problema (IA)" />
-                            )}
-                            {isSavingChecklist && checklist[doc.id] !== licitacao.checklist?.[doc.id] && <Loader2 className="h-4 w-4 animate-spin" />}
-                        </div>
-                    ))}
+                    {requiredDocuments.map(doc => {
+                        // Find the AI validation result for this specific required document type
+                        const docLabelLower = doc.label.toLowerCase();
+                        const aiValidationDetail = validationResult?.validityDetails?.find(detail =>
+                            detail.documentName.toLowerCase().includes(docLabelLower)
+                        );
+
+                        return (
+                            <div key={doc.id} className="flex items-center space-x-3">
+                                <Checkbox
+                                    id={`chk-${doc.id}`}
+                                    checked={checklist[doc.id] || false}
+                                    onCheckedChange={(checked) => handleChecklistChange(doc.id, !!checked)}
+                                    disabled={isSavingChecklist}
+                                />
+                                <Label htmlFor={`chk-${doc.id}`} className="flex-1 text-sm font-normal">
+                                    {doc.label}
+                                </Label>
+                                {/* Indicate AI validation status if available */}
+                                {aiValidationDetail && (
+                                    aiValidationDetail.isValid
+                                        ? <CheckCircle className="h-4 w-4 text-green-600" title={`Validado pela IA ${aiValidationDetail.reasoning ? `(${aiValidationDetail.reasoning})` : ''}`} />
+                                        : <XCircle className="h-4 w-4 text-red-600" title={`Inválido/Problema (IA): ${aiValidationDetail.reasoning || 'Sem detalhes'}`} />
+                                )}
+                                {isSavingChecklist && checklist[doc.id] !== licitacao.checklist?.[doc.id] && <Loader2 className="h-4 w-4 animate-spin" />}
+                            </div>
+                        );
+                    })}
                 </CardContent>
                  <CardFooter>
                     {isSavingChecklist && <p className="text-sm text-muted-foreground">Salvando checklist...</p>}
@@ -557,16 +563,16 @@ export default function LicitacaoDetalhesPage() {
                      {validationResult && (
                         <Alert variant={validationResult.completeness ? 'default' : 'destructive'} className="mt-4">
                             {validationResult.completeness ? <CheckCircle className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
-                            <AlertTitle>{validationResult.completeness ? 'Validação Concluída' : 'Validação Concluída (Incompleto)'}</AlertTitle>
+                            <AlertTitle>{validationResult.completeness ? 'Validação Concluída' : 'Validação Concluída (Incompleto/Inválido)'}</AlertTitle>
                             <AlertDescription>
-                                <p>Conjunto de documentos: {validationResult.completeness ? 'Completo' : 'Incompleto'}.</p>
+                                <p>Conjunto de documentos: {validationResult.completeness ? 'Completo' : 'Incompleto ou Inválido'}.</p>
                                 {validationResult.missingDocuments && validationResult.missingDocuments.length > 0 && (
-                                <p>Documentos faltantes/inválidos identificados: {validationResult.missingDocuments.join(', ')}</p>
+                                <p>Documentos faltantes identificados: {validationResult.missingDocuments.join(', ')}</p>
                                 )}
                                 <p className="mt-2 font-medium">Status de Validade por Arquivo:</p>
                                 <ul className="list-disc list-inside">
-                                {Object.entries(validationResult.validity).map(([docName, isValid]) => (
-                                    <li key={docName}>{docName}: {isValid ? 'Válido' : 'Inválido/Problema'}</li>
+                                {validationResult.validityDetails.map((detail) => (
+                                    <li key={detail.documentName}>{detail.documentName}: {detail.isValid ? 'Válido' : 'Inválido/Problema'} {detail.reasoning ? `(${detail.reasoning})` : ''}</li>
                                 ))}
                                 </ul>
                             </AlertDescription>
