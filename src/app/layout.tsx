@@ -1,6 +1,6 @@
 import type {Metadata} from 'next';
 import {GeistSans} from 'geist/font/sans';
-import {GeistMono} from 'geist/font/mono';
+// Removed GeistMono import as it's not found and not explicitly used
 import './globals.css';
 import {cn} from '@/lib/utils';
 import {SidebarProvider, Sidebar, SidebarTrigger, SidebarContent, SidebarInset} from '@/components/ui/sidebar';
@@ -19,7 +19,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR" suppressHydrationWarning>
-      <body className={cn('min-h-screen bg-background font-sans antialiased', GeistSans.variable, GeistMono.variable)}>
+      <body className={cn('min-h-screen bg-background font-sans antialiased', GeistSans.variable)}>
         <SidebarProvider>
           <Sidebar>
             <AppSidebar />
