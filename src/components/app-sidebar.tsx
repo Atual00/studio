@@ -1,3 +1,4 @@
+
 'use client';
 
 import Link from 'next/link';
@@ -10,7 +11,7 @@ import {
   FileText,
   KeyRound,
   CalendarDays,
-  ShieldCheck,
+  Settings, // Added Settings icon
   Briefcase,
 } from 'lucide-react';
 
@@ -34,6 +35,7 @@ const menuItems = [
   {href: '/senhas', label: 'Senhas', icon: KeyRound},
   {href: '/calendario/metas', label: 'Calendário Metas', icon: CalendarDays},
   {href: '/calendario/disputas', label: 'Calendário Disputas', icon: CalendarDays},
+  {href: '/configuracoes', label: 'Configurações', icon: Settings}, // Added Settings item
   // { href: '/crm', label: 'CRM', icon: Briefcase }, // Placeholder for CRM
 ];
 
@@ -91,3 +93,4 @@ export default function AppSidebar() {
     </>
   );
 }
+
