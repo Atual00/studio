@@ -1,7 +1,7 @@
 'use client';
 
 import {zodResolver} from '@hookform/resolvers/zod';
-import {useForm} from 'react-hook-form';
+import {useForm, Controller} from 'react-hook-form'; // Import Controller
 import {z} from 'zod';
 import {useState, useEffect} from 'react';
 import {format, parseISO} from 'date-fns';
@@ -62,7 +62,6 @@ interface LicitacaoFormProps {
 }
 
 export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitting = false}: LicitacaoFormProps) {
-  // Removed internal isSubmitting state
 
   // Helper function to safely parse dates from initialData (which might be string or Date)
     const parseInitialDate = (date: string | Date | undefined): Date | undefined => {
@@ -83,7 +82,7 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
       // Ensure dates are Date objects for the form state
       dataInicio: parseInitialDate(initialData?.dataInicio),
       dataMetaAnalise: parseInitialDate(initialData?.dataMetaAnalise),
-      // Ensure valorCobrado is a number if provided
+      // Ensure valorCobrado is a number if provided, otherwise undefined
       valorCobrado: initialData?.valorCobrado !== undefined ? Number(initialData.valorCobrado) : undefined,
     },
   });
@@ -119,7 +118,7 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
       if (rawValue === '0' || rawValue === 'R$ 0,00' || rawValue.replace(/[^0-9]/g, '') === '0') {
           numberValue = 0;
           field.onChange(0); // Update form state with 0
-          e.target.value = 'R$ 0,00'; // Force display format for zero
+          // No need to manually set e.target.value, let the controlled component update
           return; // Exit early
       }
 
@@ -133,10 +132,6 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
           numberValue = isNaN(parsedNum) ? undefined : parsedNum;
           field.onChange(numberValue); // Update form state
       }
-
-     // Update displayed value (formatted) - Let React handle re-render based on state change
-     // Avoid manually setting e.target.value here unless necessary for immediate feedback issues
-     // This relies on the component re-rendering with the formatted value from form state
    };
 
 
@@ -179,7 +174,7 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
             <FormItem>
               <FormLabel>Cliente*</FormLabel>
               {/* Use field.value directly, ensure initial is undefined */}
-              <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
+              <Select onValueChange={field.onChange} value={field.value || ''} disabled={isSubmitting}>
                 <FormControl>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione o cliente participante" />
@@ -206,7 +201,7 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
             render={({field}) => (
               <FormItem>
                 <FormLabel>Modalidade*</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
+                <Select onValueChange={field.onChange} value={field.value || ''} disabled={isSubmitting}>
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione a modalidade" />
@@ -246,7 +241,7 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
             render={({field}) => (
               <FormItem>
                 <FormLabel>Plataforma*</FormLabel>
-                 <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
+                 <Select onValueChange={field.onChange} value={field.value || ''} disabled={isSubmitting}>
                    <FormControl>
                      <SelectTrigger>
                        <SelectValue placeholder="Onde a licitação ocorrerá" />
@@ -271,16 +266,16 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
                 <FormItem>
                   <FormLabel>Valor Cobrado*</FormLabel>
                   <FormControl>
-                     {/* Control the input value with the formatted string */}
                     <Input
                      placeholder="R$ 0,00"
-                     value={currentValorCobradoFormatted} // Display formatted value
-                     onChange={(e) => handleCurrencyChange(e, field)} // Handle change to parse/set number
-                     onBlur={(e) => { // Ensure correct format on blur
-                        e.target.value = formatCurrency(field.value);
+                     type="text" // Use text type for better control over formatting
+                     value={currentValorCobradoFormatted || ''} // Ensure value is always a string
+                     onChange={(e) => handleCurrencyChange(e, field)}
+                     onBlur={(e) => { // Format on blur using the reliable form state value
+                       e.target.value = formatCurrency(form.getValues('valorCobrado'));
                      }}
                      disabled={isSubmitting}
-                     inputMode="decimal" // Hint for mobile keyboards
+                     inputMode="decimal"
                     />
                   </FormControl>
                    <FormDescription>Valor que será faturado para o cliente (pode ser R$ 0,00).</FormDescription>
