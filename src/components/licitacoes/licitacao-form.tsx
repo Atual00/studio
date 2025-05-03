@@ -15,6 +15,7 @@ import {Textarea} from '@/components/ui/textarea';
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@/components/ui/select';
 import {Popover, PopoverContent, PopoverTrigger} from '@/components/ui/popover';
 import {Calendar} from '@/components/ui/calendar';
+import {Label} from '@/components/ui/label'; // Import Label component
 import {cn} from '@/lib/utils';
 import { type ClientListItem } from '@/services/clientService'; // Import ClientListItem type
 
@@ -49,7 +50,7 @@ const licitacaoFormSchema = z.object({
   observacoes: z.string().optional(),
 });
 
-type LicitacaoFormValues = z.infer<typeof licitacaoFormSchema>;
+export type LicitacaoFormValues = z.infer<typeof licitacaoFormSchema>;
 
 interface LicitacaoFormProps {
   clients: ClientListItem[]; // Use ClientListItem type
@@ -116,7 +117,7 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
      let numberValue: number | undefined;
 
       // Special handling for zero input
-      if (rawValue === '0' || rawValue === 'R$ 0,00') {
+      if (rawValue === '0' || rawValue === 'R$ 0,00' || rawValue.replace(/\D/g, '') === '0') {
           numberValue = 0;
       } else {
           const cleaned = rawValue.replace(/\D/g, '');
