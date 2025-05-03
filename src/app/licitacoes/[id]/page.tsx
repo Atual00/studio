@@ -1,6 +1,6 @@
 'use client'; // Required for state, effects, and client-side interactions
 
-import {useState, useEffect} from 'react';
+import React, {useState, useEffect} from 'react'; // Import React
 import {useParams, useRouter} from 'next/navigation';
 import {format, parseISO} from 'date-fns';
 import {ptBR} from 'date-fns/locale';
@@ -384,6 +384,8 @@ export default function LicitacaoDetalhesPage() {
    // Parse currency string to number
   const parseCurrency = (value: string): number | undefined => {
       if (!value) return undefined;
+      // Handle "0" or "R$ 0,00"
+      if (value.trim() === '0' || value.trim() === 'R$ 0,00') return 0;
       // Remove R$, spaces, dots, and replace comma with dot
       const cleaned = value.replace(/[R$\s.]/g, '').replace(',', '.');
       const num = parseFloat(cleaned);
@@ -418,10 +420,10 @@ export default function LicitacaoDetalhesPage() {
 
    // Calculate bid difference
    const calculateBidDifference = () => {
-      if (!licitacao || licitacao.valorPrimeiroColocado === undefined || licitacao.valorPrimeiroColocado === null || licitacao.valor <= 0) {
-          return null;
+      if (!licitacao || licitacao.valorPrimeiroColocado === undefined || licitacao.valorPrimeiroColocado === null || licitacao.valorCobrado <= 0) {
+          return null; // Use valorCobrado as the client's bid value
       }
-      const valorProprio = licitacao.valor; // Assuming this is the client's bid value
+      const valorProprio = licitacao.valorCobrado;
       const valorPrimeiro = licitacao.valorPrimeiroColocado;
 
       if (valorPrimeiro <= 0) { // Handle division by zero or non-positive competitor bid
@@ -734,27 +736,35 @@ export default function LicitacaoDetalhesPage() {
                         value={valorPrimeiroColocadoInput}
                         onChange={(e) => {
                              const parsedValue = parseCurrency(e.target.value);
-                             setValorPrimeiroColocadoInput(formatCurrency(parsedValue)); // Keep input formatted
+                             // Format for display, allow partial input like "R$ 12"
+                             const displayValue = e.target.value; // Keep raw input for typing experience
+                             setValorPrimeiroColocadoInput(displayValue); // Update state with raw value
+                             // Update form value with parsed number (if valid)
+                             // form.setValue('valorPrimeiroColocado', parsedValue); // Assuming you add this to form later
+                         }}
+                         onBlur={(e) => { // Format on blur
+                             const parsedValue = parseCurrency(e.target.value);
+                             setValorPrimeiroColocadoInput(formatCurrency(parsedValue));
                          }}
                         disabled={isSavingBidResult}
-                        className={parseCurrency(valorPrimeiroColocadoInput) === undefined && valorPrimeiroColocadoInput !== '' ? 'border-red-500' : ''} // Basic invalid style
+                        className={parseCurrency(valorPrimeiroColocadoInput) === undefined && valorPrimeiroColocadoInput.trim() !== '' ? 'border-red-500' : ''} // Basic invalid style
                       />
-                      {parseCurrency(valorPrimeiroColocadoInput) === undefined && valorPrimeiroColocadoInput !== '' && <p className="text-xs text-destructive mt-1">Valor inválido.</p>}
+                      {parseCurrency(valorPrimeiroColocadoInput) === undefined && valorPrimeiroColocadoInput.trim() !== '' && <p className="text-xs text-destructive mt-1">Valor inválido.</p>}
                     </div>
                     <Button onClick={handleSaveBidResult} disabled={isSavingBidResult || parseCurrency(valorPrimeiroColocadoInput) === undefined}>
                        {isSavingBidResult ? <Loader2 className="h-4 w-4 animate-spin"/> : 'Salvar'}
                     </Button>
                   </div>
                    {bidDifference && (
-                     <Alert variant={licitacao.valor <= (licitacao.valorPrimeiroColocado ?? Infinity) ? 'success' : 'warning'} className="text-sm">
-                         {licitacao.valor <= (licitacao.valorPrimeiroColocado ?? Infinity) ? <CheckCircle className="h-4 w-4" /> : <HelpCircle className="h-4 w-4"/> }
+                     <Alert variant={licitacao.valorCobrado <= (licitacao.valorPrimeiroColocado ?? Infinity) ? 'success' : 'warning'} className="text-sm">
+                         {licitacao.valorCobrado <= (licitacao.valorPrimeiroColocado ?? Infinity) ? <CheckCircle className="h-4 w-4" /> : <HelpCircle className="h-4 w-4"/> }
                        <AlertTitle>Análise de Lance</AlertTitle>
                        <AlertDescription>
-                         {licitacao.valorPrimeiroColocado === licitacao.valor
-                            ? `Seu lance (${formatCurrency(licitacao.valor)}) foi igual ao do primeiro colocado.`
-                            : licitacao.valor < (licitacao.valorPrimeiroColocado ?? Infinity)
-                            ? `Seu lance (${formatCurrency(licitacao.valor)}) foi ${bidDifference.absolute} (${bidDifference.percentage}) abaixo do primeiro colocado (${formatCurrency(licitacao.valorPrimeiroColocado)}).`
-                            : `Seu lance (${formatCurrency(licitacao.valor)}) foi ${bidDifference.absolute} (${bidDifference.percentage}) acima do primeiro colocado (${formatCurrency(licitacao.valorPrimeiroColocado)}).`}
+                         {licitacao.valorPrimeiroColocado === licitacao.valorCobrado
+                            ? `Seu lance (${formatCurrency(licitacao.valorCobrado)}) foi igual ao do primeiro colocado.`
+                            : licitacao.valorCobrado < (licitacao.valorPrimeiroColocado ?? Infinity)
+                            ? `Seu lance (${formatCurrency(licitacao.valorCobrado)}) foi ${bidDifference.absolute} (${bidDifference.percentage}) abaixo do primeiro colocado (${formatCurrency(licitacao.valorPrimeiroColocado)}).`
+                            : `Seu lance (${formatCurrency(licitacao.valorCobrado)}) foi ${bidDifference.absolute} (${bidDifference.percentage}) acima do primeiro colocado (${formatCurrency(licitacao.valorPrimeiroColocado)}).`}
 
                        </AlertDescription>
                      </Alert>
