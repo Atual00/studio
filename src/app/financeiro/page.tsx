@@ -1,4 +1,3 @@
-
 'use client'; // Required for state and client-side interaction
 
 import {useState, useEffect} from 'react';
@@ -9,88 +8,24 @@ import {Tabs, TabsList, TabsTrigger, TabsContent} from '@/components/ui/tabs';
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@/components/ui/select';
 import {Input} from '@/components/ui/input';
 import {Badge} from '@/components/ui/badge';
-import {Download, FileText, Filter, Loader2, Send, CheckCircle, Clock} from 'lucide-react';
-import {format} from 'date-fns';
+import {Popover, PopoverContent, PopoverTrigger} from '@/components/ui/popover'; // Import Popover
+import {Calendar} from '@/components/ui/calendar'; // Import Calendar
+import {DateRange} from 'react-day-picker'; // Import DateRange type
+import {Download, FileText, Filter, Loader2, Send, CheckCircle, Clock, CalendarIcon, X} from 'lucide-react'; // Import icons
+import {format, parseISO, startOfDay, endOfDay, isWithinInterval, addDays} from 'date-fns';
 import {ptBR} from 'date-fns/locale';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable'; // Import autoTable plugin
+import autoTable from 'jspdf-autotable'; // Correct import for autoTable
 import {useToast} from '@/hooks/use-toast';
 import type { ConfiguracoesFormValues } from '@/components/configuracoes/configuracoes-form'; // Import settings type
+import { fetchDebitos, updateDebitoStatus, type Debito } from '@/services/licitacaoService'; // Import from licitacaoService
 
 
-// Extend jsPDF interface for autoTable
-declare module 'jspdf' {
-  interface jsPDF {
-    autoTable: (options: any) => jsPDF;
-  }
-}
-
-
-// --- Mock Data and Types ---
-interface Debito {
-  id: string; // Usually Licitacao ID or a specific debit ID
-  licitacaoNumero: string;
-  clienteNome: string;
-  clienteCnpj: string; // For invoice
-  valor: number;
-  dataHomologacao: Date;
-  status: 'PENDENTE' | 'PAGO' | 'ENVIADO_FINANCEIRO';
-}
-
-// Mock fetch function (replace with actual API call)
-const fetchDebitos = async (): Promise<Debito[]> => {
-  console.log('Fetching debitos...');
-  await new Promise(resolve => setTimeout(resolve, 700)); // Simulate API delay
-  return [
-    {
-      id: 'LIC-003',
-      licitacaoNumero: 'PE 456/2024',
-      clienteNome: 'Comércio Varejista XYZ EIRELI',
-      clienteCnpj: '22.222.222/0001-22',
-      valor: 850.00,
-      dataHomologacao: new Date(2024, 7, 10), // Example homologation date
-      status: 'PENDENTE',
-    },
-     {
-      id: 'LIC-005', // Example
-      licitacaoNumero: 'PE 789/2024',
-      clienteNome: 'Empresa Exemplo Ltda',
-      clienteCnpj: '00.000.000/0001-00',
-      valor: 1500.00,
-      dataHomologacao: new Date(2024, 7, 12),
-      status: 'PENDENTE',
-    },
-    {
-      id: 'LIC-001', // Corresponds to an older, processed one
-      licitacaoNumero: 'PE 123/2024',
-      clienteNome: 'Empresa Exemplo Ltda',
-      clienteCnpj: '00.000.000/0001-00',
-      valor: 500.00,
-      dataHomologacao: new Date(2024, 6, 28),
-      status: 'PAGO',
-    },
-     {
-      id: 'LIC-002',
-      licitacaoNumero: 'TP 005/2024',
-      clienteNome: 'Soluções Inovadoras S.A.',
-      clienteCnpj: '11.111.111/0001-11',
-      valor: 1200.50,
-      dataHomologacao: new Date(2024, 7, 5),
-      status: 'ENVIADO_FINANCEIRO',
-    },
-  ];
-};
-
-// Mock update function
-const updateDebitoStatus = async (id: string, newStatus: 'PAGO' | 'ENVIADO_FINANCEIRO'): Promise<boolean> => {
-   console.log(`Updating debito ID: ${id} to status: ${newStatus}`);
-   await new Promise(resolve => setTimeout(resolve, 400)); // Simulate API delay
-   return true; // Simulate success
-}
-
-// Mock function to fetch company settings (reuse logic from configuracoes/page.tsx)
+// --- Mock function to fetch company settings (reuse logic from configuracoes/page.tsx) ---
 const fetchConfiguracoesEmpresa = async (): Promise<ConfiguracoesFormValues | null> => {
     console.log('Fetching company configurations for PDF...');
+    // Basic localStorage fetch - consider a more robust state management or dedicated service
+    if (typeof window === 'undefined') return null;
     await new Promise(resolve => setTimeout(resolve, 150)); // Simulate small delay
     const storedConfig = localStorage.getItem('configuracoesEmpresa');
     if (storedConfig) {
@@ -105,6 +40,7 @@ const fetchConfiguracoesEmpresa = async (): Promise<ConfiguracoesFormValues | nu
     return {
         razaoSocial: 'Licitax Advisor (Nome Padrão)',
         cnpj: '00.000.000/0001-00',
+        nomeFantasia: 'Licitax',
         email: 'contato@licitax.com',
         telefone: '(XX) XXXXX-XXXX',
         enderecoCep: '00000-000',
@@ -138,7 +74,7 @@ const getBadgeVariantFinanceiro = (color: string): 'default' | 'secondary' | 'de
 
 // --- Component ---
 export default function FinanceiroPage() {
-  const [debitos, setDebitos] = useState<Debito[]>([]);
+  const [allDebitos, setAllDebitos] = useState<Debito[]>([]); // Store all fetched debits
   const [filteredDebitos, setFilteredDebitos] = useState<Debito[]>([]);
   const [configuracoes, setConfiguracoes] = useState<ConfiguracoesFormValues | null>(null);
   const [loading, setLoading] = useState(true);
@@ -146,6 +82,7 @@ export default function FinanceiroPage() {
   const [activeTab, setActiveTab] = useState<'pendentes' | 'processados'>('pendentes');
   const [filterCliente, setFilterCliente] = useState('');
   const [filterLicitacao, setFilterLicitacao] = useState('');
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined); // State for date range filter
   const [updatingStatus, setUpdatingStatus] = useState<{[key: string]: boolean}>({}); // Track loading state per item
   const {toast} = useToast();
 
@@ -156,15 +93,17 @@ export default function FinanceiroPage() {
       setLoading(true);
       setLoadingConfig(true);
       try {
+        // Fetch debits generated from licitacoes service
         const [debitosData, configData] = await Promise.all([
            fetchDebitos(),
            fetchConfiguracoesEmpresa()
         ]);
-        setDebitos(debitosData);
+        setAllDebitos(debitosData); // Store all fetched data
+        setFilteredDebitos(debitosData); // Initialize filtered list
         setConfiguracoes(configData);
       } catch (err) {
         console.error('Erro ao carregar dados financeiros ou configurações:', err);
-        toast({ title: "Erro", description: "Falha ao carregar dados financeiros ou configurações.", variant: "destructive" });
+        toast({ title: "Erro", description: `Falha ao carregar dados financeiros ou configurações. ${err instanceof Error ? err.message : ''}`, variant: "destructive" });
       } finally {
         setLoading(false);
         setLoadingConfig(false);
@@ -176,20 +115,24 @@ export default function FinanceiroPage() {
 
    // Filter logic
   useEffect(() => {
-    let result = debitos;
+    let result = allDebitos; // Start with all debits
 
+    // 1. Filter by Tab (Status)
     if (activeTab === 'pendentes') {
       result = result.filter(d => d.status === 'PENDENTE');
     } else { // processados
       result = result.filter(d => d.status === 'PAGO' || d.status === 'ENVIADO_FINANCEIRO');
     }
 
+    // 2. Filter by Cliente/CNPJ
     if (filterCliente) {
        result = result.filter(d =>
         d.clienteNome.toLowerCase().includes(filterCliente.toLowerCase()) ||
         d.clienteCnpj.includes(filterCliente) // Allow filtering by CNPJ as well
       );
     }
+
+    // 3. Filter by Licitação/Protocolo
      if (filterLicitacao) {
        result = result.filter(d =>
         d.licitacaoNumero.toLowerCase().includes(filterLicitacao.toLowerCase()) ||
@@ -197,20 +140,41 @@ export default function FinanceiroPage() {
       );
     }
 
+    // 4. Filter by Date Range (Data Homologação)
+     if (dateRange?.from) {
+        const start = startOfDay(dateRange.from);
+        const end = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from); // Use end of 'from' day if 'to' is not set
+        result = result.filter(d => {
+            try {
+                const homologacaoDate = typeof d.dataHomologacao === 'string' ? parseISO(d.dataHomologacao) : d.dataHomologacao;
+                return isWithinInterval(homologacaoDate, { start, end });
+            } catch (e) {
+                console.error("Error parsing homologacaoDate during filtering:", d.id, e);
+                return false;
+            }
+        });
+    }
+
     setFilteredDebitos(result);
-  }, [debitos, activeTab, filterCliente, filterLicitacao]);
+  }, [allDebitos, activeTab, filterCliente, filterLicitacao, dateRange]);
 
 
   const handleUpdateStatus = async (id: string, newStatus: 'PAGO' | 'ENVIADO_FINANCEIRO') => {
      setUpdatingStatus(prev => ({ ...prev, [id]: true }));
-     const success = await updateDebitoStatus(id, newStatus);
-     if (success) {
-        setDebitos(prevDebitos => prevDebitos.map(d => d.id === id ? { ...d, status: newStatus } : d));
-        toast({ title: "Sucesso", description: `Débito ${id} atualizado para ${statusFinanceiroMap[newStatus].label}.` });
-     } else {
-         toast({ title: "Erro", description: `Falha ao atualizar status do débito ${id}.`, variant: "destructive" });
+     try {
+        const success = await updateDebitoStatus(id, newStatus);
+        if (success) {
+            // Update the main list and let the filter useEffect re-apply
+           setAllDebitos(prevDebitos => prevDebitos.map(d => d.id === id ? { ...d, status: newStatus } : d));
+           toast({ title: "Sucesso", description: `Débito ${id} atualizado para ${statusFinanceiroMap[newStatus].label}.` });
+        } else {
+            throw new Error("Falha ao atualizar status no backend.");
+        }
+     } catch (err) {
+          toast({ title: "Erro", description: `Falha ao atualizar status do débito ${id}. ${err instanceof Error ? err.message : ''}`, variant: "destructive" });
+     } finally {
+         setUpdatingStatus(prev => ({ ...prev, [id]: false }));
      }
-      setUpdatingStatus(prev => ({ ...prev, [id]: false }));
   }
 
    // --- PDF Generation ---
@@ -223,23 +187,35 @@ export default function FinanceiroPage() {
       return true;
    }
 
+    // Safely format dates
+    const formatDateForPDF = (date: Date | string | undefined | null): string => {
+        if (!date) return 'N/A';
+        try {
+            const dateObj = typeof date === 'string' ? parseISO(date) : date;
+            return format(dateObj, "dd/MM/yyyy", { locale: ptBR });
+        } catch (e) {
+            return 'Data Inválida';
+        }
+    };
+
+
    // Generate individual invoice
    const generateInvoicePDF = (debito: Debito) => {
-    if (!checkConfig()) return;
+    if (!checkConfig() || !configuracoes) return;
 
     const doc = new jsPDF();
     const hoje = format(new Date(), "dd/MM/yyyy", { locale: ptBR });
-    const config = configuracoes!; // Use loaded config
+    const config = configuracoes; // Use loaded config
 
     // Header - Advisory Info
     doc.setFontSize(18);
     doc.text(config.nomeFantasia || config.razaoSocial, 14, 22);
     doc.setFontSize(10);
     doc.text(`CNPJ: ${config.cnpj}`, 14, 28);
-     // Add advisory address if needed
-     // doc.text(`${config.enderecoRua}, ${config.enderecoNumero} - ${config.enderecoBairro}`, 14, 34);
-     // doc.text(`${config.enderecoCidade} - CEP: ${config.enderecoCep}`, 14, 40);
-     doc.text(`Contato: ${config.email} / ${config.telefone}`, 14, 34);
+    doc.text(`Contato: ${config.email} / ${config.telefone}`, 14, 34);
+    doc.text(`${config.enderecoRua}, ${config.enderecoNumero} ${config.enderecoComplemento || ''}`, 14, 40);
+    doc.text(`${config.enderecoBairro} - ${config.enderecoCidade} - CEP: ${config.enderecoCep}`, 14, 46);
+
 
      doc.setFontSize(14);
      doc.setFont(undefined, 'bold');
@@ -247,104 +223,120 @@ export default function FinanceiroPage() {
      doc.setFont(undefined, 'normal');
      doc.setFontSize(10);
      doc.text(`Data de Emissão: ${hoje}`, 196, 28, { align: 'right' });
+     // Add Invoice Number if applicable
+     // doc.text(`Fatura Nº: ${debito.id}`, 196, 34, { align: 'right' });
 
 
-    doc.line(14, 45, 196, 45); // Separator line
+    doc.setLineWidth(0.1);
+    doc.line(14, 55, 196, 55); // Separator line
 
     // Client Info
     doc.setFontSize(12);
     doc.setFont(undefined, 'bold');
-    doc.text("Cliente:", 14, 55);
+    doc.text("Cliente:", 14, 65);
     doc.setFont(undefined, 'normal');
-    doc.text(`Razão Social: ${debito.clienteNome}`, 14, 62);
-    doc.text(`CNPJ: ${debito.clienteCnpj}`, 14, 69);
-    // Add client address here if available/needed
+    doc.text(`Razão Social: ${debito.clienteNome}`, 14, 72);
+    doc.text(`CNPJ: ${debito.clienteCnpj}`, 14, 79);
+    // TODO: Add client address here if available/needed
 
-    doc.line(14, 78, 196, 78); // Separator line
+    doc.line(14, 90, 196, 90); // Separator line
 
     // Debit Details
     doc.setFontSize(12);
     doc.setFont(undefined, 'bold');
-    doc.text("Detalhes do Serviço Prestado:", 14, 88);
+    doc.text("Detalhes do Serviço Prestado:", 14, 100);
      doc.setFont(undefined, 'normal');
-     (doc as any).autoTable({ // Use autoTable for better structure
-        startY: 93,
+     autoTable(doc, { // Use autoTable directly
+        startY: 105,
         head: [['Referência', 'Descrição', 'Data Homologação', 'Valor']],
         body: [
             [
              debito.id,
              `Serviços de Assessoria - Licitação ${debito.licitacaoNumero}`,
-             format(debito.dataHomologacao, "dd/MM/yyyy", { locale: ptBR }),
+             formatDateForPDF(debito.dataHomologacao),
              debito.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
             ]
         ],
         theme: 'grid',
-        headStyles: { fillColor: [26, 35, 126] }, // Dark blue header (#1A237E) - TODO: Use theme colors
+        headStyles: { fillColor: [26, 35, 126] }, // Dark blue header
         margin: { left: 14, right: 14 },
-        tableWidth: 'auto', // Adjust table width automatically
+        tableWidth: 'auto',
     });
 
 
     // Total
-    const finalY = (doc as any).lastAutoTable.finalY; // Get Y position after table
+    const finalY = (doc as any).lastAutoTable.finalY || 130; // Get Y position after table
     doc.setFontSize(14);
     doc.setFont(undefined, 'bold');
-    doc.text(`Valor Total: ${debito.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`, 14, finalY + 15);
+    doc.text(`Valor Total: ${debito.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`, 196, finalY + 15, { align: 'right' });
 
      // Payment Info (Using config)
     doc.setFontSize(10);
-    doc.setFont(undefined, 'normal');
+    doc.setFont(undefined, 'bold');
     doc.text("Informações para Pagamento:", 14, finalY + 25);
+    doc.setFont(undefined, 'normal');
+    let paymentY = finalY + 30;
      if (config.banco && config.agencia && config.conta) {
-        doc.text(`Banco: ${config.banco} / Agência: ${config.agencia} / Conta: ${config.conta}`, 14, finalY + 30);
+        doc.text(`Banco: ${config.banco} / Agência: ${config.agencia} / Conta: ${config.conta}`, 14, paymentY);
+        paymentY += 5;
      }
      if (config.chavePix) {
-        doc.text(`Chave PIX (${config.cnpj ? 'CNPJ' : 'geral'}): ${config.chavePix}`, 14, finalY + (config.banco ? 35 : 30));
+        const pixType = config.cnpj && config.chavePix === config.cnpj ? 'CNPJ' : 'Geral'; // Basic type detection
+        doc.text(`Chave PIX (${pixType}): ${config.chavePix}`, 14, paymentY);
+        paymentY += 5;
      } else if (config.cnpj) {
-         // Fallback to CNPJ if PIX key not set but CNPJ exists
-         doc.text(`PIX (CNPJ): ${config.cnpj}`, 14, finalY + (config.banco ? 35 : 30));
+         // Fallback to CNPJ as PIX key if PIX key not set but CNPJ exists
+         doc.text(`PIX (CNPJ): ${config.cnpj}`, 14, paymentY);
+          paymentY += 5;
      }
      // Add due date logic if needed
-    doc.text("Vencimento: [Definir Data de Vencimento]", 14, finalY + (config.banco ? 40 : 35));
+    const dueDate = addDays(new Date(), 15); // Example: Due in 15 days
+    doc.setFont(undefined, 'bold');
+    doc.text(`Vencimento: ${format(dueDate, "dd/MM/yyyy")}`, 14, paymentY + 5);
 
 
     // Footer (Optional)
-    doc.line(14, doc.internal.pageSize.height - 20, 196, doc.internal.pageSize.height - 20);
-    doc.text(`${config.razaoSocial} - Agradecemos a sua preferência!`, 14, doc.internal.pageSize.height - 15);
+    const pageHeight = doc.internal.pageSize.height;
+    doc.setLineWidth(0.1);
+    doc.line(14, pageHeight - 20, 196, pageHeight - 20);
+    doc.setFontSize(9);
+    doc.text(`${config.razaoSocial} - ${config.cnpj} - Agradecemos a sua preferência!`, 105, pageHeight - 15, { align: 'center' });
 
 
-    doc.save(`Fatura_${debito.clienteNome.replace(/\s+/g, '_')}_${debito.id}.pdf`);
+    doc.save(`Fatura_${debito.clienteNome.replace(/[\s.]+/g, '_')}_${debito.id}.pdf`);
   };
 
 
-   // Generate report for pending debits
+   // Generate report for pending debits (filtered by current view)
    const generatePendingReportPDF = () => {
-    if (!checkConfig()) return;
-    const config = configuracoes!;
+    if (!checkConfig() || !configuracoes) return;
+    const config = configuracoes;
 
     const doc = new jsPDF();
     const hoje = format(new Date(), "dd/MM/yyyy", { locale: ptBR });
-    const pendingDebits = filteredDebitos.filter(d => d.status === 'PENDENTE'); // Ensure we only get pending ones
+    const pendingDebits = filteredDebitos.filter(d => d.status === 'PENDENTE'); // Use currently filtered pending debits
 
      // Header
     doc.setFontSize(16);
     doc.text("Relatório de Pendências Financeiras", 14, 22);
      doc.setFontSize(12);
-     doc.text(config.razaoSocial, 14, 28);
+     doc.text(config.nomeFantasia || config.razaoSocial, 14, 28);
     doc.setFontSize(10);
     doc.text(`Gerado em: ${hoje}`, 14, 34);
-    doc.line(14, 40, 196, 40);
+    doc.text(`Filtros Aplicados: ${filterCliente || 'Todos Clientes'}, ${filterLicitacao || 'Todas Licitações'}, ${dateRange ? `${formatDateForPDF(dateRange.from)} a ${formatDateForPDF(dateRange.to)}` : 'Qualquer Data'}`, 14, 40);
+    doc.setLineWidth(0.1);
+    doc.line(14, 45, 196, 45);
 
      // Table
-    (doc as any).autoTable({
-        startY: 45,
+    autoTable(doc, {
+        startY: 50,
         head: [['Protocolo', 'Cliente', 'CNPJ', 'Licitação', 'Data Homolog.', 'Valor Pendente']],
         body: pendingDebits.map(d => [
              d.id,
              d.clienteNome,
              d.clienteCnpj,
              d.licitacaoNumero,
-             format(d.dataHomologacao, "dd/MM/yyyy", { locale: ptBR }),
+             formatDateForPDF(d.dataHomologacao),
              d.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
         ]),
         theme: 'striped',
@@ -353,24 +345,24 @@ export default function FinanceiroPage() {
     });
 
      // Total Pending
-    const finalY = (doc as any).lastAutoTable.finalY;
+    const finalY = (doc as any).lastAutoTable.finalY || 70;
     const totalPendente = pendingDebits.reduce((sum, d) => sum + d.valor, 0);
     doc.setFontSize(12);
     doc.setFont(undefined, 'bold');
-    doc.text(`Total Pendente: ${totalPendente.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`, 14, finalY + 15);
+    doc.text(`Total Pendente (Filtro Atual): ${totalPendente.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`, 196, finalY + 15, { align: 'right' });
 
 
     doc.save(`Relatorio_Pendencias_${hoje.replace(/\//g, '-')}.pdf`);
    }
 
-    // Generate collection document per client
+    // Generate collection document per client (using filtered pending debits)
    const generateCollectionPDF = (clienteNome: string) => {
-      if (!checkConfig()) return;
-      const config = configuracoes!;
+      if (!checkConfig() || !configuracoes) return;
+      const config = configuracoes;
 
       const clientDebits = filteredDebitos.filter(d => d.clienteNome === clienteNome && d.status === 'PENDENTE');
       if (clientDebits.length === 0) {
-         toast({title: "Aviso", description: `Nenhuma pendência encontrada para ${clienteNome}.`});
+         toast({title: "Aviso", description: `Nenhuma pendência encontrada para ${clienteNome} com os filtros atuais.`});
          return;
       }
 
@@ -381,27 +373,28 @@ export default function FinanceiroPage() {
        // Header
       doc.setFontSize(16);
       doc.text(`Documento de Cobrança`, 14, 22);
-      doc.setFontSize(12);
-       doc.text(`De: ${config.razaoSocial} (CNPJ: ${config.cnpj})`, 14, 30);
+      doc.setFontSize(11);
+       doc.text(`De: ${config.nomeFantasia || config.razaoSocial} (CNPJ: ${config.cnpj})`, 14, 30);
        doc.text(`Para: ${firstDebit.clienteNome} (CNPJ: ${firstDebit.clienteCnpj})`, 14, 36);
        doc.setFontSize(10);
        doc.text(`Data de Emissão: ${hoje}`, 14, 42);
+       doc.setLineWidth(0.1);
        doc.line(14, 50, 196, 50);
 
       // Introduction Text (Example)
       doc.setFontSize(11);
       doc.text("Prezados,", 14, 60);
-      doc.text(`Constam em aberto os seguintes débitos referentes aos serviços de assessoria em licitações prestados pela ${config.razaoSocial}:`, 14, 67, { maxWidth: 180 });
+      doc.text(`Constam em aberto os seguintes débitos referentes aos serviços de assessoria em licitações prestados pela ${config.nomeFantasia || config.razaoSocial}:`, 14, 67, { maxWidth: 180 });
 
 
        // Table of Debits
-      (doc as any).autoTable({
+      autoTable(doc, {
          startY: 75,
          head: [['Protocolo', 'Licitação', 'Data Homologação', 'Valor']],
          body: clientDebits.map(d => [
              d.id,
              d.licitacaoNumero,
-             format(d.dataHomologacao, "dd/MM/yyyy", { locale: ptBR }),
+             formatDateForPDF(d.dataHomologacao),
              d.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
          ]),
          theme: 'grid',
@@ -410,63 +403,124 @@ export default function FinanceiroPage() {
      });
 
       // Total and Payment Info
-     const finalY = (doc as any).lastAutoTable.finalY;
+     const finalY = (doc as any).lastAutoTable.finalY || 100;
      const totalCliente = clientDebits.reduce((sum, d) => sum + d.valor, 0);
      doc.setFontSize(12);
      doc.setFont(undefined, 'bold');
-     doc.text(`Valor Total Devido: ${totalCliente.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`, 14, finalY + 15);
+     doc.text(`Valor Total Devido: ${totalCliente.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`, 196, finalY + 15, { align: 'right' });
 
       doc.setFontSize(10);
+      doc.setFont(undefined, 'bold');
+      doc.text("Informações para Pagamento:", 14, finalY + 25);
       doc.setFont(undefined, 'normal');
-      doc.text("Solicitamos a regularização dos valores pendentes. Informações para pagamento:", 14, finalY + 25);
+      let paymentYColl = finalY + 30;
        if (config.banco && config.agencia && config.conta) {
-          doc.text(`Banco: ${config.banco} / Agência: ${config.agencia} / Conta: ${config.conta}`, 14, finalY + 30);
+          doc.text(`Banco: ${config.banco} / Agência: ${config.agencia} / Conta: ${config.conta}`, 14, paymentYColl);
+          paymentYColl += 5;
        }
        if (config.chavePix) {
-          doc.text(`Chave PIX (${config.cnpj ? 'CNPJ' : 'geral'}): ${config.chavePix}`, 14, finalY + (config.banco ? 35 : 30));
+          const pixType = config.cnpj && config.chavePix === config.cnpj ? 'CNPJ' : 'Geral';
+          doc.text(`Chave PIX (${pixType}): ${config.chavePix}`, 14, paymentYColl);
+          paymentYColl += 5;
        } else if (config.cnpj) {
-           doc.text(`PIX (CNPJ): ${config.cnpj}`, 14, finalY + (config.banco ? 35 : 30));
+           doc.text(`PIX (CNPJ): ${config.cnpj}`, 14, paymentYColl);
+           paymentYColl += 5;
        }
-      doc.text(`Em caso de dúvidas, contate-nos através de ${config.email} ou ${config.telefone}.`, 14, finalY + (config.banco || config.chavePix ? 45 : 35));
+        const dueDateColl = addDays(new Date(), 10); // Example: Due in 10 days for collection doc
+        doc.setFont(undefined, 'bold');
+        doc.text(`Vencimento Sugerido: ${format(dueDateColl, "dd/MM/yyyy")}`, 14, paymentYColl + 5);
+
+      doc.setFont(undefined, 'normal');
+      doc.text(`Em caso de dúvidas, contate-nos através de ${config.email} ou ${config.telefone}.`, 14, paymentYColl + 15);
 
 
      // Footer (Optional)
-     doc.line(14, doc.internal.pageSize.height - 20, 196, doc.internal.pageSize.height - 20);
-     doc.text(config.razaoSocial, 14, doc.internal.pageSize.height - 15);
+     const pageHeightColl = doc.internal.pageSize.height;
+     doc.setLineWidth(0.1);
+     doc.line(14, pageHeightColl - 20, 196, pageHeightColl - 20);
+     doc.setFontSize(9);
+     doc.text(config.nomeFantasia || config.razaoSocial, 105, pageHeightColl - 15, { align: 'center' });
 
 
-      doc.save(`Cobranca_${firstDebit.clienteNome.replace(/\s+/g, '_')}_${hoje.replace(/\//g, '-')}.pdf`);
+      doc.save(`Cobranca_${firstDebit.clienteNome.replace(/[\s.]+/g, '_')}_${hoje.replace(/\//g, '-')}.pdf`);
    }
 
-   // Get unique client names with pending debits for the dropdown
-   const clientsWithPendingDebits = Array.from(new Set(debitos.filter(d => d.status === 'PENDENTE').map(d => d.clienteNome)));
+   // Get unique client names with pending debits for the dropdown (based on filtered list)
+   const clientsWithPendingDebits = Array.from(new Set(filteredDebitos.filter(d => d.status === 'PENDENTE').map(d => d.clienteNome)));
+
+    const clearFilters = () => {
+        setFilterCliente('');
+        setFilterLicitacao('');
+        setDateRange(undefined);
+        // Note: activeTab is not reset here, as it controls the main view
+    }
 
 
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-semibold">Módulo Financeiro</h2>
+      <p className="text-muted-foreground">Gerencie os débitos gerados a partir das licitações homologadas.</p>
 
         {/* Filter Section */}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-lg flex items-center gap-2">
-             <Filter className="h-5 w-5" /> Filtros
+             <Filter className="h-5 w-5" /> Filtros ({activeTab === 'pendentes' ? 'Pendentes' : 'Processados'})
           </CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
             <Input
                 placeholder="Filtrar por Cliente ou CNPJ..."
                 value={filterCliente}
                 onChange={(e) => setFilterCliente(e.target.value)}
             />
              <Input
-                placeholder="Filtrar por Licitação ou Protocolo..."
+                placeholder="Filtrar por Licitação ou Prot..."
                 value={filterLicitacao}
                 onChange={(e) => setFilterLicitacao(e.target.value)}
             />
-            {/* Date filter could be added here */}
-             {/* <Button variant="outline" onClick={applyFilters}>Aplicar Filtros</Button> // Filtering is now real-time */}
+             {/* Date Range Filter */}
+             <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    id="date"
+                    variant={"outline"}
+                    className={`w-full justify-start text-left font-normal ${!dateRange && "text-muted-foreground"}`}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {dateRange?.from ? (
+                      dateRange.to ? (
+                        <>
+                          {format(dateRange.from, "dd/MM/yy")} - {format(dateRange.to, "dd/MM/yy")}
+                        </>
+                      ) : (
+                        format(dateRange.from, "dd/MM/yyyy")
+                      )
+                    ) : (
+                      <span>Data Homologação</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    initialFocus
+                    mode="range"
+                    defaultMonth={dateRange?.from}
+                    selected={dateRange}
+                    onSelect={setDateRange}
+                    numberOfMonths={2}
+                    locale={ptBR}
+                  />
+                </PopoverContent>
+              </Popover>
+             {/* Placeholder for potential value filter */}
+             <div></div>
+
+             {/* Clear Filters Button */}
+             <Button variant="ghost" onClick={clearFilters} className="text-muted-foreground hover:text-primary lg:justify-self-end">
+                 <X className="mr-2 h-4 w-4"/> Limpar Filtros
+             </Button>
           </div>
         </CardContent>
       </Card>
@@ -475,8 +529,8 @@ export default function FinanceiroPage() {
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} className="w-full">
         <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
           <TabsList>
-            <TabsTrigger value="pendentes">Pendentes</TabsTrigger>
-            <TabsTrigger value="processados">Processados</TabsTrigger>
+            <TabsTrigger value="pendentes">Pendentes ({filteredDebitos.filter(d => d.status === 'PENDENTE').length})</TabsTrigger>
+            <TabsTrigger value="processados">Processados ({filteredDebitos.filter(d => d.status !== 'PENDENTE').length})</TabsTrigger>
           </TabsList>
           {activeTab === 'pendentes' && (
             <div className="flex gap-2 flex-wrap">
@@ -485,14 +539,14 @@ export default function FinanceiroPage() {
                   Relatório Pendências (PDF)
               </Button>
                <Select onValueChange={generateCollectionPDF} disabled={loading || loadingConfig || clientsWithPendingDebits.length === 0}>
-                 <SelectTrigger className="w-full sm:w-[280px]"> {/* Adjusted width */}
+                 <SelectTrigger className="w-full sm:w-[280px]">
                    <SelectValue placeholder="Gerar Cobrança por Cliente (PDF)" />
                  </SelectTrigger>
                  <SelectContent>
                     {loadingConfig ? (
-                      <SelectItem value="loading" disabled>Carregando clientes...</SelectItem>
+                      <SelectItem value="loading" disabled>Carregando...</SelectItem>
                     ) : clientsWithPendingDebits.length > 0 ? (
-                       clientsWithPendingDebits.map(cliente => (
+                       clientsWithPendingDebits.sort().map(cliente => ( // Sort client names
                          <SelectItem key={cliente} value={cliente}>{cliente}</SelectItem>
                        ))
                     ) : (
@@ -508,11 +562,11 @@ export default function FinanceiroPage() {
           <Card>
             <CardHeader>
               <CardTitle>Débitos Pendentes</CardTitle>
-              <CardDescription>Licitações homologadas aguardando ação.</CardDescription>
+              <CardDescription>Licitações homologadas aguardando ação financeira.</CardDescription>
             </CardHeader>
             <CardContent>
               <FinancialTable
-                 debitos={filteredDebitos}
+                 debitos={filteredDebitos} // Pass filtered debits
                  loading={loading}
                  updatingStatus={updatingStatus}
                  onUpdateStatus={handleUpdateStatus}
@@ -528,13 +582,13 @@ export default function FinanceiroPage() {
           <Card>
             <CardHeader>
               <CardTitle>Débitos Processados</CardTitle>
-              <CardDescription>Histórico de pagamentos baixados ou enviados.</CardDescription>
+              <CardDescription>Histórico de débitos baixados ou enviados.</CardDescription>
             </CardHeader>
             <CardContent>
                <FinancialTable
-                 debitos={filteredDebitos}
+                 debitos={filteredDebitos} // Pass filtered debits
                  loading={loading}
-                 updatingStatus={{}} // No actions needed here
+                 updatingStatus={{}} // No status updates needed here
                  onUpdateStatus={() => {}}
                  onGenerateInvoice={generateInvoicePDF} // Still allow generating past invoices
                  showActions={false} // Hide status update buttons
@@ -561,72 +615,87 @@ interface FinancialTableProps {
 }
 
 function FinancialTable({ debitos, loading, updatingStatus, onUpdateStatus, onGenerateInvoice, showActions, actionsDisabled = false }: FinancialTableProps) {
+
+    // Safely format dates
+    const formatDate = (date: Date | string | undefined | null): string => {
+        if (!date) return 'N/A';
+        try {
+            const dateObj = typeof date === 'string' ? parseISO(date) : date;
+            return format(dateObj, "dd/MM/yyyy", { locale: ptBR });
+        } catch (e) {
+            return 'Inválida';
+        }
+    };
+
+
    return (
-       <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Protocolo</TableHead>
-                <TableHead>Cliente</TableHead>
-                <TableHead>Licitação</TableHead>
-                <TableHead>Data Homolog.</TableHead>
-                <TableHead>Valor</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center">
-                     <Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" />
-                  </TableCell>
-                </TableRow>
-              ) : debitos.length > 0 ? (
-                debitos.map(debito => {
-                   const isLoading = updatingStatus[debito.id];
-                   const statusInfo = statusFinanceiroMap[debito.status];
-                   return (
-                      <TableRow key={debito.id}>
-                        <TableCell className="font-medium">{debito.id}</TableCell>
-                        <TableCell>{debito.clienteNome}</TableCell>
-                        <TableCell>{debito.licitacaoNumero}</TableCell>
-                        <TableCell>{format(debito.dataHomologacao, "dd/MM/yyyy", { locale: ptBR })}</TableCell>
-                        <TableCell>{debito.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</TableCell>
-                        <TableCell>
-                          <Badge variant={getBadgeVariantFinanceiro(statusInfo.color)} className="flex items-center gap-1 w-fit">
-                            <statusInfo.icon className="h-3 w-3" />
-                            {statusInfo.label}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right space-x-1">
-                          <Button variant="outline" size="sm" onClick={() => onGenerateInvoice(debito)} title="Gerar Fatura PDF" disabled={actionsDisabled}>
-                             {actionsDisabled ? <Loader2 className="h-4 w-4 animate-spin"/> : <FileText className="h-4 w-4" />}
-                            {/* <span className="ml-1 hidden sm:inline">Fatura</span> */}
-                          </Button>
-                          {showActions && debito.status === 'PENDENTE' && (
-                            <>
-                              <Button variant="default" size="sm" onClick={() => onUpdateStatus(debito.id, 'PAGO')} disabled={isLoading || actionsDisabled} title="Marcar como Pago (Baixar)">
-                                {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
-                                {/* <span className="ml-1 hidden sm:inline">Baixar</span> */}
+       <div className="overflow-x-auto">
+           <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[120px]">Protocolo</TableHead>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead>Licitação</TableHead>
+                    <TableHead>Data Homolog.</TableHead>
+                    <TableHead>Valor</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right w-[150px]">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center h-24">
+                         <Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" />
+                      </TableCell>
+                    </TableRow>
+                  ) : debitos.length > 0 ? (
+                    debitos.map(debito => {
+                       const isLoading = updatingStatus[debito.id];
+                       const statusInfo = statusFinanceiroMap[debito.status];
+                       return (
+                          <TableRow key={debito.id}>
+                            <TableCell className="font-medium">{debito.id}</TableCell>
+                            <TableCell>{debito.clienteNome}</TableCell>
+                            <TableCell>{debito.licitacaoNumero}</TableCell>
+                            <TableCell>{formatDate(debito.dataHomologacao)}</TableCell>
+                            <TableCell>{debito.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</TableCell>
+                            <TableCell>
+                              <Badge variant={getBadgeVariantFinanceiro(statusInfo.color)} className="flex items-center gap-1 w-fit whitespace-nowrap">
+                                <statusInfo.icon className="h-3 w-3" />
+                                {statusInfo.label}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right space-x-1">
+                              <Button variant="outline" size="sm" onClick={() => onGenerateInvoice(debito)} title="Gerar Fatura PDF" disabled={actionsDisabled}>
+                                 {actionsDisabled ? <Loader2 className="h-4 w-4 animate-spin"/> : <FileText className="h-4 w-4" />}
+                                {/* <span className="ml-1 hidden sm:inline">Fatura</span> */}
                               </Button>
-                              <Button variant="secondary" size="sm" onClick={() => onUpdateStatus(debito.id, 'ENVIADO_FINANCEIRO')} disabled={isLoading || actionsDisabled} title="Enviar para Financeiro Externo">
-                                {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                                {/* <span className="ml-1 hidden sm:inline">Enviar</span> */}
-                              </Button>
-                            </>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                   );
-                })
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground">
-                    Nenhum débito encontrado para esta visualização.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+                              {showActions && debito.status === 'PENDENTE' && (
+                                <>
+                                  <Button variant="default" size="sm" onClick={() => onUpdateStatus(debito.id, 'PAGO')} disabled={isLoading || actionsDisabled} title="Marcar como Pago (Baixar)">
+                                    {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+                                    {/* <span className="ml-1 hidden sm:inline">Baixar</span> */}
+                                  </Button>
+                                  <Button variant="secondary" size="sm" onClick={() => onUpdateStatus(debito.id, 'ENVIADO_FINANCEIRO')} disabled={isLoading || actionsDisabled} title="Marcar como Enviado p/ Financeiro">
+                                    {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                                    {/* <span className="ml-1 hidden sm:inline">Enviar</span> */}
+                                  </Button>
+                                </>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                       );
+                    })
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center text-muted-foreground h-24">
+                        Nenhum débito encontrado para esta visualização.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+        </div>
    );
 }

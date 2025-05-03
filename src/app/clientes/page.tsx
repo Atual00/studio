@@ -1,40 +1,38 @@
+'use client'; // Required for client-side interactions
+
+import { useState, useEffect } from 'react';
 import {Button} from '@/components/ui/button';
 import {Card, CardHeader, CardTitle, CardDescription, CardContent} from '@/components/ui/card';
 import {Table, TableHeader, TableRow, TableHead, TableBody, TableCell} from '@/components/ui/table';
-import {PlusCircle, Edit, Eye} from 'lucide-react';
+import {PlusCircle, Edit, Eye, Loader2, AlertCircle} from 'lucide-react';
 import Link from 'next/link';
+import { fetchClients, type ClientListItem } from '@/services/clientService'; // Import service
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
-// Mock data for demonstration
-const mockClients = [
-  {
-    id: '1',
-    razaoSocial: 'Empresa Exemplo Ltda',
-    nomeFantasia: 'Exemplo Corp',
-    cnpj: '00.000.000/0001-00',
-    cidade: 'São Paulo',
-    status: 'Ativo', // Example status
-  },
-  {
-    id: '2',
-    razaoSocial: 'Soluções Inovadoras S.A.',
-    nomeFantasia: 'Inova Soluções',
-    cnpj: '11.111.111/0001-11',
-    cidade: 'Rio de Janeiro',
-    status: 'Ativo',
-  },
-  {
-    id: '3',
-    razaoSocial: 'Comércio Varejista XYZ EIRELI',
-    nomeFantasia: 'Varejo XYZ',
-    cnpj: '22.222.222/0001-22',
-    cidade: 'Belo Horizonte',
-    status: 'Inativo', // Example status
-  },
-];
 
 export default function ClientesPage() {
-  // In a real app, fetch clients from your data source
-  const clients = mockClients;
+  const [clients, setClients] = useState<ClientListItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadClients = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await fetchClients();
+        setClients(data);
+      } catch (err) {
+        console.error('Erro ao buscar clientes:', err);
+        setError('Falha ao carregar a lista de clientes.');
+        // Optionally add a toast notification here
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadClients();
+  }, []);
+
 
   return (
     <div className="space-y-6">
@@ -47,6 +45,14 @@ export default function ClientesPage() {
           </Button>
         </Link>
       </div>
+
+       {error && (
+           <Alert variant="destructive">
+             <AlertCircle className="h-4 w-4" />
+             <AlertTitle>Erro</AlertTitle>
+             <AlertDescription>{error}</AlertDescription>
+           </Alert>
+       )}
 
       <Card>
         <CardHeader>
@@ -61,19 +67,25 @@ export default function ClientesPage() {
                 <TableHead>Nome Fantasia</TableHead>
                 <TableHead>CNPJ</TableHead>
                 <TableHead>Cidade</TableHead>
-                <TableHead>Status</TableHead>
+                {/* <TableHead>Status</TableHead> */}
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {clients.length > 0 ? (
+               {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center h-24">
+                        <Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" />
+                    </TableCell>
+                  </TableRow>
+               ) : !error && clients.length > 0 ? (
                 clients.map(client => (
                   <TableRow key={client.id}>
                     <TableCell className="font-medium">{client.razaoSocial}</TableCell>
-                    <TableCell>{client.nomeFantasia}</TableCell>
+                    <TableCell>{client.nomeFantasia || '-'}</TableCell>
                     <TableCell>{client.cnpj}</TableCell>
                     <TableCell>{client.cidade}</TableCell>
-                    <TableCell>{client.status}</TableCell>
+                    {/* <TableCell>{client.status}</TableCell> */}
                     <TableCell className="text-right space-x-2">
                       <Link href={`/clientes/${client.id}`} passHref>
                         <Button variant="ghost" size="icon" title="Visualizar">
@@ -90,8 +102,8 @@ export default function ClientesPage() {
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">
-                    Nenhum cliente cadastrado ainda.
+                  <TableCell colSpan={5} className="text-center text-muted-foreground">
+                    {error ? 'Não foi possível carregar os clientes.' : 'Nenhum cliente cadastrado ainda.'}
                   </TableCell>
                 </TableRow>
               )}

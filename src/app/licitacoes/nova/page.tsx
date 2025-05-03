@@ -1,13 +1,68 @@
-import {Card, CardHeader, CardTitle, CardDescription, CardContent} from '@/components/ui/card';
-import LicitacaoForm from '@/components/licitacoes/licitacao-form';
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import LicitacaoForm, { type LicitacaoFormValues } from '@/components/licitacoes/licitacao-form';
+import { addLicitacao } from '@/services/licitacaoService'; // Import actual service
+import { fetchClients as fetchClientList, type ClientListItem } from '@/services/clientService'; // Import client fetching
+import { useToast } from '@/hooks/use-toast';
+import { Loader2, AlertCircle } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+
 
 export default function NovaLicitacaoPage() {
-  // In a real app, fetch necessary data like clients list
-  const mockClients = [
-    { id: '1', name: 'Empresa Exemplo Ltda' },
-    { id: '2', name: 'Soluções Inovadoras S.A.' },
-    { id: '3', name: 'Comércio Varejista XYZ EIRELI' },
-  ];
+  const router = useRouter();
+  const { toast } = useToast();
+  const [clients, setClients] = useState<ClientListItem[]>([]);
+  const [loadingClients, setLoadingClients] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorLoadingClients, setErrorLoadingClients] = useState<string | null>(null);
+
+   // Fetch clients on mount
+   useEffect(() => {
+    const loadClients = async () => {
+      setLoadingClients(true);
+      setErrorLoadingClients(null);
+      try {
+        const clientData = await fetchClientList();
+        setClients(clientData);
+      } catch (err) {
+        console.error("Erro ao carregar lista de clientes:", err);
+        setErrorLoadingClients("Falha ao carregar a lista de clientes.");
+        toast({ title: "Erro", description: "Não foi possível carregar clientes.", variant: "destructive" });
+      } finally {
+        setLoadingClients(false);
+      }
+    };
+    loadClients();
+  }, [toast]);
+
+
+  const handleFormSubmit = async (data: LicitacaoFormValues) => {
+    setIsSubmitting(true);
+    try {
+      const newLicitacao = await addLicitacao(data);
+      if (newLicitacao) {
+        toast({
+          title: 'Sucesso!',
+          description: `Licitação ${newLicitacao.numeroLicitacao} (${newLicitacao.id}) cadastrada.`,
+        });
+        router.push(`/licitacoes/${newLicitacao.id}`); // Redirect to the new licitacao's detail page
+      } else {
+         throw new Error('Falha ao obter dados da licitação após adição.');
+      }
+    } catch (error) {
+      console.error('Erro ao salvar nova licitação:', error);
+      toast({
+        title: 'Erro ao Salvar',
+        description: `Não foi possível cadastrar a licitação. ${error instanceof Error ? error.message : ''}`,
+        variant: 'destructive',
+      });
+       setIsSubmitting(false); // Ensure submitting state is reset on error
+    }
+    // No need to set isSubmitting false on success due to redirect
+  };
 
   return (
     <div className="space-y-6">
@@ -18,7 +73,25 @@ export default function NovaLicitacaoPage() {
           <CardDescription>Preencha as informações abaixo para cadastrar uma nova licitação.</CardDescription>
         </CardHeader>
         <CardContent>
-          <LicitacaoForm clients={mockClients} />
+          {loadingClients ? (
+             <div className="flex justify-center items-center h-24">
+               <Loader2 className="h-6 w-6 animate-spin text-primary" />
+               <p className="ml-2">Carregando clientes...</p>
+             </div>
+          ) : errorLoadingClients ? (
+             <Alert variant="destructive">
+               <AlertCircle className="h-4 w-4" />
+               <AlertTitle>Erro ao Carregar Clientes</AlertTitle>
+               <AlertDescription>{errorLoadingClients}</AlertDescription>
+             </Alert>
+           ) : isSubmitting ? (
+             <div className="flex justify-center items-center h-40">
+               <Loader2 className="h-8 w-8 animate-spin text-primary" />
+               <p className="ml-2">Salvando licitação...</p>
+             </div>
+           ): (
+            <LicitacaoForm clients={clients} onSubmit={handleFormSubmit} isSubmitting={isSubmitting} />
+          )}
         </CardContent>
       </Card>
     </div>
