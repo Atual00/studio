@@ -13,6 +13,7 @@ import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@/c
 import {Checkbox} from '@/components/ui/checkbox';
 import {getAddressByPostalCode, type Address} from '@/services/address'; // Import service
 import { Loader2 } from 'lucide-react'; // Import Loader
+import { cn } from '@/lib/utils'; // Import cn utility function
 
 const companySizeOptions = ['MEI', 'ME', 'EPP', 'Demais']; // Added 'Demais'
 
