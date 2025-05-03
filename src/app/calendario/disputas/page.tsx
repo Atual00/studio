@@ -8,6 +8,7 @@ import {Loader2} from 'lucide-react';
 import {format} from 'date-fns';
 import {ptBR} from 'date-fns/locale';
 import Link from 'next/link';
+import { cn } from '@/lib/utils'; // Import cn utility function
 
 // --- Mock Data and Types ---
 interface LicitacaoDisputa {
