@@ -9,6 +9,7 @@ import { fetchClients as fetchClientList, type ClientListItem } from '@/services
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import Link from 'next/link'; // Import Link
 
 
 export default function NovaLicitacaoPage() {
@@ -26,7 +27,7 @@ export default function NovaLicitacaoPage() {
       setErrorLoadingClients(null);
       try {
         const clientData = await fetchClientList();
-        setClients(clientData);
+        setClients(clientData || []); // Ensure clients is always an array
       } catch (err) {
         console.error("Erro ao carregar lista de clientes:", err);
         setErrorLoadingClients("Falha ao carregar a lista de clientes.");
@@ -89,7 +90,17 @@ export default function NovaLicitacaoPage() {
                <Loader2 className="h-8 w-8 animate-spin text-primary" />
                <p className="ml-2">Salvando licitação...</p>
              </div>
-           ): (
+           ): clients.length === 0 ? ( // Check if clients list is empty after loading
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Nenhum Cliente Encontrado</AlertTitle>
+                <AlertDescription>
+                   Você precisa cadastrar pelo menos um cliente antes de criar uma licitação.
+                   <Link href="/clientes/novo" className="text-primary hover:underline ml-1">Cadastrar Cliente</Link>
+                </AlertDescription>
+              </Alert>
+            ) : (
+            // Pass the fetched clients (guaranteed to be an array)
             <LicitacaoForm clients={clients} onSubmit={handleFormSubmit} isSubmitting={isSubmitting} />
           )}
         </CardContent>

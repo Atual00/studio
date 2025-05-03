@@ -25,7 +25,7 @@ const platforms = ['ComprasNet', 'Licitações-e (BB)', 'BEC/SP', 'BNC', 'BLL Co
 
 // Zod schema for validation
 const licitacaoFormSchema = z.object({
-  clienteId: z.string({required_error: 'Selecione o cliente participante.'}),
+  clienteId: z.string({required_error: 'Selecione o cliente participante.'}).min(1, 'Selecione o cliente participante.'), // Ensure not empty string
   modalidade: z.string({required_error: 'Selecione a modalidade da licitação.'}),
   numeroLicitacao: z.string().min(1, {message: 'Número da licitação é obrigatório.'}),
   plataforma: z.string({required_error: 'Selecione a plataforma onde ocorrerá.'}),
@@ -35,6 +35,8 @@ const licitacaoFormSchema = z.object({
   valorCobrado: z.preprocess(
     (val) => {
       if (typeof val === 'string') {
+        // Allow "0", "0,00" etc. to be parsed as 0
+        if (val.match(/^R?\$\s?0([,.](0+))?$/)) return 0;
         const cleaned = val.replace(/[R$\s.]/g, '').replace(',', '.');
         const num = parseFloat(cleaned);
         return isNaN(num) ? undefined : num;
@@ -45,7 +47,7 @@ const licitacaoFormSchema = z.object({
        }
       return val;
     },
-    z.number({required_error: 'Valor cobrado é obrigatório.'}).min(0, { message: 'Valor deve ser zero ou positivo.' })
+    z.number({required_error: 'Valor cobrado é obrigatório.', invalid_type_error: 'Valor cobrado deve ser um número.'}).min(0, { message: 'Valor deve ser zero ou positivo.' })
   ),
   observacoes: z.string().optional(),
 });
@@ -77,6 +79,7 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
     resolver: zodResolver(licitacaoFormSchema),
     defaultValues: {
       ...initialData,
+      clienteId: initialData?.clienteId || undefined, // Ensure initial value is undefined for placeholder
       // Ensure dates are Date objects for the form state
       dataInicio: parseInitialDate(initialData?.dataInicio),
       dataMetaAnalise: parseInitialDate(initialData?.dataMetaAnalise),
@@ -90,6 +93,7 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
         if (initialData) {
             form.reset({
                 ...initialData,
+                 clienteId: initialData?.clienteId || undefined, // Reset client ID correctly
                  dataInicio: parseInitialDate(initialData?.dataInicio),
                  dataMetaAnalise: parseInitialDate(initialData?.dataMetaAnalise),
                  valorCobrado: initialData?.valorCobrado !== undefined ? Number(initialData.valorCobrado) : undefined,
@@ -99,36 +103,40 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
 
 
    // Format currency on input change and allow zero
-  const formatCurrency = (value: string | number | undefined | null): string => {
+  const formatCurrency = (value: number | undefined | null): string => {
     if (value === undefined || value === null) return '';
-     // Allow typing '0' or '0,00' etc.
-     if (String(value).match(/^0[,.]?0*$/)) return 'R$ 0,00';
+    // Explicitly format 0 as R$ 0,00
+    if (value === 0) return 'R$ 0,00';
 
-    let numStr = String(value).replace(/\D/g, '');
-    if (!numStr) return '';
-
-    let num = parseInt(numStr, 10) / 100;
-
-    return num.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
    const handleCurrencyChange = (e: React.ChangeEvent<HTMLInputElement>, field: any) => {
      const rawValue = e.target.value;
      let numberValue: number | undefined;
 
-      // Special handling for zero input
-      if (rawValue === '0' || rawValue === 'R$ 0,00' || rawValue.replace(/\D/g, '') === '0') {
+      // Check if the raw input aims to be zero
+      if (rawValue === '0' || rawValue === 'R$ 0,00' || rawValue.replace(/[^0-9]/g, '') === '0') {
           numberValue = 0;
-      } else {
-          const cleaned = rawValue.replace(/\D/g, '');
-          const parsedNum = parseInt(cleaned, 10) / 100;
-          numberValue = isNaN(parsedNum) ? undefined : parsedNum;
+          field.onChange(0); // Update form state with 0
+          e.target.value = 'R$ 0,00'; // Force display format for zero
+          return; // Exit early
       }
 
-     field.onChange(numberValue); // Store as number or undefined
-     // Update displayed value (formatted)
-     // We need to manually set the input value because field.onChange might not trigger a re-render immediately with the formatted value
-     e.target.value = formatCurrency(numberValue);
+      // Parse non-zero values
+      const cleaned = rawValue.replace(/[^0-9]/g, '');
+      if (cleaned === '') {
+          numberValue = undefined;
+          field.onChange(undefined); // Update form state
+      } else {
+          const parsedNum = parseInt(cleaned, 10) / 100;
+          numberValue = isNaN(parsedNum) ? undefined : parsedNum;
+          field.onChange(numberValue); // Update form state
+      }
+
+     // Update displayed value (formatted) - Let React handle re-render based on state change
+     // Avoid manually setting e.target.value here unless necessary for immediate feedback issues
+     // This relies on the component re-rendering with the formatted value from form state
    };
 
 
@@ -137,15 +145,17 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
     // Convert dates to ISO strings before submitting if backend expects strings
     const dataToSubmit = {
         ...data,
-        dataInicio: data.dataInicio.toISOString(),
-        dataMetaAnalise: data.dataMetaAnalise.toISOString(),
+        // Ensure dates are valid before calling toISOString
+        dataInicio: data.dataInicio instanceof Date ? data.dataInicio.toISOString() : undefined,
+        dataMetaAnalise: data.dataMetaAnalise instanceof Date ? data.dataMetaAnalise.toISOString() : undefined,
     };
 
     console.log('Submitting Data:', dataToSubmit);
 
     if (onSubmit) {
       try {
-        await onSubmit(data); // Pass original data with Date objects if onSubmit handles it
+        // Pass data with Date objects if the service handles it, otherwise pass dataToSubmit
+        await onSubmit(data);
       } catch (error) {
          console.error('Failed to submit licitação data:', error);
          // Error handling is managed by the parent through toast
@@ -156,6 +166,9 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
     }
   };
 
+  // Get the current formatted value for display
+  const currentValorCobradoFormatted = formatCurrency(form.watch('valorCobrado'));
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-6">
@@ -165,7 +178,8 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
           render={({field}) => (
             <FormItem>
               <FormLabel>Cliente*</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value || ''} disabled={isSubmitting}>
+              {/* Use field.value directly, ensure initial is undefined */}
+              <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
                 <FormControl>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione o cliente participante" />
@@ -175,7 +189,7 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
                   {clients.length === 0 && <SelectItem value="loading" disabled>Carregando...</SelectItem>}
                   {clients.map(client => (
                     <SelectItem key={client.id} value={client.id}>
-                      {client.name}
+                      {client.name} ({client.cnpj}) {/* Show CNPJ for clarity */}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -192,7 +206,7 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
             render={({field}) => (
               <FormItem>
                 <FormLabel>Modalidade*</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value || ''} disabled={isSubmitting}>
+                <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione a modalidade" />
@@ -232,7 +246,7 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
             render={({field}) => (
               <FormItem>
                 <FormLabel>Plataforma*</FormLabel>
-                 <Select onValueChange={field.onChange} value={field.value || ''} disabled={isSubmitting}>
+                 <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
                    <FormControl>
                      <SelectTrigger>
                        <SelectValue placeholder="Onde a licitação ocorrerá" />
@@ -257,16 +271,16 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
                 <FormItem>
                   <FormLabel>Valor Cobrado*</FormLabel>
                   <FormControl>
+                     {/* Control the input value with the formatted string */}
                     <Input
                      placeholder="R$ 0,00"
-                     // Use field.value directly if it's already managed as a number
-                     // value={formatCurrency(field.value)} // Use controlled formatting
-                     defaultValue={formatCurrency(field.value)} // Use defaultValue for initial render
-                     onBlur={(e) => { // Format on blur
-                         e.target.value = formatCurrency(field.value);
-                     }}
+                     value={currentValorCobradoFormatted} // Display formatted value
                      onChange={(e) => handleCurrencyChange(e, field)} // Handle change to parse/set number
+                     onBlur={(e) => { // Ensure correct format on blur
+                        e.target.value = formatCurrency(field.value);
+                     }}
                      disabled={isSubmitting}
+                     inputMode="decimal" // Hint for mobile keyboards
                     />
                   </FormControl>
                    <FormDescription>Valor que será faturado para o cliente (pode ser R$ 0,00).</FormDescription>
@@ -307,7 +321,16 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
                       <Calendar
                         mode="single"
                         selected={field.value}
-                        onSelect={field.onChange}
+                        onSelect={(date) => {
+                             // Preserve time if date is selected without time picker interaction
+                             const currentTime = field.value instanceof Date ? { hours: field.value.getHours(), minutes: field.value.getMinutes() } : { hours: 9, minutes: 0 }; // Default time
+                             if (date) {
+                                 date.setHours(currentTime.hours, currentTime.minutes, 0, 0);
+                                 field.onChange(date);
+                             } else {
+                                 field.onChange(undefined);
+                             }
+                         }}
                         // disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))} // Allow past dates if needed
                         initialFocus
                          disabled={isSubmitting}
@@ -320,7 +343,8 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
                             defaultValue={field.value ? format(field.value, 'HH:mm') : '09:00'}
                             onChange={(e) => {
                               const time = e.target.value;
-                              const currentValidDate = field.value instanceof Date && !isNaN(field.value.getTime()) ? field.value : new Date(); // Use today if no valid date yet
+                              // Ensure field.value is a valid date before setting time
+                              const currentValidDate = field.value instanceof Date && !isNaN(field.value.getTime()) ? field.value : new Date();
                               if (time) {
                                 const [hours, minutes] = time.split(':').map(Number);
                                 const newDate = new Date(currentValidDate);
@@ -370,7 +394,15 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
                       <Calendar
                         mode="single"
                         selected={field.value}
-                        onSelect={field.onChange}
+                        onSelect={(date) => {
+                            // Set time to start of day for date-only fields
+                            if (date) {
+                                date.setHours(0, 0, 0, 0);
+                                field.onChange(date);
+                            } else {
+                                field.onChange(undefined);
+                            }
+                        }}
                          // disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))} // Allow past dates if needed
                         initialFocus
                          disabled={isSubmitting}
@@ -402,7 +434,7 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
           />
 
         <div className="flex justify-end">
-          <Button type="submit" disabled={isSubmitting}>
+          <Button type="submit" disabled={isSubmitting || !form.formState.isValid}>
             {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             {isSubmitting ? 'Salvando...' : initialData ? 'Salvar Alterações' : 'Confirmar e Salvar Licitação'}
           </Button>
