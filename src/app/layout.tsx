@@ -1,7 +1,6 @@
 
 import type { Metadata } from 'next';
 import { GeistSans } from 'geist/font/sans';
-// Removed GeistMono import
 import './globals.css';
 import { cn } from '@/lib/utils';
 import { SidebarProvider, Sidebar, SidebarTrigger, SidebarInset } from '@/components/ui/sidebar';
@@ -10,8 +9,9 @@ import AppSidebar from '@/components/app-sidebar';
 import { AuthProvider, useAuth } from '@/context/AuthContext'; // Import AuthProvider and useAuth
 import { Button } from '@/components/ui/button'; // Import Button for SidebarTrigger
 import { LogOut } from 'lucide-react'; // Import LogOut icon
-import { usePathname } from 'next/navigation'; // Import usePathname
+// Removed usePathname import from here
 import React from 'react'; // Ensure React is imported
+import LayoutSelector from '@/components/layout-selector'; // Import LayoutSelector
 
 export const metadata: Metadata = {
   title: 'Licitax Advisor',
@@ -20,7 +20,7 @@ export const metadata: Metadata = {
 
 // Inner component to access auth context
 function AppLayout({ children }: { children: React.ReactNode }) {
-  'use client'; // <-- Already marked as client component
+  'use client'; // <-- Marked as client component
   const { isAuthenticated, isLoading, user, logout } = useAuth();
 
   // Show loading or nothing if not authenticated and not on login page (handled by AuthProvider redirect)
@@ -69,7 +69,7 @@ export default function RootLayout({
       <body className={cn('min-h-screen bg-background font-sans antialiased', GeistSans.variable)}>
         <AuthProvider>
           {/* Conditionally render layout based on route */}
-           <LayoutSelector>{children}</LayoutSelector>
+           <LayoutSelector AppLayout={AppLayout}>{children}</LayoutSelector> {/* Pass AppLayout */}
            <Toaster />
         </AuthProvider>
       </body>
@@ -77,16 +77,6 @@ export default function RootLayout({
   );
 }
 
-// Component to select layout based on route
-function LayoutSelector({ children }: { children: React.ReactNode }) {
-    'use client'; // <-- Add 'use client' here because it uses usePathname
-    const pathname = usePathname(); // Use usePathname here
+// Component to select layout based on route moved to its own file
+// function LayoutSelector({ children }: { children: React.ReactNode }) { ... }
 
-    if (pathname === '/login') {
-        // Render children directly for the login page (no sidebar/header)
-        return <>{children}</>;
-    }
-
-    // Render the main app layout for all other pages
-    return <AppLayout>{children}</AppLayout>;
-}
