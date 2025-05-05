@@ -2,7 +2,7 @@
 'use client';
 
 import Link from 'next/link';
-import {usePathname} from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
   Users,
@@ -11,11 +11,11 @@ import {
   FileText,
   KeyRound,
   CalendarDays,
-  Settings, // Added Settings icon
+  Settings,
   Briefcase,
 } from 'lucide-react';
 
-import {cn} from '@/lib/utils';
+import { cn } from '@/lib/utils';
 import {
   SidebarContent,
   SidebarHeader,
@@ -24,38 +24,45 @@ import {
   SidebarMenuButton,
   SidebarFooter,
 } from '@/components/ui/sidebar';
-import {Button} from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
+import { useAuth } from '@/context/AuthContext'; // Import useAuth
 
-const menuItems = [
-  {href: '/', label: 'Dashboard', icon: LayoutDashboard},
-  {href: '/clientes', label: 'Clientes', icon: Users},
-  {href: '/licitacoes', label: 'Licitações', icon: Gavel},
-  {href: '/financeiro', label: 'Financeiro', icon: DollarSign},
-  {href: '/documentos', label: 'Documentos', icon: FileText},
-  {href: '/senhas', label: 'Senhas', icon: KeyRound},
-  {href: '/calendario/metas', label: 'Calendário Metas', icon: CalendarDays},
-  {href: '/calendario/disputas', label: 'Calendário Disputas', icon: CalendarDays},
-  {href: '/configuracoes', label: 'Configurações', icon: Settings}, // Added Settings item
-  // { href: '/crm', label: 'CRM', icon: Briefcase }, // Placeholder for CRM
+const baseMenuItems = [
+  { href: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/clientes', label: 'Clientes', icon: Users },
+  { href: '/licitacoes', label: 'Licitações', icon: Gavel },
+  { href: '/financeiro', label: 'Financeiro', icon: DollarSign },
+  { href: '/documentos', label: 'Documentos', icon: FileText },
+  { href: '/senhas', label: 'Senhas', icon: KeyRound },
+  { href: '/calendario/metas', label: 'Calendário Metas', icon: CalendarDays },
+  { href: '/calendario/disputas', label: 'Calendário Disputas', icon: CalendarDays },
+  // { href: '/crm', label: 'CRM', icon: Briefcase }, // Placeholder
+];
+
+const adminMenuItems = [
+    { href: '/configuracoes', label: 'Configurações', icon: Settings },
 ];
 
 export default function AppSidebar() {
   const pathname = usePathname();
+  const { user } = useAuth(); // Get user info
 
   const isActive = (href: string) => {
     if (href === '/') {
       return pathname === '/';
     }
-    // Check if the current pathname starts with the link's href,
-    // but only if the href is longer than just "/"
     return pathname.startsWith(href);
   };
+
+  const menuItems = user?.role === 'admin'
+    ? [...baseMenuItems, ...adminMenuItems] // Admins see all + admin items
+    : baseMenuItems; // Regular users see base items
+
 
   return (
     <>
       <SidebarHeader>
         {/* Can add Logo or Title here if needed */}
-        {/* <h2 className="text-lg font-semibold text-sidebar-foreground">Licitax</h2> */}
       </SidebarHeader>
       <SidebarContent className="flex-1 overflow-y-auto">
         <SidebarMenu>
@@ -83,14 +90,8 @@ export default function AppSidebar() {
         </SidebarMenu>
       </SidebarContent>
       <SidebarFooter>
-        {/* Add User profile / Logout button here */}
-        {/* Example:
-        <Button variant="ghost" className="w-full justify-start text-sidebar-foreground">
-          <LogOut className="mr-2 h-4 w-4" />
-          Logout
-        </Button> */}
+        {/* User info and Logout button moved to top bar in layout.tsx */}
       </SidebarFooter>
     </>
   );
 }
-

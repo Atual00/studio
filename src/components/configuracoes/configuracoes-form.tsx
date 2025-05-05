@@ -1,34 +1,34 @@
 
 'use client';
 
-import {zodResolver} from '@hookform/resolvers/zod';
-import {useForm, Controller} from 'react-hook-form';
-import {z} from 'zod';
-import {useState, useEffect} from 'react';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm, Controller } from 'react-hook-form';
+import { z } from 'zod';
+import { useState, useEffect } from 'react';
 
-import {Button} from '@/components/ui/button';
-import {Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage} from '@/components/ui/form';
-import {Input} from '@/components/ui/input';
-import {Textarea} from '@/components/ui/textarea';
-import {getAddressByPostalCode, type Address} from '@/services/address'; // Import service
-import {Loader2} from 'lucide-react';
-import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@/components/ui/select'; // Import Select
+import { Button } from '@/components/ui/button';
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { getAddressByPostalCode, type Address } from '@/services/address'; // Import service
+import { Loader2 } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'; // Import Select
 
 // Zod schema for validation
 const configuracoesFormSchema = z.object({
-  razaoSocial: z.string().min(2, {message: 'Razão Social deve ter pelo menos 2 caracteres.'}),
+  razaoSocial: z.string().min(2, { message: 'Razão Social deve ter pelo menos 2 caracteres.' }),
   nomeFantasia: z.string().optional(),
-  cnpj: z.string().regex(/^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/, {message: 'CNPJ inválido. Use o formato XX.XXX.XXX/XXXX-XX.'}),
+  cnpj: z.string().regex(/^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/, { message: 'CNPJ inválido. Use o formato XX.XXX.XXX/XXXX-XX.' }),
   // Address fields
-  enderecoRua: z.string().min(1, {message: 'Rua é obrigatória.'}),
-  enderecoNumero: z.string().min(1, {message: 'Número é obrigatório.'}),
+  enderecoRua: z.string().min(1, { message: 'Rua é obrigatória.' }),
+  enderecoNumero: z.string().min(1, { message: 'Número é obrigatório.' }),
   enderecoComplemento: z.string().optional(),
-  enderecoBairro: z.string().min(1, {message: 'Bairro é obrigatório.'}),
-  enderecoCidade: z.string().min(1, {message: 'Cidade é obrigatória.'}),
-  enderecoCep: z.string().regex(/^\d{5}-\d{3}$/, {message: 'CEP inválido. Use o formato XXXXX-XXX.'}),
+  enderecoBairro: z.string().min(1, { message: 'Bairro é obrigatório.' }),
+  enderecoCidade: z.string().min(1, { message: 'Cidade é obrigatória.' }),
+  enderecoCep: z.string().regex(/^\d{5}-\d{3}$/, { message: 'CEP inválido. Use o formato XXXXX-XXX.' }),
   // Contact
-  email: z.string().email({message: 'E-mail inválido.'}),
-  telefone: z.string().min(10, {message: 'Telefone deve ter pelo menos 10 dígitos.'}),
+  email: z.string().email({ message: 'E-mail inválido.' }),
+  telefone: z.string().min(10, { message: 'Telefone deve ter pelo menos 10 dígitos.' }),
   // Bank Details
   banco: z.string().optional(),
   agencia: z.string().optional(),
@@ -36,11 +36,11 @@ const configuracoesFormSchema = z.object({
   chavePix: z.string().optional(),
   // Financial Settings
   diaVencimentoPadrao: z.preprocess(
-      (val) => (typeof val === 'string' ? parseInt(val, 10) : val),
-      z.number({ required_error: 'Dia de vencimento é obrigatório.', invalid_type_error: 'Dia deve ser um número.'}).min(1, 'Dia deve ser entre 1 e 31').max(31, 'Dia deve ser entre 1 e 31')
+    (val) => (typeof val === 'string' ? parseInt(val, 10) : val),
+    z.number({ required_error: 'Dia de vencimento é obrigatório.', invalid_type_error: 'Dia deve ser um número.' }).min(1, 'Dia deve ser entre 1 e 31').max(31, 'Dia deve ser entre 1 e 31')
   ),
-  // Logo (Optional - for future use)
-  // logoUrl: z.string().url("URL inválida").optional().or(z.literal('')),
+  // Logo (Optional - only for type, handled separately in UI)
+  logoUrl: z.string().url("URL inválida").optional().or(z.literal('')),
 });
 
 export type ConfiguracoesFormValues = z.infer<typeof configuracoesFormSchema>;
@@ -51,7 +51,7 @@ interface ConfiguracoesFormProps {
   isSubmitting?: boolean; // Loading state from parent
 }
 
-export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting = false}: ConfiguracoesFormProps) {
+export default function ConfiguracoesForm({ initialData, onSubmit, isSubmitting = false }: ConfiguracoesFormProps) {
   const [cepLoading, setCepLoading] = useState(false);
 
   const form = useForm<ConfiguracoesFormValues>({
@@ -73,27 +73,27 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
       conta: '',
       chavePix: '',
       diaVencimentoPadrao: 15, // Default to 15
-      // logoUrl: '',
+      logoUrl: '',
     },
   });
 
-   // Watch CEP for autofill
-   const watchedCep = form.watch('enderecoCep');
+  // Watch CEP for autofill
+  const watchedCep = form.watch('enderecoCep');
 
   // --- CEP Autofill Logic ---
   useEffect(() => {
     // Update form values if initialData changes (e.g., after fetch)
     if (initialData) {
-        form.reset({
-             ...initialData,
-            // Ensure diaVencimentoPadrao is a number or default
-             diaVencimentoPadrao: typeof initialData.diaVencimentoPadrao === 'number' ? initialData.diaVencimentoPadrao : 15,
-        });
+      form.reset({
+        ...initialData,
+        // Ensure diaVencimentoPadrao is a number or default
+        diaVencimentoPadrao: typeof initialData.diaVencimentoPadrao === 'number' ? initialData.diaVencimentoPadrao : 15,
+      });
     }
-   }, [initialData, form]);
+  }, [initialData, form]);
 
 
-   useEffect(() => {
+  useEffect(() => {
     const cep = watchedCep?.replace(/\D/g, ''); // Remove non-digits
     if (cep?.length === 8) {
       const fetchAddress = async () => {
@@ -101,18 +101,16 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
         try {
           const addressData = await getAddressByPostalCode(cep);
           if (addressData) {
-            form.setValue('enderecoRua', addressData.street, {shouldValidate: true});
-            form.setValue('enderecoBairro', addressData.neighborhood, {shouldValidate: true});
-            form.setValue('enderecoCidade', addressData.city, {shouldValidate: true});
+            form.setValue('enderecoRua', addressData.street, { shouldValidate: true });
+            form.setValue('enderecoBairro', addressData.neighborhood, { shouldValidate: true });
+            form.setValue('enderecoCidade', addressData.city, { shouldValidate: true });
             // Don't automatically set number or complement from ViaCEP
-            // form.setValue('enderecoNumero', addressData.number || '');
-            // form.setValue('enderecoComplemento', addressData.complement || '');
           } else {
             console.warn('CEP não encontrado:', cep);
-             // Clear fields if CEP not found
-             form.setValue('enderecoRua', '', { shouldValidate: true });
-             form.setValue('enderecoBairro', '', { shouldValidate: true });
-             form.setValue('enderecoCidade', '', { shouldValidate: true });
+            // Clear fields if CEP not found
+            form.setValue('enderecoRua', '', { shouldValidate: true });
+            form.setValue('enderecoBairro', '', { shouldValidate: true });
+            form.setValue('enderecoCidade', '', { shouldValidate: true });
           }
         } catch (error) {
           console.error('Erro ao buscar CEP:', error);
@@ -128,9 +126,9 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
   const handleFormSubmit = async (data: ConfiguracoesFormValues) => {
     if (onSubmit) {
       await onSubmit({
-          ...data,
-         // Ensure diaVencimentoPadrao is submitted as a number
-         diaVencimentoPadrao: Number(data.diaVencimentoPadrao)
+        ...data,
+        // Ensure diaVencimentoPadrao is submitted as a number
+        diaVencimentoPadrao: Number(data.diaVencimentoPadrao)
       });
     } else {
       console.log('Submitting configuration data (default action)...', data);
@@ -139,8 +137,8 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
     }
   };
 
-   // Helper to format CNPJ/CEP on input change
-   const formatInput = (value: string | undefined, type: 'cnpj' | 'cep'): string => {
+  // Helper to format CNPJ/CEP on input change
+  const formatInput = (value: string | undefined, type: 'cnpj' | 'cep'): string => {
     if (!value) return '';
     const digits = value.replace(/\D/g, '');
     if (type === 'cnpj') {
@@ -172,7 +170,7 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
             <FormField
               control={form.control}
               name="razaoSocial"
-              render={({field}) => (
+              render={({ field }) => (
                 <FormItem>
                   <FormLabel>Razão Social*</FormLabel>
                   <FormControl>
@@ -185,7 +183,7 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
             <FormField
               control={form.control}
               name="nomeFantasia"
-              render={({field}) => (
+              render={({ field }) => (
                 <FormItem>
                   <FormLabel>Nome Fantasia</FormLabel>
                   <FormControl>
@@ -196,7 +194,7 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
               )}
             />
           </div>
-           <FormField
+          <FormField
             control={form.control}
             name="cnpj"
             render={({ field }) => (
@@ -207,7 +205,7 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
                     placeholder="XX.XXX.XXX/XXXX-XX"
                     {...field}
                     onChange={(e) => field.onChange(formatInput(e.target.value, 'cnpj'))}
-                     disabled={isSubmitting}
+                    disabled={isSubmitting}
                   />
                 </FormControl>
                 <FormMessage />
@@ -219,33 +217,33 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
         {/* Company Address */}
         <section className="space-y-4 p-4 border rounded-md">
           <h3 className="text-lg font-medium mb-4">Endereço da Assessoria</h3>
-           <FormField
-              control={form.control}
-              name="enderecoCep"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>CEP*</FormLabel>
-                  <FormControl>
-                     <div className="flex items-center gap-2">
-                      <Input
-                        placeholder="XXXXX-XXX"
-                        {...field}
-                        onChange={(e) => field.onChange(formatInput(e.target.value, 'cep'))}
-                        maxLength={9}
-                         disabled={isSubmitting || cepLoading}
-                      />
-                      {cepLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-                    </div>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+          <FormField
+            control={form.control}
+            name="enderecoCep"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>CEP*</FormLabel>
+                <FormControl>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      placeholder="XXXXX-XXX"
+                      {...field}
+                      onChange={(e) => field.onChange(formatInput(e.target.value, 'cep'))}
+                      maxLength={9}
+                      disabled={isSubmitting || cepLoading}
+                    />
+                    {cepLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                  </div>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <FormField
               control={form.control}
               name="enderecoRua"
-              render={({field}) => (
+              render={({ field }) => (
                 <FormItem className="md:col-span-2">
                   <FormLabel>Rua*</FormLabel>
                   <FormControl>
@@ -255,10 +253,10 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
                 </FormItem>
               )}
             />
-             <FormField
+            <FormField
               control={form.control}
               name="enderecoNumero"
-              render={({field}) => (
+              render={({ field }) => (
                 <FormItem>
                   <FormLabel>Número*</FormLabel>
                   <FormControl>
@@ -274,11 +272,11 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
             <FormField
               control={form.control}
               name="enderecoComplemento"
-              render={({field}) => (
+              render={({ field }) => (
                 <FormItem>
                   <FormLabel>Complemento</FormLabel>
                   <FormControl>
-                    <Input placeholder="Apto, Bloco, Sala" {...field} disabled={isSubmitting}/>
+                    <Input placeholder="Apto, Bloco, Sala" {...field} disabled={isSubmitting} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -287,7 +285,7 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
             <FormField
               control={form.control}
               name="enderecoBairro"
-              render={({field}) => (
+              render={({ field }) => (
                 <FormItem>
                   <FormLabel>Bairro*</FormLabel>
                   <FormControl>
@@ -300,7 +298,7 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
             <FormField
               control={form.control}
               name="enderecoCidade"
-              render={({field}) => (
+              render={({ field }) => (
                 <FormItem>
                   <FormLabel>Cidade*</FormLabel>
                   <FormControl>
@@ -313,37 +311,37 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
           </div>
         </section>
 
-         {/* Contact Info */}
+        {/* Contact Info */}
         <section className="space-y-4 p-4 border rounded-md">
-            <h3 className="text-lg font-medium mb-4">Contato</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                    <FormItem>
-                    <FormLabel>E-mail*</FormLabel>
-                    <FormControl>
-                        <Input type="email" placeholder="contato@suaassessoria.com" {...field} disabled={isSubmitting}/>
-                    </FormControl>
-                    <FormMessage />
-                    </FormItem>
-                )}
-                />
-                <FormField
-                control={form.control}
-                name="telefone"
-                render={({ field }) => (
-                    <FormItem>
-                    <FormLabel>Telefone*</FormLabel>
-                    <FormControl>
-                        <Input type="tel" placeholder="(XX) XXXXX-XXXX" {...field} disabled={isSubmitting}/>
-                    </FormControl>
-                    <FormMessage />
-                    </FormItem>
-                )}
-                />
-            </div>
+          <h3 className="text-lg font-medium mb-4">Contato</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <FormField
+              control={form.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>E-mail*</FormLabel>
+                  <FormControl>
+                    <Input type="email" placeholder="contato@suaassessoria.com" {...field} disabled={isSubmitting} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="telefone"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Telefone*</FormLabel>
+                  <FormControl>
+                    <Input type="tel" placeholder="(XX) XXXXX-XXXX" {...field} disabled={isSubmitting} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
         </section>
 
         {/* Bank Details for Receiving Payments */}
@@ -353,11 +351,11 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
             <FormField
               control={form.control}
               name="banco"
-              render={({field}) => (
+              render={({ field }) => (
                 <FormItem>
                   <FormLabel>Banco</FormLabel>
                   <FormControl>
-                    <Input placeholder="Nome ou número do banco" {...field} disabled={isSubmitting}/>
+                    <Input placeholder="Nome ou número do banco" {...field} disabled={isSubmitting} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -366,11 +364,11 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
             <FormField
               control={form.control}
               name="agencia"
-              render={({field}) => (
+              render={({ field }) => (
                 <FormItem>
                   <FormLabel>Agência</FormLabel>
                   <FormControl>
-                    <Input placeholder="Número da agência (com dígito, se houver)" {...field} disabled={isSubmitting}/>
+                    <Input placeholder="Número da agência (com dígito, se houver)" {...field} disabled={isSubmitting} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -379,90 +377,70 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
             <FormField
               control={form.control}
               name="conta"
-              render={({field}) => (
+              render={({ field }) => (
                 <FormItem>
                   <FormLabel>Conta Corrente</FormLabel>
                   <FormControl>
-                    <Input placeholder="Número da conta com dígito" {...field} disabled={isSubmitting}/>
+                    <Input placeholder="Número da conta com dígito" {...field} disabled={isSubmitting} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
           </div>
-           <FormField
-              control={form.control}
-              name="chavePix"
-              render={({field}) => (
-                <FormItem>
-                  <FormLabel>Chave PIX</FormLabel>
-                  <FormControl>
-                    <Input placeholder="CNPJ, E-mail, Telefone ou Chave Aleatória" {...field} disabled={isSubmitting}/>
-                  </FormControl>
-                   <FormDescription>Esta chave será usada nas faturas e documentos de cobrança.</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+          <FormField
+            control={form.control}
+            name="chavePix"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Chave PIX</FormLabel>
+                <FormControl>
+                  <Input placeholder="CNPJ, E-mail, Telefone ou Chave Aleatória" {...field} disabled={isSubmitting} />
+                </FormControl>
+                <FormDescription>Esta chave será usada nas faturas e documentos de cobrança.</FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
         </section>
 
         {/* Financial Settings */}
         <section className="space-y-4 p-4 border rounded-md">
-             <h3 className="text-lg font-medium mb-4">Configurações Financeiras</h3>
-             <FormField
-                control={form.control}
-                name="diaVencimentoPadrao"
-                render={({field}) => (
-                    <FormItem>
-                    <FormLabel>Dia Padrão de Vencimento*</FormLabel>
-                    <Select
-                        onValueChange={(value) => field.onChange(parseInt(value, 10))} // Ensure value is number
-                        value={field.value?.toString()} // Convert number to string for Select value
-                        disabled={isSubmitting}
-                    >
-                      <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione o dia do mês" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                           {dayOptions.map(day => (
-                             <SelectItem key={day} value={day}>{day}</SelectItem>
-                           ))}
-                        </SelectContent>
-                      </Select>
-                     <FormDescription>Dia do mês seguinte à homologação para vencimento das faturas.</FormDescription>
-                     <FormMessage />
-                    </FormItem>
-                )}
-                />
+          <h3 className="text-lg font-medium mb-4">Configurações Financeiras</h3>
+          <FormField
+            control={form.control}
+            name="diaVencimentoPadrao"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Dia Padrão de Vencimento*</FormLabel>
+                <Select
+                  onValueChange={(value) => field.onChange(parseInt(value, 10))} // Ensure value is number
+                  value={field.value?.toString()} // Convert number to string for Select value
+                  disabled={isSubmitting}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o dia do mês" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {dayOptions.map(day => (
+                      <SelectItem key={day} value={day}>{day}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormDescription>Dia do mês seguinte à homologação para vencimento das faturas.</FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
         </section>
 
-
-         {/* Logo Upload - Placeholder */}
-         {/* <section className="space-y-4 p-4 border rounded-md">
-            <h3 className="text-lg font-medium mb-4">Logo da Assessoria</h3>
-            <FormField
-                control={form.control}
-                name="logoUrl"
-                render={({ field }) => (
-                    <FormItem>
-                    <FormLabel>URL do Logo</FormLabel>
-                    <FormControl>
-                       <Input type="url" placeholder="https://..." {...field} disabled={isSubmitting} />
-                    </FormControl>
-                     <FormDescription>Link para a imagem do logo que aparecerá nos relatórios.</FormDescription>
-                    <FormMessage />
-                    </FormItem>
-                )}
-                />
-             {/* Or implement file upload here */}
-         {/* </section> */}
-
+        {/* Note: Logo Upload UI is handled in configuracoes/page.tsx */}
 
         <div className="flex justify-end">
           <Button type="submit" disabled={isSubmitting || cepLoading}>
-            {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+            {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             Salvar Configurações
           </Button>
         </div>
