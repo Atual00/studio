@@ -26,7 +26,7 @@ import {
 } from '@/components/ui/popover';
 import {Calendar} from '@/components/ui/calendar';
 import {Label} from '@/components/ui/label';
-import {AlertCircle, CalendarClock, CheckCircle, Filter, Loader2, PlusCircle, Trash2, Edit, FileText, Calendar as CalendarIcon} from 'lucide-react';
+import {AlertCircle, CalendarClock, CheckCircle, Filter, Loader2, PlusCircle, Trash2, Edit, FileText, Calendar as CalendarIcon, HelpCircle} from 'lucide-react'; // Added HelpCircle
 import {format, differenceInDays, isBefore, addDays, parseISO, startOfDay, endOfDay, isValid} from 'date-fns';
 import {ptBR} from 'date-fns/locale';
 import {Button} from '@/components/ui/button';
@@ -37,6 +37,16 @@ import { useForm, Controller } from 'react-hook-form'; // Import react-hook-form
 import { z } from 'zod'; // Import zod
 import { zodResolver } from '@hookform/resolvers/zod'; // Import zod resolver
 import { cn } from '@/lib/utils'; // Import cn utility
+import {
+  Form, // Assuming Form, FormControl, etc. are also used
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+
 
 // --- Zod Schema for Form ---
 const documentoSchema = z.object({
@@ -252,7 +262,7 @@ export default function DocumentosPage() {
                 // Update
                 const success = await updateDocumento(editingDocumento.id, data);
                 if (success) {
-                    setDocumentos(prev => prev.map(d => d.id === editingDocumento.id ? { ...d, ...data, clienteNome: clientes.find(c => c.id === data.clienteId)?.name || 'N/A' } : d));
+                    setDocumentos(prev => prev.map(d => d.id === editingDocumento.id ? { ...d, ...data, clienteNome: clientes.find(c => c.id === data.clienteId)?.name || 'N/A', dataVencimento: parseAndValidateDate(data.dataVencimento) } : d)); // Ensure date is updated correctly
                     // toast({ title: "Sucesso", description: "Documento atualizado." });
                 } else {
                     throw new Error("Falha ao atualizar documento.");
@@ -401,9 +411,11 @@ export default function DocumentosPage() {
                     ) : filteredDocumentos.length > 0 ? (
                        filteredDocumentos.map(doc => {
                             const statusInfo = getDocumentStatus(doc.dataVencimento);
-                            const formattedDate = doc.dataVencimento
-                                ? format(doc.dataVencimento instanceof Date ? doc.dataVencimento : parseISO(doc.dataVencimento), "dd/MM/yyyy", { locale: ptBR })
-                                : 'N/A';
+                             // Use parsed and validated date for formatting
+                             const parsedDate = parseAndValidateDate(doc.dataVencimento);
+                             const formattedDate = parsedDate
+                                 ? format(parsedDate, "dd/MM/yyyy", { locale: ptBR })
+                                 : 'N/A';
                             return (
                                 <TableRow key={doc.id}>
                                     <TableCell className="font-medium">
@@ -456,7 +468,8 @@ export default function DocumentosPage() {
                         Preencha as informações do documento e sua data de vencimento (se aplicável).
                     </DialogDescription>
                 </DialogHeader>
-                <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4 py-4">
+                <Form {...{control, handleSubmit, reset, setValue, formState: { errors }}}> {/* Pass form methods to Form component */}
+                  <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4 py-4">
                      {error && (
                          <Alert variant="destructive">
                              <AlertCircle className="h-4 w-4" />
@@ -464,12 +477,12 @@ export default function DocumentosPage() {
                              <AlertDescription>{error}</AlertDescription>
                          </Alert>
                      )}
-                     <Controller
+                     <FormField
                         control={control}
                         name="clienteId"
                         render={({ field }) => (
                             <FormItem>
-                                <Label htmlFor="clienteId">Cliente*</Label>
+                                <FormLabel>Cliente*</FormLabel>
                                 <Select onValueChange={field.onChange} value={field.value || ''} disabled={isSubmitting || loadingClients}>
                                     <FormControl>
                                         <SelectTrigger id="clienteId">
@@ -478,7 +491,7 @@ export default function DocumentosPage() {
                                     </FormControl>
                                     <SelectContent>
                                         {loadingClients ? (
-                                            <SelectItem value="loading" disabled>Carregando...</SelectItem>
+                                            <SelectItem value="loading-clients" disabled>Carregando...</SelectItem>
                                         ) : (
                                              clientes.map(c => (
                                                 <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
@@ -486,27 +499,29 @@ export default function DocumentosPage() {
                                         )}
                                     </SelectContent>
                                 </Select>
-                                {errors.clienteId && <p className="text-sm text-destructive mt-1">{errors.clienteId.message}</p>}
+                                <FormMessage>{errors.clienteId?.message}</FormMessage>
                             </FormItem>
                         )}
                         />
-                     <Controller
+                     <FormField
                         control={control}
                         name="tipoDocumento"
                         render={({ field }) => (
                            <FormItem>
-                              <Label htmlFor="tipoDocumento">Tipo de Documento*</Label>
-                              <Input id="tipoDocumento" placeholder="Ex: CND Federal, Contrato Social..." {...field} disabled={isSubmitting} />
-                              {errors.tipoDocumento && <p className="text-sm text-destructive mt-1">{errors.tipoDocumento.message}</p>}
+                              <FormLabel>Tipo de Documento*</FormLabel>
+                              <FormControl>
+                                 <Input id="tipoDocumento" placeholder="Ex: CND Federal, Contrato Social..." {...field} disabled={isSubmitting} />
+                               </FormControl>
+                              <FormMessage>{errors.tipoDocumento?.message}</FormMessage>
                            </FormItem>
                         )}
                         />
-                    <Controller
+                    <FormField
                         control={control}
                         name="dataVencimento"
                         render={({ field }) => (
                             <FormItem className="flex flex-col">
-                                <Label>Data de Vencimento</Label>
+                                <FormLabel>Data de Vencimento</FormLabel>
                                 <Popover>
                                     <PopoverTrigger asChild>
                                         <FormControl>
@@ -538,7 +553,7 @@ export default function DocumentosPage() {
                                     </PopoverContent>
                                 </Popover>
                                 <FormDescription className="text-xs">Deixe em branco se não aplicável.</FormDescription>
-                                {errors.dataVencimento && <p className="text-sm text-destructive mt-1">{errors.dataVencimento.message}</p>}
+                                <FormMessage>{errors.dataVencimento?.message}</FormMessage>
                             </FormItem>
                         )}
                         />
@@ -553,7 +568,8 @@ export default function DocumentosPage() {
                             {editingDocumento ? 'Salvar Alterações' : 'Adicionar Documento'}
                         </Button>
                     </DialogFooter>
-                </form>
+                  </form>
+                </Form> {/* Close Form component */}
             </DialogContent>
         </Dialog>
 
@@ -561,3 +577,5 @@ export default function DocumentosPage() {
     </div>
   );
 }
+
+    
