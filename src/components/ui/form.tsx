@@ -45,30 +45,16 @@ const FormField = <
 const useFormField = () => {
   const fieldContext = React.useContext(FormFieldContext)
   const itemContext = React.useContext(FormItemContext)
-  const formMethods = useFormContext() // Get the whole context
-
-  // Add an explicit check for the context
-  if (!formMethods) {
-    throw new Error("useFormField must be used within a <Form> component provided by react-hook-form or ShadCN.");
-  }
-
-  // Destructure AFTER checking if formMethods exists
-  const { getFieldState, formState } = formMethods
-
-  // Check if getFieldState is actually a function
-  if (typeof getFieldState !== 'function') {
-    console.error("useFormContext did not return an object with getFieldState function.", formMethods);
-    throw new Error("getFieldState is not a function. Check react-hook-form version or context provider.");
-  }
-
-
-  const fieldState = getFieldState(fieldContext.name, formState)
+  const { getFieldState, formState } = useFormContext() // Now correctly referencing the imported hook
 
   if (!fieldContext) {
     throw new Error("useFormField should be used within <FormField>")
   }
-
   const { id } = itemContext
+
+  // Assume getFieldState exists if useFormContext is used correctly within FormProvider
+  const fieldState = getFieldState(fieldContext.name, formState)
+
 
   return {
     id,

@@ -107,6 +107,23 @@ const getBadgeVariantDoc = (color: 'destructive' | 'warning' | 'success' | 'defa
    }
 }
 
+// Helper to parse and validate date strings or Date objects
+const parseAndValidateDate = (dateInput: string | Date | null | undefined): Date | null => {
+   if (!dateInput) return null;
+   if (dateInput instanceof Date) {
+       return isValid(dateInput) ? dateInput : null;
+   }
+   if (typeof dateInput === 'string') {
+      try {
+         const parsed = parseISO(dateInput);
+         return isValid(parsed) ? parsed : null;
+      } catch {
+         return null;
+      }
+   }
+   return null; // Return null for other types
+}
+
 
 // --- Component ---
 export default function DocumentosPage() {
@@ -123,7 +140,8 @@ export default function DocumentosPage() {
   const [editingDocumento, setEditingDocumento] = useState<Documento | null>(null); // State for editing
   const [isDialogOpen, setIsDialogOpen] = useState(false); // State for dialog visibility
 
-  const { control, handleSubmit, reset, setValue, formState: { errors } } = useForm<DocumentoFormData>({
+  // Initialize form using useForm hook
+  const form = useForm<DocumentoFormData>({
       resolver: zodResolver(documentoSchema),
       defaultValues: {
           clienteId: '',
@@ -241,12 +259,13 @@ export default function DocumentosPage() {
 
     const handleOpenDialog = (doc: Documento | null = null) => {
         setEditingDocumento(doc);
-        reset(doc ? {
+        // Reset form values based on whether editing or adding
+        form.reset(doc ? {
              clienteId: doc.clienteId,
              tipoDocumento: doc.tipoDocumento,
-             dataVencimento: doc.dataVencimento ? (doc.dataVencimento instanceof Date ? doc.dataVencimento : parseISO(doc.dataVencimento)) : null,
+             dataVencimento: parseAndValidateDate(doc.dataVencimento), // Ensure it's Date or null
          } : {
-            clienteId: '',
+            clienteId: '', // Reset to empty string or suitable default
             tipoDocumento: '',
             dataVencimento: null,
         });
@@ -262,7 +281,22 @@ export default function DocumentosPage() {
                 // Update
                 const success = await updateDocumento(editingDocumento.id, data);
                 if (success) {
-                    setDocumentos(prev => prev.map(d => d.id === editingDocumento.id ? { ...d, ...data, clienteNome: clientes.find(c => c.id === data.clienteId)?.name || 'N/A', dataVencimento: parseAndValidateDate(data.dataVencimento) } : d)); // Ensure date is updated correctly
+                    // Update the document list with potentially new client name and parsed date
+                    setDocumentos(prev => prev.map(d => {
+                        if (d.id === editingDocumento.id) {
+                             // Find the new client name if client ID changed
+                            const newClientName = data.clienteId === d.clienteId
+                                ? d.clienteNome
+                                : clientes.find(c => c.id === data.clienteId)?.name || 'N/A';
+                            return {
+                                ...d,
+                                ...data,
+                                clienteNome: newClientName,
+                                dataVencimento: parseAndValidateDate(data.dataVencimento) // Ensure date is correct type
+                            };
+                        }
+                        return d;
+                    }));
                     // toast({ title: "Sucesso", description: "Documento atualizado." });
                 } else {
                     throw new Error("Falha ao atualizar documento.");
@@ -271,7 +305,9 @@ export default function DocumentosPage() {
                 // Add
                 const newDoc = await addDocumento(data);
                 if (newDoc) {
-                    setDocumentos(prev => [newDoc, ...prev]);
+                    // Ensure date is parsed correctly when adding to list
+                    const docWithParsedDate = {...newDoc, dataVencimento: parseAndValidateDate(newDoc.dataVencimento)};
+                    setDocumentos(prev => [docWithParsedDate, ...prev]);
                     // toast({ title: "Sucesso", description: "Documento adicionado." });
                 } else {
                     throw new Error("Falha ao adicionar documento.");
@@ -336,7 +372,7 @@ export default function DocumentosPage() {
               <SelectContent>
                  <SelectItem value="todos">Todos os Clientes</SelectItem>
                  {loadingClients ? (
-                      <SelectItem value="loading" disabled>Carregando...</SelectItem>
+                      <SelectItem value="loading-clients" disabled>Carregando...</SelectItem>
                  ) : (
                      clientes.map(c => (
                         <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
@@ -468,8 +504,9 @@ export default function DocumentosPage() {
                         Preencha as informações do documento e sua data de vencimento (se aplicável).
                     </DialogDescription>
                 </DialogHeader>
-                <Form {...{control, handleSubmit, reset, setValue, formState: { errors }}}> {/* Pass form methods to Form component */}
-                  <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4 py-4">
+                {/* Wrap form elements in the Form component */}
+                <Form {...form}>
+                  <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4 py-4">
                      {error && (
                          <Alert variant="destructive">
                              <AlertCircle className="h-4 w-4" />
@@ -478,7 +515,7 @@ export default function DocumentosPage() {
                          </Alert>
                      )}
                      <FormField
-                        control={control}
+                        control={form.control}
                         name="clienteId"
                         render={({ field }) => (
                             <FormItem>
@@ -499,12 +536,12 @@ export default function DocumentosPage() {
                                         )}
                                     </SelectContent>
                                 </Select>
-                                <FormMessage>{errors.clienteId?.message}</FormMessage>
+                                <FormMessage />
                             </FormItem>
                         )}
                         />
                      <FormField
-                        control={control}
+                        control={form.control}
                         name="tipoDocumento"
                         render={({ field }) => (
                            <FormItem>
@@ -512,12 +549,12 @@ export default function DocumentosPage() {
                               <FormControl>
                                  <Input id="tipoDocumento" placeholder="Ex: CND Federal, Contrato Social..." {...field} disabled={isSubmitting} />
                                </FormControl>
-                              <FormMessage>{errors.tipoDocumento?.message}</FormMessage>
+                              <FormMessage />
                            </FormItem>
                         )}
                         />
                     <FormField
-                        control={control}
+                        control={form.control}
                         name="dataVencimento"
                         render={({ field }) => (
                             <FormItem className="flex flex-col">
@@ -553,7 +590,7 @@ export default function DocumentosPage() {
                                     </PopoverContent>
                                 </Popover>
                                 <FormDescription className="text-xs">Deixe em branco se não aplicável.</FormDescription>
-                                <FormMessage>{errors.dataVencimento?.message}</FormMessage>
+                                <FormMessage />
                             </FormItem>
                         )}
                         />
@@ -578,4 +615,4 @@ export default function DocumentosPage() {
   );
 }
 
-    
+
