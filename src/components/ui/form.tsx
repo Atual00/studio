@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -6,7 +7,7 @@ import { Slot } from "@radix-ui/react-slot"
 import {
   Controller,
   FormProvider,
-  useFormContext,
+  useFormContext, // Correctly import useFormContext
   type ControllerProps,
   type FieldPath,
   type FieldValues,
@@ -44,7 +45,7 @@ const FormField = <
 const useFormField = () => {
   const fieldContext = React.useContext(FormFieldContext)
   const itemContext = React.useContext(FormItemContext)
-  const { getFieldState, formState } = useFormContext()
+  const { getFieldState, formState } = useFormContext() // Now correctly referencing the imported hook
 
   const fieldState = getFieldState(fieldContext.name, formState)
 
