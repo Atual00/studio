@@ -78,12 +78,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // *** MOCK PASSWORD CHECK - Replace with real authentication ***
     // This is highly insecure and only for demonstration.
     let foundUser: { username: string; role: 'admin' | 'user' } | null = null;
-    if (username === 'admin' && password === 'password') {
+    // Case-insensitive username comparison
+    const lowerCaseUsername = username.toLowerCase();
+
+    if (lowerCaseUsername === 'admin' && password === 'password') {
         foundUser = { username: 'admin', role: 'admin' };
-    } else if (username === 'user' && password === 'password') {
+    } else if (lowerCaseUsername === 'user' && password === 'password') {
         foundUser = { username: 'user', role: 'user' };
-    } else if (username === 'joao' && password === '150306') {
-        foundUser = { username: 'joao', role: 'user' }; // Assuming 'user' role for joao
+    } else if (lowerCaseUsername === 'joao' && password === '305533') { // Updated JOAO password and role
+        foundUser = { username: 'JOAO', role: 'admin' }; // Assign admin role
     }
     // *** END MOCK PASSWORD CHECK ***
 

@@ -15,7 +15,7 @@ export interface User {
 let initialMockUsers: User[] = [
   { id: 'user-admin-001', username: 'admin', role: 'admin' },
   { id: 'user-user-002', username: 'user', role: 'user' },
-  { id: 'user-joao-003', username: 'joao', role: 'user' }, // Ensure Joao is in the initial seed
+  { id: 'user-joao-003', username: 'JOAO', role: 'admin' }, // Ensure JOAO is admin here too
 ];
 
 // --- Helper Functions (using localStorage for simulation) ---
@@ -27,15 +27,19 @@ const getUsersFromStorage = (): User[] => {
     let users: User[] = storedData ? JSON.parse(storedData) : [];
 
     // Ensure default mock users (including joao) are present if storage was cleared or empty initially
+    // And update JOAO role if found with a different role
     initialMockUsers.forEach(mockUser => {
-        if (!users.some(u => u.username === mockUser.username)) {
-            users.push(mockUser);
+        const existingUserIndex = users.findIndex(u => u.username.toLowerCase() === mockUser.username.toLowerCase());
+        if (existingUserIndex === -1) {
+            users.push(mockUser); // Add if missing
+        } else if (users[existingUserIndex].role !== mockUser.role && mockUser.username.toLowerCase() === 'joao') {
+            users[existingUserIndex].role = mockUser.role; // Update JOAO's role if it differs
         }
     });
 
     // Filter duplicates just in case (e.g., if localStorage had old data)
     users = users.filter((user, index, self) =>
-        index === self.findIndex((u) => (u.id === user.id || u.username === user.username))
+        index === self.findIndex((u) => (u.id === user.id || u.username.toLowerCase() === user.username.toLowerCase()))
     );
 
     return users;
@@ -49,9 +53,9 @@ const getUsersFromStorage = (): User[] => {
 const saveUsersToStorage = (users: User[]): void => {
   if (typeof window === 'undefined') return;
   try {
-    // Filter duplicates before saving
+    // Filter duplicates before saving (case-insensitive username check)
      const uniqueUsers = users.filter((user, index, self) =>
-        index === self.findIndex((u) => (u.id === user.id || u.username === user.username))
+        index === self.findIndex((u) => (u.id === user.id || u.username.toLowerCase() === user.username.toLowerCase()))
     );
     localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(uniqueUsers));
   } catch (e) {
@@ -61,7 +65,7 @@ const saveUsersToStorage = (users: User[]): void => {
 
 // Initialize storage with potentially updated mock data if it doesn't exist or is outdated
 if (typeof window !== 'undefined') {
-    const existingUsers = getUsersFromStorage(); // Load potentially existing + ensure defaults
+    const existingUsers = getUsersFromStorage(); // Load potentially existing + ensure defaults + update roles
     saveUsersToStorage(existingUsers); // Save the potentially updated list
 }
 
@@ -95,7 +99,7 @@ export const addUser = async (username: string, password?: string, role: 'admin'
 
   const users = getUsersFromStorage();
 
-  // Check for duplicate username
+  // Check for duplicate username (case-insensitive)
   if (users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
     throw new Error(`Usuário "${username}" já existe.`);
   }
@@ -105,15 +109,13 @@ export const addUser = async (username: string, password?: string, role: 'admin'
 
   const newUser: User = {
     id: `user-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-    username: username,
+    username: username, // Store username as provided
     // passwordHash: passwordHash,
     role: role,
   };
 
   const updatedUsers = [...users, newUser];
   saveUsersToStorage(updatedUsers);
-
-  // REMOVED: Update to window.MOCK_USERS - AuthContext handles mock login directly now.
 
   return newUser;
 };
@@ -148,12 +150,9 @@ export const deleteUser = async (id: string): Promise<boolean> => {
 
   saveUsersToStorage(updatedUsers);
 
-  // REMOVED: Update to window.MOCK_USERS
-
   return true;
 };
 
 // --- Potential Future Functions ---
 // export const updateUser = async (id: string, data: Partial<User>): Promise<boolean> => { ... };
 // export const changePassword = async (id: string, newPassword: string): Promise<boolean> => { ... };
-
