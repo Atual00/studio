@@ -10,6 +10,8 @@ import AppSidebar from '@/components/app-sidebar';
 import { AuthProvider, useAuth } from '@/context/AuthContext'; // Import AuthProvider and useAuth
 import { Button } from '@/components/ui/button'; // Import Button for SidebarTrigger
 import { LogOut } from 'lucide-react'; // Import LogOut icon
+import { usePathname } from 'next/navigation'; // Import usePathname
+import React from 'react'; // Ensure React is imported
 
 export const metadata: Metadata = {
   title: 'Licitax Advisor',
@@ -18,6 +20,7 @@ export const metadata: Metadata = {
 
 // Inner component to access auth context
 function AppLayout({ children }: { children: React.ReactNode }) {
+  'use client'; // <-- Already marked as client component
   const { isAuthenticated, isLoading, user, logout } = useAuth();
 
   // Show loading or nothing if not authenticated and not on login page (handled by AuthProvider redirect)
@@ -76,6 +79,7 @@ export default function RootLayout({
 
 // Component to select layout based on route
 function LayoutSelector({ children }: { children: React.ReactNode }) {
+    'use client'; // <-- Add 'use client' here because it uses usePathname
     const pathname = usePathname(); // Use usePathname here
 
     if (pathname === '/login') {
