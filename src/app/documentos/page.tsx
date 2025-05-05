@@ -1,104 +1,98 @@
+
 // src/app/documentos/page.tsx
 'use client'; // For state and effects
 
-import {useState, useEffect} from 'react';
-import {Card, CardHeader, CardTitle, CardDescription, CardContent} from '@/components/ui/card';
+import React, {useState, useEffect} from 'react'; // Import React
+import {Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter} from '@/components/ui/card';
 import {Table, TableHeader, TableRow, TableHead, TableBody, TableCell} from '@/components/ui/table';
 import {Input} from '@/components/ui/input';
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@/components/ui/select';
 import {Badge} from '@/components/ui/badge';
-import {AlertCircle, CalendarClock, CheckCircle, Filter, Loader2} from 'lucide-react';
-import {format, differenceInDays, isBefore, addDays} from 'date-fns';
+import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert'; // Import Alert
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+    DialogFooter,
+    DialogTrigger,
+    DialogClose
+} from '@/components/ui/dialog';
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from '@/components/ui/popover';
+import {Calendar} from '@/components/ui/calendar';
+import {Label} from '@/components/ui/label';
+import {AlertCircle, CalendarClock, CheckCircle, Filter, Loader2, PlusCircle, Trash2, Edit, FileText, Calendar as CalendarIcon} from 'lucide-react';
+import {format, differenceInDays, isBefore, addDays, parseISO, startOfDay, endOfDay, isValid} from 'date-fns';
 import {ptBR} from 'date-fns/locale';
-import {Button} from '@/components/ui/button'; // Added for potential actions
+import {Button} from '@/components/ui/button';
 import Link from 'next/link'; // For linking to client
+import { fetchDocumentos, addDocumento, updateDocumento, deleteDocumento, type Documento } from '@/services/documentoService'; // Import document service
+import { fetchClients as fetchClientList, type ClientListItem } from '@/services/clientService'; // Import client service
+import { useForm, Controller } from 'react-hook-form'; // Import react-hook-form
+import { z } from 'zod'; // Import zod
+import { zodResolver } from '@hookform/resolvers/zod'; // Import zod resolver
+import { cn } from '@/lib/utils'; // Import cn utility
 
-// --- Mock Data and Types ---
-interface Documento {
-  id: string; // Unique ID for the document instance
-  clienteId: string;
-  clienteNome: string;
-  tipoDocumento: string; // e.g., CND Federal, Contrato Social
-  dataVencimento: Date | null; // Null if not applicable or not set
-  // Could add file link/reference here later
-}
+// --- Zod Schema for Form ---
+const documentoSchema = z.object({
+  clienteId: z.string({required_error: "Selecione o cliente"}).min(1, "Cliente é obrigatório"),
+  tipoDocumento: z.string().min(1, "Tipo de documento é obrigatório"),
+  dataVencimento: z.date().nullable().optional(), // Allow null or undefined
+});
 
-// Mock fetch function (replace with actual API call)
-const fetchDocumentos = async (): Promise<Documento[]> => {
-  console.log('Fetching documentos...');
-  await new Promise(resolve => setTimeout(resolve, 600)); // Simulate API delay
-  const today = new Date();
-  return [
-    {
-      id: 'doc-001',
-      clienteId: '1',
-      clienteNome: 'Empresa Exemplo Ltda',
-      tipoDocumento: 'CND Federal',
-      dataVencimento: addDays(today, 5), // Expires in 5 days
-    },
-     {
-      id: 'doc-002',
-      clienteId: '1',
-      clienteNome: 'Empresa Exemplo Ltda',
-      tipoDocumento: 'CND FGTS',
-      dataVencimento: addDays(today, 25), // Expires in 25 days
-    },
-     {
-      id: 'doc-003',
-      clienteId: '2',
-      clienteNome: 'Soluções Inovadoras S.A.',
-      tipoDocumento: 'Certidão Falência',
-      dataVencimento: addDays(today, 80), // Expires in 80 days
-    },
-     {
-      id: 'doc-004',
-      clienteId: '3',
-      clienteNome: 'Comércio Varejista XYZ EIRELI',
-      tipoDocumento: 'CND Municipal',
-      dataVencimento: addDays(today, -10), // Expired 10 days ago
-    },
-      {
-      id: 'doc-005',
-      clienteId: '2',
-      clienteNome: 'Soluções Inovadoras S.A.',
-      tipoDocumento: 'CND Estadual',
-      dataVencimento: addDays(today, 15), // Expires in 15 days
-    },
-    {
-      id: 'doc-006',
-      clienteId: '1',
-      clienteNome: 'Empresa Exemplo Ltda',
-      tipoDocumento: 'Contrato Social', // No expiration
-      dataVencimento: null,
-    },
-  ];
-};
+type DocumentoFormData = z.infer<typeof documentoSchema>;
 
 
 // --- Helper Function for Status ---
-const getDocumentStatus = (vencimento: Date | null): { label: string; color: 'destructive' | 'warning' | 'success' | 'default'; icon: React.ElementType } => {
-  if (!vencimento) {
+const getDocumentStatus = (vencimento: Date | null | string): { label: string; color: 'destructive' | 'warning' | 'success' | 'default'; icon: React.ElementType } => {
+  let dateVencimento: Date | null = null;
+  if (vencimento instanceof Date && isValid(vencimento)) {
+      dateVencimento = vencimento;
+  } else if (typeof vencimento === 'string') {
+      try {
+          const parsed = parseISO(vencimento);
+          if (isValid(parsed)) {
+              dateVencimento = parsed;
+          }
+      } catch {
+          // ignore parse error
+      }
+  }
+
+  if (!dateVencimento) {
     return { label: 'Não Aplicável', color: 'default', icon: CheckCircle }; // Or maybe a different icon/label
   }
-  const today = new Date();
-  const daysDiff = differenceInDays(vencimento, today);
+  const today = startOfDay(new Date()); // Compare against start of today
+  const targetDate = startOfDay(dateVencimento); // Compare against start of expiration date
 
-  if (isBefore(vencimento, today)) {
-    return { label: `Vencido (${Math.abs(daysDiff)}d atrás)`, color: 'destructive', icon: AlertCircle };
-  } else if (daysDiff <= 15) {
-    return { label: `Vence em ${daysDiff}d`, color: 'destructive', icon: AlertCircle }; // Urgent
-  } else if (daysDiff <= 30) {
-     return { label: `Vence em ${daysDiff}d`, color: 'warning', icon: CalendarClock }; // Warning
+  if (isBefore(targetDate, today)) {
+     const daysDiff = differenceInDays(today, targetDate); // How many days ago it expired
+    return { label: `Vencido (${daysDiff}d atrás)`, color: 'destructive', icon: AlertCircle };
   } else {
-    return { label: 'Válido', color: 'success', icon: CheckCircle };
+     const daysDiff = differenceInDays(targetDate, today); // How many days until it expires
+     if (daysDiff <= 0) { // Expires today
+        return { label: `Vence Hoje`, color: 'destructive', icon: AlertCircle };
+     } else if (daysDiff <= 15) {
+        return { label: `Vence em ${daysDiff}d`, color: 'destructive', icon: AlertCircle }; // Urgent (within 15 days)
+     } else if (daysDiff <= 30) {
+        return { label: `Vence em ${daysDiff}d`, color: 'warning', icon: CalendarClock }; // Warning (within 30 days)
+     } else {
+        return { label: 'Válido', color: 'success', icon: CheckCircle }; // Valid (> 30 days)
+     }
   }
 };
 
-const getBadgeVariantDoc = (color: 'destructive' | 'warning' | 'success' | 'default'): 'destructive' | 'default' | 'outline' | 'secondary' => {
+
+const getBadgeVariantDoc = (color: 'destructive' | 'warning' | 'success' | 'default'): 'destructive' | 'warning' | 'success' | 'outline' => {
    switch (color) {
        case 'destructive': return 'destructive';
-       case 'warning': return 'default'; // Using primary/default for warning state for visibility
-       case 'success': return 'secondary'; // Using secondary for valid/ok state
+       case 'warning': return 'warning'; // Use specific warning variant
+       case 'success': return 'success'; // Use specific success variant
        case 'default': return 'outline'; // Using outline for N/A
    }
 }
@@ -108,27 +102,49 @@ const getBadgeVariantDoc = (color: 'destructive' | 'warning' | 'success' | 'defa
 export default function DocumentosPage() {
   const [documentos, setDocumentos] = useState<Documento[]>([]);
   const [filteredDocumentos, setFilteredDocumentos] = useState<Documento[]>([]);
+  const [clientes, setClientes] = useState<ClientListItem[]>([]); // State for client list
   const [loading, setLoading] = useState(true);
-  const [filterCliente, setFilterCliente] = useState('');
+  const [loadingClients, setLoadingClients] = useState(true); // Separate loading state for clients
+  const [filterCliente, setFilterCliente] = useState('todos'); // Allow filtering by specific client ID
   const [filterTipo, setFilterTipo] = useState('todos'); // Initial state set to 'todos'
-  const [filterStatus, setFilterStatus] = useState<'todos' | 'vencido' | 'vence_15d' | 'vence_30d' | 'valido'>('todos');
+  const [filterStatus, setFilterStatus] = useState<'todos' | 'vencido' | 'vence_hoje' | 'vence_15d' | 'vence_30d' | 'valido' | 'na'>('todos');
+  const [error, setError] = useState<string | null>(null); // State for general errors
+  const [isSubmitting, setIsSubmitting] = useState(false); // State for form submission
+  const [editingDocumento, setEditingDocumento] = useState<Documento | null>(null); // State for editing
+  const [isDialogOpen, setIsDialogOpen] = useState(false); // State for dialog visibility
+
+  const { control, handleSubmit, reset, setValue, formState: { errors } } = useForm<DocumentoFormData>({
+      resolver: zodResolver(documentoSchema),
+      defaultValues: {
+          clienteId: '',
+          tipoDocumento: '',
+          dataVencimento: null,
+      }
+  });
 
    // Fetch data on mount
   useEffect(() => {
-    const loadDocumentos = async () => {
+    const loadInitialData = async () => {
       setLoading(true);
+      setLoadingClients(true);
+      setError(null);
       try {
-        const data = await fetchDocumentos();
-        setDocumentos(data);
-        setFilteredDocumentos(data); // Initialize filtered list
+        const [docData, clientData] = await Promise.all([
+          fetchDocumentos(),
+          fetchClientList()
+        ]);
+        setDocumentos(docData);
+        setFilteredDocumentos(docData); // Initialize filtered list
+        setClientes(clientData);
       } catch (err) {
-        console.error('Erro ao buscar documentos:', err);
-        // Add toast notification for error
+        console.error('Erro ao buscar documentos ou clientes:', err);
+        setError('Falha ao carregar dados.');
       } finally {
         setLoading(false);
+        setLoadingClients(false);
       }
     };
-    loadDocumentos();
+    loadInitialData();
   }, []);
 
 
@@ -136,13 +152,11 @@ export default function DocumentosPage() {
   useEffect(() => {
     let result = documentos;
 
-    if (filterCliente) {
-       result = result.filter(d =>
-        d.clienteNome.toLowerCase().includes(filterCliente.toLowerCase())
-      );
+    if (filterCliente !== 'todos') {
+       result = result.filter(d => d.clienteId === filterCliente);
     }
-    // Updated filter logic for Tipo
-    if (filterTipo && filterTipo !== 'todos') {
+
+    if (filterTipo !== 'todos') {
        result = result.filter(d =>
         d.tipoDocumento.toLowerCase().includes(filterTipo.toLowerCase())
       );
@@ -151,19 +165,29 @@ export default function DocumentosPage() {
      if (filterStatus !== 'todos') {
         result = result.filter(d => {
             const statusInfo = getDocumentStatus(d.dataVencimento);
-            const today = new Date();
-            const venc = d.dataVencimento;
+            const today = startOfDay(new Date());
+            let venc: Date | null = null;
+            if (d.dataVencimento) {
+               try {
+                   venc = d.dataVencimento instanceof Date ? d.dataVencimento : parseISO(d.dataVencimento);
+                   if (!isValid(venc)) venc = null; // Treat invalid dates as null
+                   else venc = startOfDay(venc); // Normalize to start of day
+               } catch { venc = null; }
+            }
 
             switch (filterStatus) {
                 case 'vencido':
                     return venc ? isBefore(venc, today) : false;
+                 case 'vence_hoje':
+                    return venc ? differenceInDays(venc, today) === 0 : false;
                 case 'vence_15d':
-                     return venc ? !isBefore(venc, today) && differenceInDays(venc, today) <= 15 : false;
+                     return venc ? !isBefore(venc, today) && differenceInDays(venc, today) > 0 && differenceInDays(venc, today) <= 15 : false;
                 case 'vence_30d':
                      return venc ? !isBefore(venc, today) && differenceInDays(venc, today) > 15 && differenceInDays(venc, today) <= 30 : false;
                  case 'valido':
-                     // Ensure N/A documents are included in 'valido' filter
-                     return venc ? (!isBefore(venc, today) && differenceInDays(venc, today) > 30) : (statusInfo.label === 'Não Aplicável');
+                     return venc ? (!isBefore(venc, today) && differenceInDays(venc, today) > 30) : false; // Only strictly valid (>30d)
+                 case 'na':
+                     return !venc || statusInfo.label === 'Não Aplicável'; // Include null/undefined/NA dates
                 default:
                     return true;
             }
@@ -173,25 +197,26 @@ export default function DocumentosPage() {
 
     // Sort by expiration date (soonest first, then N/A, then already expired)
     result.sort((a, b) => {
-        const statusA = getDocumentStatus(a.dataVencimento);
-        const statusB = getDocumentStatus(b.dataVencimento);
-        const dateA = a.dataVencimento;
-        const dateB = b.dataVencimento;
+         let dateA: Date | null = null;
+         let dateB: Date | null = null;
 
-        if (!dateA && !dateB) return 0; // Both N/A
-        if (!dateA) return 1; // N/A comes after dates
-        if (!dateB) return -1; // N/A comes after dates
+         try { dateA = a.dataVencimento ? (a.dataVencimento instanceof Date ? a.dataVencimento : parseISO(a.dataVencimento)) : null; if (dateA && !isValid(dateA)) dateA = null; } catch { dateA = null; }
+         try { dateB = b.dataVencimento ? (b.dataVencimento instanceof Date ? b.dataVencimento : parseISO(b.dataVencimento)) : null; if (dateB && !isValid(dateB)) dateB = null; } catch { dateB = null; }
 
-        const today = new Date();
-        const isAExpired = isBefore(dateA, today);
-        const isBExpired = isBefore(dateB, today);
+         const today = startOfDay(new Date());
+         const isAExpired = dateA ? isBefore(startOfDay(dateA), today) : false;
+         const isBExpired = dateB ? isBefore(startOfDay(dateB), today) : false;
 
-        if (isAExpired && isBExpired) return dateA.getTime() - dateB.getTime(); // Sort expired by date
-        if (isAExpired) return 1; // Expired come last
-        if (isBExpired) return -1; // Expired come last
+         if (!dateA && !dateB) return 0; // Both N/A - keep original order or sort by name?
+         if (!dateA) return 1;         // N/A (A) comes after valid dates (B)
+         if (!dateB) return -1;        // N/A (B) comes after valid dates (A)
 
-        // Both are valid, sort by closest expiration
-        return dateA.getTime() - dateB.getTime();
+         if (isAExpired && isBExpired) return dateA.getTime() - dateB.getTime(); // Both expired: sort by expiration date (oldest first)
+         if (isAExpired) return 1;      // Expired (A) comes after valid/NA (B)
+         if (isBExpired) return -1;     // Expired (B) comes after valid/NA (A)
+
+         // Both are valid and not N/A: sort by closest expiration date first
+         return dateA.getTime() - dateB.getTime();
     });
 
 
@@ -202,10 +227,88 @@ export default function DocumentosPage() {
    // Get unique document types for filtering
    const uniqueTipos = Array.from(new Set(documentos.map(d => d.tipoDocumento)));
 
+   // --- CRUD Handlers ---
+
+    const handleOpenDialog = (doc: Documento | null = null) => {
+        setEditingDocumento(doc);
+        reset(doc ? {
+             clienteId: doc.clienteId,
+             tipoDocumento: doc.tipoDocumento,
+             dataVencimento: doc.dataVencimento ? (doc.dataVencimento instanceof Date ? doc.dataVencimento : parseISO(doc.dataVencimento)) : null,
+         } : {
+            clienteId: '',
+            tipoDocumento: '',
+            dataVencimento: null,
+        });
+        setError(null); // Clear previous errors
+        setIsDialogOpen(true);
+    };
+
+    const onSubmit = async (data: DocumentoFormData) => {
+        setIsSubmitting(true);
+        setError(null);
+        try {
+            if (editingDocumento) {
+                // Update
+                const success = await updateDocumento(editingDocumento.id, data);
+                if (success) {
+                    setDocumentos(prev => prev.map(d => d.id === editingDocumento.id ? { ...d, ...data, clienteNome: clientes.find(c => c.id === data.clienteId)?.name || 'N/A' } : d));
+                    // toast({ title: "Sucesso", description: "Documento atualizado." });
+                } else {
+                    throw new Error("Falha ao atualizar documento.");
+                }
+            } else {
+                // Add
+                const newDoc = await addDocumento(data);
+                if (newDoc) {
+                    setDocumentos(prev => [newDoc, ...prev]);
+                    // toast({ title: "Sucesso", description: "Documento adicionado." });
+                } else {
+                    throw new Error("Falha ao adicionar documento.");
+                }
+            }
+            setIsDialogOpen(false); // Close dialog on success
+        } catch (err) {
+            console.error("Erro ao salvar documento:", err);
+            setError(`Erro ao salvar: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
+            // Keep dialog open on error
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+     const handleDelete = async (id: string) => {
+        const confirmed = confirm("Tem certeza que deseja excluir este documento?");
+        if (!confirmed) return;
+
+        // Find the document to potentially show its name in the toast
+        const docToDelete = documentos.find(d => d.id === id);
+
+        try {
+            const success = await deleteDocumento(id);
+            if (success) {
+                setDocumentos(prev => prev.filter(d => d.id !== id));
+                // toast({ title: "Sucesso", description: `Documento "${docToDelete?.tipoDocumento || id}" excluído.` });
+            } else {
+                throw new Error("Falha ao excluir documento no backend.");
+            }
+        } catch (err) {
+            console.error("Erro ao excluir documento:", err);
+            setError(`Erro ao excluir: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
+            // toast({ title: "Erro", description: `Não foi possível excluir o documento. ${err instanceof Error ? err.message : ''}`, variant: "destructive" });
+        }
+    };
+
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-semibold">Controle de Vencimento de Documentos</h2>
+      <div className="flex justify-between items-center flex-wrap gap-2">
+        <h2 className="text-2xl font-semibold">Controle de Vencimento de Documentos</h2>
+         <Button onClick={() => handleOpenDialog()}>
+           <PlusCircle className="mr-2 h-4 w-4" />
+           Adicionar Documento
+         </Button>
+      </div>
 
         {/* Filter Section */}
       <Card>
@@ -215,18 +318,27 @@ export default function DocumentosPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Input
-                placeholder="Filtrar por Cliente..."
-                value={filterCliente}
-                onChange={(e) => setFilterCliente(e.target.value)}
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+             <Select value={filterCliente} onValueChange={setFilterCliente} disabled={loadingClients}>
+              <SelectTrigger>
+                <SelectValue placeholder="Filtrar por Cliente..." />
+              </SelectTrigger>
+              <SelectContent>
+                 <SelectItem value="todos">Todos os Clientes</SelectItem>
+                 {loadingClients ? (
+                      <SelectItem value="loading" disabled>Carregando...</SelectItem>
+                 ) : (
+                     clientes.map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                     ))
+                 )}
+              </SelectContent>
+            </Select>
              <Select value={filterTipo} onValueChange={setFilterTipo}>
               <SelectTrigger>
                 <SelectValue placeholder="Filtrar por Tipo..." />
               </SelectTrigger>
               <SelectContent>
-                 {/* Changed value from "" to "todos" */}
                  <SelectItem value="todos">Todos os Tipos</SelectItem>
                  {uniqueTipos.sort().map(tipo => (
                    <SelectItem key={tipo} value={tipo}>{tipo}</SelectItem>
@@ -240,12 +352,17 @@ export default function DocumentosPage() {
               <SelectContent>
                  <SelectItem value="todos">Todos Status</SelectItem>
                  <SelectItem value="vencido">Vencido</SelectItem>
+                 <SelectItem value="vence_hoje">Vence Hoje</SelectItem>
                  <SelectItem value="vence_15d">Vence em até 15 dias</SelectItem>
-                  <SelectItem value="vence_30d">Vence em até 30 dias</SelectItem>
-                 <SelectItem value="valido">Válido (&gt;30d ou N/A)</SelectItem>
+                  <SelectItem value="vence_30d">Vence em 16-30 dias</SelectItem>
+                 <SelectItem value="valido">Válido (&gt;30d)</SelectItem>
+                 <SelectItem value="na">Não Aplicável</SelectItem>
               </SelectContent>
             </Select>
-             {/* <Button variant="outline" >Aplicar Filtros</Button> // Filtering is real-time */}
+             {/* Clear button or other filters can go here */}
+              <Button variant="ghost" onClick={() => { setFilterCliente('todos'); setFilterTipo('todos'); setFilterStatus('todos'); }} className="text-muted-foreground hover:text-primary">
+                Limpar Filtros
+              </Button>
           </div>
         </CardContent>
       </Card>
@@ -257,6 +374,13 @@ export default function DocumentosPage() {
              <CardDescription>Acompanhe a validade dos documentos dos seus clientes.</CardDescription>
          </CardHeader>
           <CardContent>
+             {error && (
+                 <Alert variant="destructive" className="mb-4">
+                     <AlertCircle className="h-4 w-4" />
+                     <AlertTitle>Erro</AlertTitle>
+                     <AlertDescription>{error}</AlertDescription>
+                 </Alert>
+             )}
              <Table>
                 <TableHeader>
                     <TableRow>
@@ -270,37 +394,40 @@ export default function DocumentosPage() {
                 <TableBody>
                     {loading ? (
                         <TableRow>
-                            <TableCell colSpan={5} className="text-center">
+                            <TableCell colSpan={5} className="text-center h-24">
                                 <Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" />
                             </TableCell>
                         </TableRow>
                     ) : filteredDocumentos.length > 0 ? (
                        filteredDocumentos.map(doc => {
                             const statusInfo = getDocumentStatus(doc.dataVencimento);
+                            const formattedDate = doc.dataVencimento
+                                ? format(doc.dataVencimento instanceof Date ? doc.dataVencimento : parseISO(doc.dataVencimento), "dd/MM/yyyy", { locale: ptBR })
+                                : 'N/A';
                             return (
                                 <TableRow key={doc.id}>
                                     <TableCell className="font-medium">
                                        <Link href={`/clientes/${doc.clienteId}`} className="hover:underline text-primary">
-                                          {doc.clienteNome}
+                                          {doc.clienteNome || 'Cliente não encontrado'}
                                        </Link>
                                     </TableCell>
                                     <TableCell>{doc.tipoDocumento}</TableCell>
+                                    <TableCell>{formattedDate}</TableCell>
                                     <TableCell>
-                                       {doc.dataVencimento ? format(doc.dataVencimento, "dd/MM/yyyy", { locale: ptBR }) : 'N/A'}
-                                    </TableCell>
-                                    <TableCell>
-                                        <Badge variant={getBadgeVariantDoc(statusInfo.color)} className="flex items-center gap-1 w-fit">
+                                        <Badge variant={getBadgeVariantDoc(statusInfo.color)} className="flex items-center gap-1 w-fit whitespace-nowrap">
                                             <statusInfo.icon className="h-3 w-3" />
                                             {statusInfo.label}
                                         </Badge>
                                     </TableCell>
                                     <TableCell className="text-right space-x-1">
-                                       {/* Add buttons for actions like: Upload New, View File, Request Update */}
-                                       {/* Example: */}
-                                        {/* <Button variant="outline" size="sm" title="Upload Novo Documento">
-                                           <Upload className="h-4 w-4" />
-                                        </Button> */}
-                                        {/* <Button variant="ghost" size="sm" title="Ver Arquivo">
+                                       <Button variant="ghost" size="icon" title="Editar" onClick={() => handleOpenDialog(doc)}>
+                                           <Edit className="h-4 w-4" />
+                                       </Button>
+                                       <Button variant="ghost" size="icon" title="Excluir" onClick={() => handleDelete(doc.id)}>
+                                           <Trash2 className="h-4 w-4 text-destructive" />
+                                       </Button>
+                                       {/* Add button for uploading file later */}
+                                        {/* <Button variant="outline" size="sm" title="Anexar Arquivo">
                                            <FileText className="h-4 w-4" />
                                         </Button> */}
                                     </TableCell>
@@ -309,7 +436,7 @@ export default function DocumentosPage() {
                         })
                     ) : (
                         <TableRow>
-                            <TableCell colSpan={5} className="text-center text-muted-foreground">
+                            <TableCell colSpan={5} className="text-center text-muted-foreground h-24">
                                 Nenhum documento encontrado com os filtros aplicados.
                             </TableCell>
                         </TableRow>
@@ -319,6 +446,117 @@ export default function DocumentosPage() {
               {/* Add Pagination */}
           </CardContent>
       </Card>
+
+       {/* Add/Edit Document Dialog */}
+       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogContent className="sm:max-w-[500px]">
+                <DialogHeader>
+                    <DialogTitle>{editingDocumento ? 'Editar Documento' : 'Adicionar Novo Documento'}</DialogTitle>
+                    <DialogDescription>
+                        Preencha as informações do documento e sua data de vencimento (se aplicável).
+                    </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4 py-4">
+                     {error && (
+                         <Alert variant="destructive">
+                             <AlertCircle className="h-4 w-4" />
+                             <AlertTitle>Erro ao Salvar</AlertTitle>
+                             <AlertDescription>{error}</AlertDescription>
+                         </Alert>
+                     )}
+                     <Controller
+                        control={control}
+                        name="clienteId"
+                        render={({ field }) => (
+                            <FormItem>
+                                <Label htmlFor="clienteId">Cliente*</Label>
+                                <Select onValueChange={field.onChange} value={field.value || ''} disabled={isSubmitting || loadingClients}>
+                                    <FormControl>
+                                        <SelectTrigger id="clienteId">
+                                            <SelectValue placeholder="Selecione o Cliente" />
+                                        </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                        {loadingClients ? (
+                                            <SelectItem value="loading" disabled>Carregando...</SelectItem>
+                                        ) : (
+                                             clientes.map(c => (
+                                                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                                             ))
+                                        )}
+                                    </SelectContent>
+                                </Select>
+                                {errors.clienteId && <p className="text-sm text-destructive mt-1">{errors.clienteId.message}</p>}
+                            </FormItem>
+                        )}
+                        />
+                     <Controller
+                        control={control}
+                        name="tipoDocumento"
+                        render={({ field }) => (
+                           <FormItem>
+                              <Label htmlFor="tipoDocumento">Tipo de Documento*</Label>
+                              <Input id="tipoDocumento" placeholder="Ex: CND Federal, Contrato Social..." {...field} disabled={isSubmitting} />
+                              {errors.tipoDocumento && <p className="text-sm text-destructive mt-1">{errors.tipoDocumento.message}</p>}
+                           </FormItem>
+                        )}
+                        />
+                    <Controller
+                        control={control}
+                        name="dataVencimento"
+                        render={({ field }) => (
+                            <FormItem className="flex flex-col">
+                                <Label>Data de Vencimento</Label>
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <FormControl>
+                                            <Button
+                                                variant={"outline"}
+                                                className={cn(
+                                                    "w-full pl-3 text-left font-normal",
+                                                    !field.value && "text-muted-foreground"
+                                                )}
+                                                disabled={isSubmitting}
+                                            >
+                                                {field.value ? (
+                                                    format(field.value, "dd/MM/yyyy", { locale: ptBR })
+                                                ) : (
+                                                    <span>Selecione a data (opcional)</span>
+                                                )}
+                                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                            </Button>
+                                        </FormControl>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-auto p-0" align="start">
+                                        <Calendar
+                                            mode="single"
+                                            selected={field.value ?? undefined} // Pass undefined if null
+                                            onSelect={(date) => field.onChange(date || null)} // Set to null if date is cleared
+                                            initialFocus
+                                            disabled={isSubmitting}
+                                        />
+                                    </PopoverContent>
+                                </Popover>
+                                <FormDescription className="text-xs">Deixe em branco se não aplicável.</FormDescription>
+                                {errors.dataVencimento && <p className="text-sm text-destructive mt-1">{errors.dataVencimento.message}</p>}
+                            </FormItem>
+                        )}
+                        />
+
+
+                    <DialogFooter>
+                        <DialogClose asChild>
+                            <Button type="button" variant="outline" disabled={isSubmitting}>Cancelar</Button>
+                        </DialogClose>
+                        <Button type="submit" disabled={isSubmitting}>
+                            {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+                            {editingDocumento ? 'Salvar Alterações' : 'Adicionar Documento'}
+                        </Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
+
 
     </div>
   );

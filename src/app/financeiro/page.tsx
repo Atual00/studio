@@ -1,3 +1,4 @@
+
 'use client'; // Required for state and client-side interaction
 
 import {useState, useEffect} from 'react';
@@ -12,48 +13,14 @@ import {Popover, PopoverContent, PopoverTrigger} from '@/components/ui/popover';
 import {Calendar} from '@/components/ui/calendar'; // Import Calendar
 import {DateRange} from 'react-day-picker'; // Import DateRange type
 import {Download, FileText, Filter, Loader2, Send, CheckCircle, Clock, CalendarIcon, X} from 'lucide-react'; // Import icons
-import {format, parseISO, startOfDay, endOfDay, isWithinInterval, addDays} from 'date-fns';
+import {format, parseISO, startOfDay, endOfDay, isWithinInterval, addMonths, setDate} from 'date-fns'; // Updated date-fns imports
 import {ptBR} from 'date-fns/locale';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable'; // Correct import for autoTable
 import {useToast} from '@/hooks/use-toast';
 import type { ConfiguracoesFormValues } from '@/components/configuracoes/configuracoes-form'; // Import settings type
 import { fetchDebitos, updateDebitoStatus, type Debito } from '@/services/licitacaoService'; // Import from licitacaoService
-
-
-// --- Mock function to fetch company settings (reuse logic from configuracoes/page.tsx) ---
-const fetchConfiguracoesEmpresa = async (): Promise<ConfiguracoesFormValues | null> => {
-    console.log('Fetching company configurations for PDF...');
-    // Basic localStorage fetch - consider a more robust state management or dedicated service
-    if (typeof window === 'undefined') return null;
-    await new Promise(resolve => setTimeout(resolve, 150)); // Simulate small delay
-    const storedConfig = localStorage.getItem('configuracoesEmpresa');
-    if (storedConfig) {
-        try {
-            return JSON.parse(storedConfig);
-        } catch (e) {
-            console.error("Error parsing stored config:", e);
-            return null;
-        }
-    }
-    // Return default/empty if not found
-    return {
-        razaoSocial: 'Licitax Advisor (Nome Padrão)',
-        cnpj: '00.000.000/0001-00',
-        nomeFantasia: 'Licitax',
-        email: 'contato@licitax.com',
-        telefone: '(XX) XXXXX-XXXX',
-        enderecoCep: '00000-000',
-        enderecoRua: 'Rua Padrão',
-        enderecoNumero: 'S/N',
-        enderecoBairro: 'Centro',
-        enderecoCidade: 'Cidade Padrão',
-        banco: 'Banco Exemplo',
-        agencia: '0001',
-        conta: '12345-6',
-        chavePix: 'seu-pix@exemplo.com',
-    };
-};
+import { fetchConfiguracoes } from '@/services/configuracoesService'; // Import config service
 
 
 const statusFinanceiroMap: {[key: string]: {label: string; color: string; icon: React.ElementType}} = {
@@ -96,7 +63,7 @@ export default function FinanceiroPage() {
         // Fetch debits generated from licitacoes service
         const [debitosData, configData] = await Promise.all([
            fetchDebitos(),
-           fetchConfiguracoesEmpresa()
+           fetchConfiguracoes() // Use service to fetch configs
         ]);
         setAllDebitos(debitosData); // Store all fetched data
         setFilteredDebitos(debitosData); // Initialize filtered list
@@ -147,6 +114,11 @@ export default function FinanceiroPage() {
         result = result.filter(d => {
             try {
                 const homologacaoDate = typeof d.dataHomologacao === 'string' ? parseISO(d.dataHomologacao) : d.dataHomologacao;
+                // Ensure homologacaoDate is a valid Date before comparison
+                 if (!(homologacaoDate instanceof Date) || isNaN(homologacaoDate.getTime())) {
+                     console.warn(`Invalid homologacaoDate for debit ${d.id}:`, d.dataHomologacao);
+                     return false;
+                 }
                 return isWithinInterval(homologacaoDate, { start, end });
             } catch (e) {
                 console.error("Error parsing homologacaoDate during filtering:", d.id, e);
@@ -192,11 +164,34 @@ export default function FinanceiroPage() {
         if (!date) return 'N/A';
         try {
             const dateObj = typeof date === 'string' ? parseISO(date) : date;
+             // Ensure it's a valid date
+             if (!(dateObj instanceof Date) || isNaN(dateObj.getTime())) {
+                 return 'Data Inválida';
+             }
             return format(dateObj, "dd/MM/yyyy", { locale: ptBR });
         } catch (e) {
             return 'Data Inválida';
         }
     };
+
+    // Calculate Due Date based on Homologation Date and Config
+    const calculateDueDate = (homologacaoDate: Date | string): Date => {
+        const defaultDueDay = configuracoes?.diaVencimentoPadrao || 15; // Default to 15 if config not loaded
+        let baseDate: Date;
+         try {
+             baseDate = typeof homologacaoDate === 'string' ? parseISO(homologacaoDate) : homologacaoDate;
+             // Ensure it's a valid date
+             if (!(baseDate instanceof Date) || isNaN(baseDate.getTime())) {
+                 throw new Error("Invalid homologation date");
+             }
+         } catch {
+             baseDate = new Date(); // Fallback to today if parsing fails
+         }
+
+        let dueDate = addMonths(baseDate, 1); // Go to the next month
+        dueDate = setDate(dueDate, defaultDueDay); // Set the day to the configured default
+        return dueDate;
+    }
 
 
    // Generate individual invoice
@@ -206,6 +201,7 @@ export default function FinanceiroPage() {
     const doc = new jsPDF();
     const hoje = format(new Date(), "dd/MM/yyyy", { locale: ptBR });
     const config = configuracoes; // Use loaded config
+    const dueDate = calculateDueDate(debito.dataHomologacao); // Calculate due date
 
     // Header - Advisory Info
     doc.setFontSize(18);
@@ -289,8 +285,7 @@ export default function FinanceiroPage() {
          doc.text(`PIX (CNPJ): ${config.cnpj}`, 14, paymentY);
           paymentY += 5;
      }
-     // Add due date logic if needed
-    const dueDate = addDays(new Date(), 15); // Example: Due in 15 days
+     // Due Date
     doc.setFont(undefined, 'bold');
     doc.text(`Vencimento: ${format(dueDate, "dd/MM/yyyy")}`, 14, paymentY + 5);
 
@@ -390,13 +385,17 @@ export default function FinanceiroPage() {
        // Table of Debits
       autoTable(doc, {
          startY: 75,
-         head: [['Protocolo', 'Licitação', 'Data Homologação', 'Valor']],
-         body: clientDebits.map(d => [
-             d.id,
-             d.licitacaoNumero,
-             formatDateForPDF(d.dataHomologacao),
-             d.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-         ]),
+         head: [['Protocolo', 'Licitação', 'Data Homologação', 'Valor', 'Vencimento']],
+         body: clientDebits.map(d => {
+             const dueDate = calculateDueDate(d.dataHomologacao);
+             return [
+                 d.id,
+                 d.licitacaoNumero,
+                 formatDateForPDF(d.dataHomologacao),
+                 d.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
+                 format(dueDate, "dd/MM/yyyy") // Add due date to table
+             ];
+         }),
          theme: 'grid',
          headStyles: { fillColor: [26, 35, 126] },
          margin: { left: 14, right: 14 },
@@ -426,12 +425,10 @@ export default function FinanceiroPage() {
            doc.text(`PIX (CNPJ): ${config.cnpj}`, 14, paymentYColl);
            paymentYColl += 5;
        }
-        const dueDateColl = addDays(new Date(), 10); // Example: Due in 10 days for collection doc
-        doc.setFont(undefined, 'bold');
-        doc.text(`Vencimento Sugerido: ${format(dueDateColl, "dd/MM/yyyy")}`, 14, paymentYColl + 5);
-
-      doc.setFont(undefined, 'normal');
-      doc.text(`Em caso de dúvidas, contate-nos através de ${config.email} ou ${config.telefone}.`, 14, paymentYColl + 15);
+        // Suggestion text for payment
+        doc.setFont(undefined, 'normal');
+        doc.text(`Solicitamos a regularização dos valores conforme vencimentos indicados na tabela acima.`, 14, paymentYColl + 5);
+        doc.text(`Em caso de dúvidas, contate-nos através de ${config.email} ou ${config.telefone}.`, 14, paymentYColl + 15);
 
 
      // Footer (Optional)
@@ -621,6 +618,10 @@ function FinancialTable({ debitos, loading, updatingStatus, onUpdateStatus, onGe
         if (!date) return 'N/A';
         try {
             const dateObj = typeof date === 'string' ? parseISO(date) : date;
+             // Ensure it's a valid date
+             if (!(dateObj instanceof Date) || isNaN(dateObj.getTime())) {
+                 return 'Inválida';
+             }
             return format(dateObj, "dd/MM/yyyy", { locale: ptBR });
         } catch (e) {
             return 'Inválida';
@@ -661,10 +662,17 @@ function FinancialTable({ debitos, loading, updatingStatus, onUpdateStatus, onGe
                             <TableCell>{formatDate(debito.dataHomologacao)}</TableCell>
                             <TableCell>{debito.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</TableCell>
                             <TableCell>
-                              <Badge variant={getBadgeVariantFinanceiro(statusInfo.color)} className="flex items-center gap-1 w-fit whitespace-nowrap">
-                                <statusInfo.icon className="h-3 w-3" />
-                                {statusInfo.label}
-                              </Badge>
+                               {statusInfo ? (
+                                  <Badge variant={getBadgeVariantFinanceiro(statusInfo.color)} className="flex items-center gap-1 w-fit whitespace-nowrap">
+                                    <statusInfo.icon className="h-3 w-3" />
+                                    {statusInfo.label}
+                                  </Badge>
+                               ) : (
+                                    <Badge variant="outline" className="flex items-center gap-1 w-fit whitespace-nowrap">
+                                        <HelpCircle className="h-3 w-3" />
+                                        {debito.status || 'Desconhecido'}
+                                    </Badge>
+                               )}
                             </TableCell>
                             <TableCell className="text-right space-x-1">
                               <Button variant="outline" size="sm" onClick={() => onGenerateInvoice(debito)} title="Gerar Fatura PDF" disabled={actionsDisabled}>

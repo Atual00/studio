@@ -12,6 +12,7 @@ import {Input} from '@/components/ui/input';
 import {Textarea} from '@/components/ui/textarea';
 import {getAddressByPostalCode, type Address} from '@/services/address'; // Import service
 import {Loader2} from 'lucide-react';
+import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@/components/ui/select'; // Import Select
 
 // Zod schema for validation
 const configuracoesFormSchema = z.object({
@@ -33,6 +34,11 @@ const configuracoesFormSchema = z.object({
   agencia: z.string().optional(),
   conta: z.string().optional(),
   chavePix: z.string().optional(),
+  // Financial Settings
+  diaVencimentoPadrao: z.preprocess(
+      (val) => (typeof val === 'string' ? parseInt(val, 10) : val),
+      z.number({ required_error: 'Dia de vencimento é obrigatório.', invalid_type_error: 'Dia deve ser um número.'}).min(1, 'Dia deve ser entre 1 e 31').max(31, 'Dia deve ser entre 1 e 31')
+  ),
   // Logo (Optional - for future use)
   // logoUrl: z.string().url("URL inválida").optional().or(z.literal('')),
 });
@@ -66,6 +72,7 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
       agencia: '',
       conta: '',
       chavePix: '',
+      diaVencimentoPadrao: 15, // Default to 15
       // logoUrl: '',
     },
   });
@@ -77,7 +84,11 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
   useEffect(() => {
     // Update form values if initialData changes (e.g., after fetch)
     if (initialData) {
-        form.reset(initialData);
+        form.reset({
+             ...initialData,
+            // Ensure diaVencimentoPadrao is a number or default
+             diaVencimentoPadrao: typeof initialData.diaVencimentoPadrao === 'number' ? initialData.diaVencimentoPadrao : 15,
+        });
     }
    }, [initialData, form]);
 
@@ -93,14 +104,15 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
             form.setValue('enderecoRua', addressData.street, {shouldValidate: true});
             form.setValue('enderecoBairro', addressData.neighborhood, {shouldValidate: true});
             form.setValue('enderecoCidade', addressData.city, {shouldValidate: true});
-            if (addressData.number) {
-              form.setValue('enderecoNumero', addressData.number);
-            }
-            if (addressData.complement) {
-              form.setValue('enderecoComplemento', addressData.complement);
-            }
+            // Don't automatically set number or complement from ViaCEP
+            // form.setValue('enderecoNumero', addressData.number || '');
+            // form.setValue('enderecoComplemento', addressData.complement || '');
           } else {
             console.warn('CEP não encontrado:', cep);
+             // Clear fields if CEP not found
+             form.setValue('enderecoRua', '', { shouldValidate: true });
+             form.setValue('enderecoBairro', '', { shouldValidate: true });
+             form.setValue('enderecoCidade', '', { shouldValidate: true });
           }
         } catch (error) {
           console.error('Erro ao buscar CEP:', error);
@@ -115,7 +127,11 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
 
   const handleFormSubmit = async (data: ConfiguracoesFormValues) => {
     if (onSubmit) {
-      await onSubmit(data);
+      await onSubmit({
+          ...data,
+         // Ensure diaVencimentoPadrao is submitted as a number
+         diaVencimentoPadrao: Number(data.diaVencimentoPadrao)
+      });
     } else {
       console.log('Submitting configuration data (default action)...', data);
       await new Promise(resolve => setTimeout(resolve, 1000));
@@ -143,6 +159,9 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
     return value;
   };
 
+  // Generate options for day selection
+  const dayOptions = Array.from({ length: 31 }, (_, i) => (i + 1).toString());
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-8">
@@ -157,7 +176,7 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
                 <FormItem>
                   <FormLabel>Razão Social*</FormLabel>
                   <FormControl>
-                    <Input placeholder="Nome da sua empresa de assessoria" {...field} />
+                    <Input placeholder="Nome da sua empresa de assessoria" {...field} disabled={isSubmitting} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -170,7 +189,7 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
                 <FormItem>
                   <FormLabel>Nome Fantasia</FormLabel>
                   <FormControl>
-                    <Input placeholder="Nome comercial (opcional)" {...field} />
+                    <Input placeholder="Nome comercial (opcional)" {...field} disabled={isSubmitting} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -188,6 +207,7 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
                     placeholder="XX.XXX.XXX/XXXX-XX"
                     {...field}
                     onChange={(e) => field.onChange(formatInput(e.target.value, 'cnpj'))}
+                     disabled={isSubmitting}
                   />
                 </FormControl>
                 <FormMessage />
@@ -212,6 +232,7 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
                         {...field}
                         onChange={(e) => field.onChange(formatInput(e.target.value, 'cep'))}
                         maxLength={9}
+                         disabled={isSubmitting || cepLoading}
                       />
                       {cepLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
                     </div>
@@ -228,7 +249,7 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
                 <FormItem className="md:col-span-2">
                   <FormLabel>Rua*</FormLabel>
                   <FormControl>
-                    <Input placeholder="Nome da rua, avenida, etc." {...field} disabled={cepLoading} />
+                    <Input placeholder="Nome da rua, avenida, etc." {...field} disabled={isSubmitting || cepLoading} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -241,7 +262,7 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
                 <FormItem>
                   <FormLabel>Número*</FormLabel>
                   <FormControl>
-                    <Input placeholder="Nº" {...field} />
+                    <Input placeholder="Nº" {...field} disabled={isSubmitting} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -257,7 +278,7 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
                 <FormItem>
                   <FormLabel>Complemento</FormLabel>
                   <FormControl>
-                    <Input placeholder="Apto, Bloco, Sala" {...field} />
+                    <Input placeholder="Apto, Bloco, Sala" {...field} disabled={isSubmitting}/>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -270,7 +291,7 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
                 <FormItem>
                   <FormLabel>Bairro*</FormLabel>
                   <FormControl>
-                    <Input placeholder="Nome do bairro" {...field} disabled={cepLoading} />
+                    <Input placeholder="Nome do bairro" {...field} disabled={isSubmitting || cepLoading} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -283,7 +304,7 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
                 <FormItem>
                   <FormLabel>Cidade*</FormLabel>
                   <FormControl>
-                    <Input placeholder="Nome da cidade" {...field} disabled={cepLoading} />
+                    <Input placeholder="Nome da cidade" {...field} disabled={isSubmitting || cepLoading} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -303,7 +324,7 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
                     <FormItem>
                     <FormLabel>E-mail*</FormLabel>
                     <FormControl>
-                        <Input type="email" placeholder="contato@suaassessoria.com" {...field} />
+                        <Input type="email" placeholder="contato@suaassessoria.com" {...field} disabled={isSubmitting}/>
                     </FormControl>
                     <FormMessage />
                     </FormItem>
@@ -316,7 +337,7 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
                     <FormItem>
                     <FormLabel>Telefone*</FormLabel>
                     <FormControl>
-                        <Input type="tel" placeholder="(XX) XXXXX-XXXX" {...field} />
+                        <Input type="tel" placeholder="(XX) XXXXX-XXXX" {...field} disabled={isSubmitting}/>
                     </FormControl>
                     <FormMessage />
                     </FormItem>
@@ -336,7 +357,7 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
                 <FormItem>
                   <FormLabel>Banco</FormLabel>
                   <FormControl>
-                    <Input placeholder="Nome ou número do banco" {...field} />
+                    <Input placeholder="Nome ou número do banco" {...field} disabled={isSubmitting}/>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -349,7 +370,7 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
                 <FormItem>
                   <FormLabel>Agência</FormLabel>
                   <FormControl>
-                    <Input placeholder="Número da agência (com dígito, se houver)" {...field} />
+                    <Input placeholder="Número da agência (com dígito, se houver)" {...field} disabled={isSubmitting}/>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -362,7 +383,7 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
                 <FormItem>
                   <FormLabel>Conta Corrente</FormLabel>
                   <FormControl>
-                    <Input placeholder="Número da conta com dígito" {...field} />
+                    <Input placeholder="Número da conta com dígito" {...field} disabled={isSubmitting}/>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -376,7 +397,7 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
                 <FormItem>
                   <FormLabel>Chave PIX</FormLabel>
                   <FormControl>
-                    <Input placeholder="CNPJ, E-mail, Telefone ou Chave Aleatória" {...field} />
+                    <Input placeholder="CNPJ, E-mail, Telefone ou Chave Aleatória" {...field} disabled={isSubmitting}/>
                   </FormControl>
                    <FormDescription>Esta chave será usada nas faturas e documentos de cobrança.</FormDescription>
                   <FormMessage />
@@ -384,6 +405,39 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
               )}
             />
         </section>
+
+        {/* Financial Settings */}
+        <section className="space-y-4 p-4 border rounded-md">
+             <h3 className="text-lg font-medium mb-4">Configurações Financeiras</h3>
+             <FormField
+                control={form.control}
+                name="diaVencimentoPadrao"
+                render={({field}) => (
+                    <FormItem>
+                    <FormLabel>Dia Padrão de Vencimento*</FormLabel>
+                    <Select
+                        onValueChange={(value) => field.onChange(parseInt(value, 10))} // Ensure value is number
+                        value={field.value?.toString()} // Convert number to string for Select value
+                        disabled={isSubmitting}
+                    >
+                      <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione o dia do mês" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                           {dayOptions.map(day => (
+                             <SelectItem key={day} value={day}>{day}</SelectItem>
+                           ))}
+                        </SelectContent>
+                      </Select>
+                     <FormDescription>Dia do mês seguinte à homologação para vencimento das faturas.</FormDescription>
+                     <FormMessage />
+                    </FormItem>
+                )}
+                />
+        </section>
+
 
          {/* Logo Upload - Placeholder */}
          {/* <section className="space-y-4 p-4 border rounded-md">
@@ -395,7 +449,7 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
                     <FormItem>
                     <FormLabel>URL do Logo</FormLabel>
                     <FormControl>
-                       <Input type="url" placeholder="https://..." {...field} />
+                       <Input type="url" placeholder="https://..." {...field} disabled={isSubmitting} />
                     </FormControl>
                      <FormDescription>Link para a imagem do logo que aparecerá nos relatórios.</FormDescription>
                     <FormMessage />
@@ -416,4 +470,3 @@ export default function ConfiguracoesForm({initialData, onSubmit, isSubmitting =
     </Form>
   );
 }
-
