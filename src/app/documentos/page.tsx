@@ -26,13 +26,13 @@ import {
 } from '@/components/ui/popover';
 import {Calendar} from '@/components/ui/calendar';
 import {Label} from '@/components/ui/label';
-import {AlertCircle, CalendarClock, CheckCircle, Filter, Loader2, PlusCircle, Trash2, Edit, FileText, Calendar as CalendarIcon, HelpCircle} from 'lucide-react'; // Added HelpCircle
+import {AlertCircle, CalendarClock, CheckCircle, Filter, Loader2, PlusCircle, Trash2, Edit, FileText, Calendar as CalendarIcon, HelpCircle, X} from 'lucide-react'; // Added HelpCircle and X
 import {format, differenceInDays, isBefore, addDays, parseISO, startOfDay, endOfDay, isValid} from 'date-fns';
 import {ptBR} from 'date-fns/locale';
 import {Button} from '@/components/ui/button';
 import Link from 'next/link'; // For linking to client
 import { fetchDocumentos, addDocumento, updateDocumento, deleteDocumento, type Documento } from '@/services/documentoService'; // Import document service
-import { fetchClients as fetchClientList, type ClientListItem } from '@/services/clientService'; // Import client service
+import { fetchClients, type ClientListItem } from '@/services/clientService'; // Import client service
 import { useForm, Controller } from 'react-hook-form'; // Import react-hook-form
 import { z } from 'zod'; // Import zod
 import { zodResolver } from '@hookform/resolvers/zod'; // Import zod resolver
@@ -75,7 +75,7 @@ const getDocumentStatus = (vencimento: Date | null | string): { label: string; c
   }
 
   if (!dateVencimento) {
-    return { label: 'Não Aplicável', color: 'default', icon: CheckCircle }; // Or maybe a different icon/label
+    return { label: 'Não Aplicável', color: 'default', icon: HelpCircle }; // Changed Icon
   }
   const today = startOfDay(new Date()); // Compare against start of today
   const targetDate = startOfDay(dateVencimento); // Compare against start of expiration date
@@ -88,7 +88,7 @@ const getDocumentStatus = (vencimento: Date | null | string): { label: string; c
      if (daysDiff <= 0) { // Expires today
         return { label: `Vence Hoje`, color: 'destructive', icon: AlertCircle };
      } else if (daysDiff <= 15) {
-        return { label: `Vence em ${daysDiff}d`, color: 'destructive', icon: AlertCircle }; // Urgent (within 15 days)
+        return { label: `Vence em ${daysDiff}d`, color: 'destructive', icon: AlertCircle }; // Urgent (within 15 days) - Changed color
      } else if (daysDiff <= 30) {
         return { label: `Vence em ${daysDiff}d`, color: 'warning', icon: CalendarClock }; // Warning (within 30 days)
      } else {
@@ -133,7 +133,7 @@ export default function DocumentosPage() {
   const [loading, setLoading] = useState(true);
   const [loadingClients, setLoadingClients] = useState(true); // Separate loading state for clients
   const [filterCliente, setFilterCliente] = useState('todos'); // Allow filtering by specific client ID
-  const [filterTipo, setFilterTipo] = useState('todos'); // Initial state set to 'todos'
+  const [filterTipo, setFilterTipo] = useState(''); // Initial state empty for Input filter
   const [filterStatus, setFilterStatus] = useState<'todos' | 'vencido' | 'vence_hoje' | 'vence_15d' | 'vence_30d' | 'valido' | 'na'>('todos');
   const [error, setError] = useState<string | null>(null); // State for general errors
   const [isSubmitting, setIsSubmitting] = useState(false); // State for form submission
@@ -159,7 +159,7 @@ export default function DocumentosPage() {
       try {
         const [docData, clientData] = await Promise.all([
           fetchDocumentos(),
-          fetchClientList()
+          fetchClients() // Use correct import name
         ]);
         setDocumentos(docData);
         setFilteredDocumentos(docData); // Initialize filtered list
@@ -184,7 +184,7 @@ export default function DocumentosPage() {
        result = result.filter(d => d.clienteId === filterCliente);
     }
 
-    if (filterTipo !== 'todos') {
+    if (filterTipo) { // Filter if filterTipo is not empty
        result = result.filter(d =>
         d.tipoDocumento.toLowerCase().includes(filterTipo.toLowerCase())
       );
@@ -345,6 +345,12 @@ export default function DocumentosPage() {
         }
     };
 
+    const clearFilters = () => {
+        setFilterCliente('todos');
+        setFilterTipo('');
+        setFilterStatus('todos');
+    };
+
 
   return (
     <div className="space-y-6">
@@ -380,17 +386,13 @@ export default function DocumentosPage() {
                  )}
               </SelectContent>
             </Select>
-             <Select value={filterTipo} onValueChange={setFilterTipo}>
-              <SelectTrigger>
-                <SelectValue placeholder="Filtrar por Tipo..." />
-              </SelectTrigger>
-              <SelectContent>
-                 <SelectItem value="todos">Todos os Tipos</SelectItem>
-                 {uniqueTipos.sort().map(tipo => (
-                   <SelectItem key={tipo} value={tipo}>{tipo}</SelectItem>
-                 ))}
-              </SelectContent>
-            </Select>
+             {/* Changed Select to Input for Tipo filter */}
+             <Input
+                 placeholder="Filtrar por Tipo..."
+                 value={filterTipo}
+                 onChange={(e) => setFilterTipo(e.target.value)}
+                 disabled={loading}
+              />
              <Select value={filterStatus} onValueChange={setFilterStatus}>
               <SelectTrigger>
                 <SelectValue placeholder="Filtrar por Status..." />
@@ -405,9 +407,8 @@ export default function DocumentosPage() {
                  <SelectItem value="na">Não Aplicável</SelectItem>
               </SelectContent>
             </Select>
-             {/* Clear button or other filters can go here */}
-              <Button variant="ghost" onClick={() => { setFilterCliente('todos'); setFilterTipo('todos'); setFilterStatus('todos'); }} className="text-muted-foreground hover:text-primary">
-                Limpar Filtros
+              <Button variant="ghost" onClick={clearFilters} className="text-muted-foreground hover:text-primary">
+                 <X className="mr-2 h-4 w-4"/> Limpar Filtros
               </Button>
           </div>
         </CardContent>
@@ -615,4 +616,4 @@ export default function DocumentosPage() {
   );
 }
 
-
+    

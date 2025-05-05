@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { ClientFormValues, ClientDetails } from '@/components/clientes/client-form';
@@ -28,7 +29,8 @@ const saveClientsToStorage = (clients: ClientDetails[]): void => {
 
 // --- Service Functions ---
 
-export type ClientListItem = Pick<ClientDetails, 'id' | 'razaoSocial' | 'nomeFantasia' | 'cnpj' | 'cidade'>;
+// Exporting ClientListItem type explicitly
+export type ClientListItem = Pick<ClientDetails, 'id' | 'razaoSocial' | 'nomeFantasia' | 'cnpj' | 'cidade'> & { name: string }; // Added 'name' for consistency
 
 /**
  * Fetches a simplified list of all clients.
@@ -44,6 +46,7 @@ export const fetchClients = async (): Promise<ClientListItem[]> => {
     nomeFantasia,
     cnpj,
     cidade: enderecoCidade, // Map enderecoCidade to cidade
+    name: razaoSocial, // Add 'name' property, using razaoSocial as default
   }));
 };
 
@@ -148,3 +151,5 @@ export const deleteClient = async (id: string): Promise<boolean> => {
   // TODO: Consider deleting related data (licitacoes, senhas) here or handle cascading deletes
   return true;
 };
+
+    
