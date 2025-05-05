@@ -3,6 +3,7 @@
 
 import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import { fetchUsers } from '@/services/userService'; // Import fetchUsers
 
 interface AuthContextType {
   isAuthenticated: boolean;
@@ -16,17 +17,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const AUTH_STORAGE_KEY = 'licitaxAuthUser';
 
-// Mock user data (replace with actual user fetching/validation later)
-const MOCK_USERS = [
-    { username: 'admin', password: 'password', role: 'admin' as 'admin' | 'user' },
-    { username: 'user', password: 'password', role: 'user' as 'admin' | 'user' },
-    { username: 'joao', password: '150306', role: 'user' as 'admin' | 'user' }, // Added Joao user
-];
-// Expose mock users globally for userService hack (REMOVE in real app)
-if (typeof window !== 'undefined') {
-  (window as any).MOCK_USERS = MOCK_USERS;
-}
-
+// Remove the global MOCK_USERS definition here. We will fetch users.
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<{ username: string; role: 'admin' | 'user' } | null>(null);
@@ -81,10 +72,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 
   const login = async (username: string, password?: string): Promise<boolean> => {
-    // Simulate API call & password check (replace with real logic)
+    // Simulate API call & password check (using mock passwords for demo)
     await new Promise(resolve => setTimeout(resolve, 500));
 
-    const foundUser = MOCK_USERS.find(u => u.username === username && (!password || u.password === password));
+    // *** MOCK PASSWORD CHECK - Replace with real authentication ***
+    // This is highly insecure and only for demonstration.
+    let foundUser: { username: string; role: 'admin' | 'user' } | null = null;
+    if (username === 'admin' && password === 'password') {
+        foundUser = { username: 'admin', role: 'admin' };
+    } else if (username === 'user' && password === 'password') {
+        foundUser = { username: 'user', role: 'user' };
+    } else if (username === 'joao' && password === '150306') {
+        foundUser = { username: 'joao', role: 'user' }; // Assuming 'user' role for joao
+    }
+    // *** END MOCK PASSWORD CHECK ***
 
     if (foundUser) {
         const userData = { username: foundUser.username, role: foundUser.role };

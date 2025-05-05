@@ -113,18 +113,7 @@ export const addUser = async (username: string, password?: string, role: 'admin'
   const updatedUsers = [...users, newUser];
   saveUsersToStorage(updatedUsers);
 
-   // Add to MOCK_USERS in AuthContext as well for login check (this is a bit hacky due to mock setup)
-   // This is not ideal, ideally AuthContext reads from the service/storage on login
-   if (typeof window !== 'undefined') {
-       try {
-          // Accessing global mock (HACK - REMOVE in real app)
-          const authContextUsers = (window as any).MOCK_USERS || [];
-           if (authContextUsers && !authContextUsers.some((u: any) => u.username === newUser.username)) {
-               // Add with plain password for mock login check
-               authContextUsers.push({username: newUser.username, password: password, role: newUser.role});
-           }
-       } catch (e) { console.warn("Could not update AuthContext MOCK_USERS"); }
-   }
+  // REMOVED: Update to window.MOCK_USERS - AuthContext handles mock login directly now.
 
   return newUser;
 };
@@ -158,17 +147,13 @@ export const deleteUser = async (id: string): Promise<boolean> => {
   }
 
   saveUsersToStorage(updatedUsers);
-   // Remove from AuthContext MOCK_USERS as well (HACK - REMOVE in real app)
-    if (typeof window !== 'undefined' && userToDelete) {
-       try {
-           let authContextUsers = (window as any).MOCK_USERS || [];
-           authContextUsers = authContextUsers.filter((u: any) => u.username !== userToDelete.username);
-           (window as any).MOCK_USERS = authContextUsers;
-       } catch (e) { console.warn("Could not update AuthContext MOCK_USERS on delete"); }
-    }
+
+  // REMOVED: Update to window.MOCK_USERS
+
   return true;
 };
 
 // --- Potential Future Functions ---
 // export const updateUser = async (id: string, data: Partial<User>): Promise<boolean> => { ... };
 // export const changePassword = async (id: string, newPassword: string): Promise<boolean> => { ... };
+
