@@ -18,8 +18,9 @@ const AUTH_STORAGE_KEY = 'licitaxAuthUser';
 
 // Mock user data (replace with actual user fetching/validation later)
 const MOCK_USERS = [
-    { username: 'admin', password: 'password', role: 'admin' },
-    { username: 'user', password: 'password', role: 'user' },
+    { username: 'admin', password: 'password', role: 'admin' as 'admin' | 'user' },
+    { username: 'user', password: 'password', role: 'user' as 'admin' | 'user' },
+    { username: 'joao', password: '150306', role: 'user' as 'admin' | 'user' }, // Added new user
 ];
 
 export function AuthProvider({ children }: { children: ReactNode }) {

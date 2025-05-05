@@ -14,6 +14,7 @@ export interface User {
 let mockUsers: User[] = [
   { id: 'user-admin-001', username: 'admin', role: 'admin' },
   { id: 'user-user-002', username: 'user', role: 'user' },
+  { id: 'user-joao-003', username: 'joao', role: 'user' }, // Added Joao
 ];
 
 // --- Helper Functions (using localStorage for simulation) ---
@@ -22,10 +23,27 @@ const getUsersFromStorage = (): User[] => {
   if (typeof window === 'undefined') return [...mockUsers]; // Return initial mock on server
   const storedData = localStorage.getItem(USER_STORAGE_KEY);
   try {
-    const users = storedData ? JSON.parse(storedData) : [...mockUsers]; // Start with mock if empty
-    // Ensure mock users are present if storage was cleared or empty initially
-    if (!users.some((u: User) => u.username === 'admin')) users.push(mockUsers[0]);
-    if (!users.some((u: User) => u.username === 'user')) users.push(mockUsers[1]);
+    let users = storedData ? JSON.parse(storedData) : [...mockUsers]; // Start with mock if empty
+    // Ensure default mock users are present if storage was cleared or empty initially
+    if (!users.some((u: User) => u.username === 'admin')) {
+        const adminUser = mockUsers.find(u => u.username === 'admin');
+        if(adminUser) users.push(adminUser);
+    }
+    if (!users.some((u: User) => u.username === 'user' && u.id !== 'user-joao-003')) { // Avoid duplicating 'user' role if Joao exists
+        const genericUser = mockUsers.find(u => u.username === 'user' && u.id === 'user-user-002');
+         if(genericUser) users.push(genericUser);
+    }
+     if (!users.some((u: User) => u.username === 'joao')) {
+         const joaoUser = mockUsers.find(u => u.username === 'joao');
+          if(joaoUser) users.push(joaoUser);
+     }
+
+    // Filter duplicates just in case
+    users = users.filter((user: User, index: number, self: User[]) =>
+        index === self.findIndex((u) => (u.id === user.id || u.username === user.username))
+    );
+
+
     return users;
   } catch (e) {
     console.error("Error parsing users from localStorage:", e);
@@ -44,10 +62,10 @@ const saveUsersToStorage = (users: User[]): void => {
 };
 
 // Initialize storage with mock data if it doesn't exist
-if (typeof window !== 'undefined' && !localStorage.getItem(USER_STORAGE_KEY)) {
-    saveUsersToStorage(mockUsers);
-} else if (typeof window !== 'undefined') {
-    mockUsers = getUsersFromStorage(); // Load current state into memory
+if (typeof window !== 'undefined') {
+    const existingUsers = getUsersFromStorage(); // Load potentially existing + defaults
+    mockUsers = existingUsers; // Update in-memory mock
+    saveUsersToStorage(existingUsers); // Save the potentially updated list
 }
 
 
@@ -97,6 +115,17 @@ export const addUser = async (username: string, password?: string, role: 'admin'
 
   const updatedUsers = [...users, newUser];
   saveUsersToStorage(updatedUsers);
+  // Add to MOCK_USERS in AuthContext as well for login check (this is a bit hacky due to mock setup)
+   // This is not ideal, ideally AuthContext reads from the service/storage on login
+   if (typeof window !== 'undefined') {
+       try {
+          const authContextUsers = (window as any).MOCK_USERS || []; // Accessing global mock (HACK)
+           if (authContextUsers && !authContextUsers.some((u: any) => u.username === newUser.username)) {
+               authContextUsers.push({username: newUser.username, password: password, role: newUser.role}); // Add with plain password for mock login
+           }
+       } catch (e) { console.warn("Could not update AuthContext MOCK_USERS"); }
+   }
+
   return newUser;
 };
 
@@ -129,6 +158,14 @@ export const deleteUser = async (id: string): Promise<boolean> => {
   }
 
   saveUsersToStorage(updatedUsers);
+   // Remove from AuthContext MOCK_USERS as well (HACK)
+    if (typeof window !== 'undefined') {
+       try {
+           let authContextUsers = (window as any).MOCK_USERS || [];
+           authContextUsers = authContextUsers.filter((u: any) => u.username !== userToDelete.username);
+           (window as any).MOCK_USERS = authContextUsers;
+       } catch (e) { console.warn("Could not update AuthContext MOCK_USERS on delete"); }
+    }
   return true;
 };
 
