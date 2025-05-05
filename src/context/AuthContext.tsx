@@ -20,8 +20,13 @@ const AUTH_STORAGE_KEY = 'licitaxAuthUser';
 const MOCK_USERS = [
     { username: 'admin', password: 'password', role: 'admin' as 'admin' | 'user' },
     { username: 'user', password: 'password', role: 'user' as 'admin' | 'user' },
-    { username: 'joao', password: '150306', role: 'user' as 'admin' | 'user' }, // Added new user
+    { username: 'joao', password: '150306', role: 'user' as 'admin' | 'user' }, // Added Joao user
 ];
+// Expose mock users globally for userService hack (REMOVE in real app)
+if (typeof window !== 'undefined') {
+  (window as any).MOCK_USERS = MOCK_USERS;
+}
+
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<{ username: string; role: 'admin' | 'user' } | null>(null);
