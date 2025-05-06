@@ -12,7 +12,7 @@ import {Calendar} from '@/components/ui/calendar'; // Import Calendar
 import {PlusCircle, Edit, Eye, Filter, Loader2, AlertCircle, CalendarIcon, X } from 'lucide-react'; // Import icons
 import Link from 'next/link';
 import {Badge} from '@/components/ui/badge';
-import {format, parseISO, startOfDay, endOfDay, isWithinInterval} from 'date-fns';
+import {format, parseISO, startOfDay, endOfDay, isWithinInterval, isValid} from 'date-fns';
 import {ptBR} from 'date-fns/locale';
 import { fetchLicitacoes, type LicitacaoListItem, statusMap } from '@/services/licitacaoService'; // Import service
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
@@ -110,6 +110,9 @@ export default function LicitacoesPage() {
                // Handle both Date objects and ISO strings
                const dataInicio = typeof lic.dataInicio === 'string' ? parseISO(lic.dataInicio) : lic.dataInicio;
                const dataMeta = typeof lic.dataMetaAnalise === 'string' ? parseISO(lic.dataMetaAnalise) : lic.dataMetaAnalise;
+               // Check if dates are valid before comparison
+                if (!(dataInicio instanceof Date) || !isValid(dataInicio)) return false;
+                if (!(dataMeta instanceof Date) || !isValid(dataMeta)) return false; // Ensure meta date is also valid for check
                return isWithinInterval(dataInicio, { start, end }) || isWithinInterval(dataMeta, { start, end });
            } catch (e) {
                console.error("Error parsing date during filtering:", lic.id, e);
@@ -123,8 +126,8 @@ export default function LicitacoesPage() {
         try {
              const dateA = a.dataInicio instanceof Date ? a.dataInicio : parseISO(a.dataInicio);
              const dateB = b.dataInicio instanceof Date ? b.dataInicio : parseISO(b.dataInicio);
-             if (!(dateA instanceof Date) || isNaN(dateA.getTime())) return 1; // Invalid dates last
-             if (!(dateB instanceof Date) || isNaN(dateB.getTime())) return -1;
+             if (!(dateA instanceof Date) || !isValid(dateA)) return 1; // Invalid dates last
+             if (!(dateB instanceof Date) || !isValid(dateB)) return -1;
              return dateB.getTime() - dateA.getTime();
         } catch { return 0;}
     });
@@ -138,7 +141,7 @@ export default function LicitacoesPage() {
         if (!date) return 'N/A';
         try {
             const dateObj = typeof date === 'string' ? parseISO(date) : date;
-             if (!(dateObj instanceof Date) || isNaN(dateObj.getTime())) return 'Inválida';
+             if (!(dateObj instanceof Date) || !isValid(dateObj)) return 'Inválida';
             const formatString = time ? "dd/MM/yyyy HH:mm" : "dd/MM/yyyy";
             return format(dateObj, formatString, { locale: ptBR });
         } catch (e) {
@@ -349,4 +352,3 @@ function LicitacaoTable({ loading, error, filteredLicitacoes, formatDate }: Lici
         </Card>
     );
 }
-```
