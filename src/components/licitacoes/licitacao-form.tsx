@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import {zodResolver} from '@hookform/resolvers/zod';
@@ -85,7 +86,7 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
   const form = useForm<LicitacaoFormValues>({
     resolver: zodResolver(licitacaoFormSchema),
     defaultValues: {
-      clienteId: initialData?.clienteId || undefined, // Ensure initial value is undefined for placeholder
+      clienteId: initialData?.clienteId || '', // Use empty string instead of undefined
       modalidade: initialData?.modalidade || undefined,
       numeroLicitacao: initialData?.numeroLicitacao || '',
       orgaoComprador: initialData?.orgaoComprador || '', // Initialize new field
@@ -104,7 +105,7 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
         if (initialData) {
             form.reset({
                 ...initialData,
-                 clienteId: initialData?.clienteId || undefined, // Reset client ID correctly
+                 clienteId: initialData?.clienteId || '', // Reset client ID correctly
                  modalidade: initialData?.modalidade || undefined,
                  orgaoComprador: initialData?.orgaoComprador || '',
                  plataforma: initialData?.plataforma || undefined,
@@ -112,6 +113,7 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
                  dataMetaAnalise: parseInitialDate(initialData?.dataMetaAnalise),
                  valorCobrado: initialData?.valorCobrado !== undefined ? Number(initialData.valorCobrado) : undefined,
                  valorTotalLicitacao: initialData?.valorTotalLicitacao !== undefined ? Number(initialData.valorTotalLicitacao) : undefined,
+                 observacoes: initialData?.observacoes || '', // Ensure observacoes is reset
             });
         }
     }, [initialData, form]);
@@ -134,7 +136,8 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
       if (rawValue.trim() === '0' || rawValue === 'R$ 0,00' || rawValue.replace(/[^0-9,]/g, '') === '0' || rawValue.replace(/[^0-9.]/g, '') === '0') {
           numberValue = 0;
           field.onChange(0); // Update form state with 0
-          e.target.value = formatCurrency(0); // Format display immediately
+          // Don't format immediately onChange, format onBlur instead for better UX
+          // e.target.value = formatCurrency(0);
           return;
       }
 
@@ -143,7 +146,7 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
       if (cleaned === '') {
           numberValue = undefined;
           field.onChange(undefined); // Update form state
-          e.target.value = ''; // Clear display
+          // e.target.value = ''; // Clear display if needed, but often better to keep raw input during typing
       } else {
           const parsedNum = parseInt(cleaned, 10) / 100;
           numberValue = isNaN(parsedNum) ? undefined : parsedNum;
@@ -190,7 +193,7 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
           render={({field}) => (
             <FormItem>
               <FormLabel>Cliente*</FormLabel>
-              {/* Use field.value directly, ensure initial is undefined */}
+              {/* Use field.value directly, ensure initial is empty string */}
               <Select onValueChange={field.onChange} value={field.value || ''} disabled={isSubmitting}>
                 <FormControl>
                   <SelectTrigger>
@@ -300,8 +303,7 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
                     <Input
                      placeholder="R$ 0,00"
                      type="text" // Use text type for formatting control
-                     // Use a separate state or watch for formatted display
-                     value={formatCurrency(field.value)}
+                     value={field.value !== undefined ? formatCurrency(field.value) : ''} // Format value for display
                      onChange={(e) => handleCurrencyChange(e, field)}
                      onBlur={(e) => { // Ensure formatting on blur
                         e.target.value = formatCurrency(field.value);
@@ -327,7 +329,7 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
                   <Input
                      placeholder="R$ 0,00"
                      type="text"
-                     value={formatCurrency(field.value)}
+                     value={field.value !== undefined ? formatCurrency(field.value) : ''} // Format value for display
                      onChange={(e) => handleCurrencyChange(e, field)}
                      onBlur={(e) => {
                          e.target.value = formatCurrency(field.value);
@@ -496,4 +498,3 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
     </Form>
   );
 }
-```
