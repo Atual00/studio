@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -15,60 +16,96 @@ import Link from 'next/link'; // Import Link
 import jsPDF from 'jspdf'; // Import jsPDF
 import { format } from 'date-fns'; // Import date-fns for formatting
 import { ptBR } from 'date-fns/locale';
+import { useAuth } from '@/context/AuthContext'; // Import useAuth to get current user
 
 
 /**
  * Generates a confirmation PDF for a newly added bid.
+ * Includes logo and user signature details.
  * @param licitacao The details of the newly added bid.
  * @param config The advisory company's configuration details.
+ * @param currentUser The currently logged-in user.
  */
-const generateConfirmationPDF = (licitacao: LicitacaoDetails, config: ConfiguracoesFormValues | null) => {
+const generateConfirmationPDF = (
+    licitacao: LicitacaoDetails,
+    config: ConfiguracoesFormValues | null,
+    currentUser: { username: string; fullName?: string; cpf?: string } | null
+) => {
   const doc = new jsPDF();
   const hoje = format(new Date(), "dd/MM/yyyy HH:mm", { locale: ptBR });
+  const logoUrl = config?.logoUrl;
+  const logoDim = 25; // Logo dimension
+  const margin = 14;
+  let headerY = 22; // Initial Y position for header text
 
-  // Header
+  // Draw Header with Logo if available
+  if (logoUrl) {
+      try {
+          const img = new Image();
+          img.src = logoUrl;
+          // Determine image type
+          const imageType = logoUrl.startsWith("data:image/jpeg") ? "JPEG" : "PNG";
+          if (imageType === "PNG" || imageType === "JPEG") {
+              // Adjust logo position and size as needed
+              doc.addImage(img, imageType, margin, 15, logoDim, logoDim);
+              headerY = 18 + logoDim; // Adjust text start below logo
+          } else {
+              console.warn("Formato do logo não suportado pelo jsPDF, pulando logo.");
+          }
+      } catch (e) {
+          console.error("Erro ao adicionar logo ao PDF:", e);
+      }
+  }
+
+  // Confirmation Title
   doc.setFontSize(16);
-  doc.text("Confirmação de Recebimento de Licitação", 105, 22, { align: 'center' });
+  doc.text("Confirmação de Recebimento de Licitação", 105, headerY, { align: 'center' });
+  headerY += 8;
 
+  // Advisory Info (if available)
   if (config) {
     doc.setFontSize(11);
-    doc.text(`Assessoria: ${config.nomeFantasia || config.razaoSocial} (CNPJ: ${config.cnpj})`, 14, 30);
+    doc.text(`Assessoria: ${config.nomeFantasia || config.razaoSocial} (CNPJ: ${config.cnpj})`, margin, headerY);
+    headerY += 6;
   }
+  // Receipt Date
   doc.setFontSize(10);
-  doc.text(`Data de Recebimento: ${hoje}`, 14, config ? 36 : 30);
+  doc.text(`Data de Recebimento: ${hoje}`, margin, headerY);
+  headerY += 8;
+
+  // Separator Line
   doc.setLineWidth(0.1);
-  doc.line(14, config ? 40 : 34, 196, config ? 40 : 34);
+  doc.line(margin, headerY, 196, headerY);
+  headerY += 8;
+
 
   // Licitacao Details
   doc.setFontSize(12);
   doc.setFont(undefined, 'bold');
-  doc.text("Detalhes da Licitação Recebida:", 14, 50);
+  doc.text("Detalhes da Licitação Recebida:", margin, headerY);
   doc.setFont(undefined, 'normal');
   doc.setFontSize(11);
 
-  const dataYStart = 57;
+  let currentY = headerY + 7; // Start details below title
   const lineHeight = 7;
-  let currentY = dataYStart;
+  const fieldX = margin;
+  const valueX = 50;
 
-  doc.text(`Protocolo:`, 14, currentY);
-  doc.text(`${licitacao.id}`, 50, currentY);
-  currentY += lineHeight;
+  // Helper to add detail lines
+  const addDetail = (label: string, value: string | undefined | null) => {
+      if (value !== undefined && value !== null) {
+         doc.text(`${label}:`, fieldX, currentY);
+         doc.text(value.toString(), valueX, currentY);
+         currentY += lineHeight;
+      }
+  }
 
-  doc.text(`Cliente:`, 14, currentY);
-  doc.text(`${licitacao.clienteNome}`, 50, currentY);
-  currentY += lineHeight;
-
-  doc.text(`Número Lic.:`, 14, currentY);
-  doc.text(`${licitacao.numeroLicitacao}`, 50, currentY);
-  currentY += lineHeight;
-
-  doc.text(`Modalidade:`, 14, currentY);
-  doc.text(`${licitacao.modalidade}`, 50, currentY);
-  currentY += lineHeight;
-
-  doc.text(`Plataforma:`, 14, currentY);
-  doc.text(`${licitacao.plataforma}`, 50, currentY);
-  currentY += lineHeight;
+  addDetail('Protocolo', licitacao.id);
+  addDetail('Cliente', licitacao.clienteNome);
+  addDetail('Número Lic.', licitacao.numeroLicitacao);
+  addDetail('Órgão Comprador', licitacao.orgaoComprador);
+  addDetail('Modalidade', licitacao.modalidade);
+  addDetail('Plataforma', licitacao.plataforma);
 
   // Safely format dates
   const formatDate = (date: Date | string | undefined | null, time = false): string => {
@@ -81,29 +118,36 @@ const generateConfirmationPDF = (licitacao: LicitacaoDetails, config: Configurac
     } catch (e) { return 'Data Inválida'; }
   };
 
-  doc.text(`Data Início:`, 14, currentY);
-  doc.text(`${formatDate(licitacao.dataInicio, true)}`, 50, currentY);
-  currentY += lineHeight;
+  addDetail('Data Início', formatDate(licitacao.dataInicio, true));
+  addDetail('Meta Análise', formatDate(licitacao.dataMetaAnalise));
+  addDetail('Valor Cobrado (Assessoria)', (licitacao.valorCobrado ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
+  addDetail('Valor Total (Licitação)', (licitacao.valorTotalLicitacao ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
+  addDetail('Status Inicial', 'Aguardando Análise');
 
-  doc.text(`Meta Análise:`, 14, currentY);
-  doc.text(`${formatDate(licitacao.dataMetaAnalise)}`, 50, currentY);
-  currentY += lineHeight;
+  currentY += lineHeight; // Extra space before signature
 
-  doc.text(`Valor Cobrado:`, 14, currentY);
-  doc.text(`${(licitacao.valorCobrado ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`, 50, currentY);
-  currentY += lineHeight;
+  // Signature Block
+  doc.setFontSize(10);
+  doc.text("Esta licitação foi recebida pelo sistema e será analisada pela equipe.", margin, currentY, { maxWidth: 180 });
+  currentY += 10;
+  doc.text(`Documento gerado e assinado automaticamente por:`, margin, currentY);
+  currentY += 6;
+  doc.setFont(undefined, 'bold');
+  doc.text(`${currentUser?.fullName || currentUser?.username || 'Usuário Desconhecido'}`, margin, currentY);
+  currentY += 6;
+  doc.setFont(undefined, 'normal');
+  if (currentUser?.cpf) {
+      doc.text(`CPF: ${currentUser.cpf}`, margin, currentY);
+      currentY += 6;
+  }
+  doc.text(`Em: ${hoje}`, margin, currentY);
 
-  doc.text(`Status Inicial:`, 14, currentY);
-  doc.text(`Aguardando Análise`, 50, currentY);
-  currentY += lineHeight * 2; // Extra space
-
-  doc.text("Esta licitação foi recebida pelo sistema e será analisada pela equipe.", 14, currentY, { maxWidth: 180 });
 
   // Footer (Optional)
   if (config) {
     const pageHeight = doc.internal.pageSize.height;
     doc.setLineWidth(0.1);
-    doc.line(14, pageHeight - 20, 196, pageHeight - 20);
+    doc.line(margin, pageHeight - 20, 196, pageHeight - 20);
     doc.setFontSize(9);
     doc.text(`${config.razaoSocial} - ${config.cnpj}`, 105, pageHeight - 15, { align: 'center' });
   }
@@ -116,6 +160,7 @@ const generateConfirmationPDF = (licitacao: LicitacaoDetails, config: Configurac
 export default function NovaLicitacaoPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const { user: currentUser } = useAuth(); // Get current user from auth context
   const [clients, setClients] = useState<ClientListItem[]>([]);
   const [configuracoes, setConfiguracoes] = useState<ConfiguracoesFormValues | null>(null);
   const [loadingData, setLoadingData] = useState(true); // Combined loading state
@@ -150,7 +195,9 @@ export default function NovaLicitacaoPage() {
   const handleFormSubmit = async (data: LicitacaoFormValues) => {
     setIsSubmitting(true);
     try {
-      const newLicitacao = await addLicitacao(data);
+      // Add the current user info to the licitacao data before saving (if needed backend-side)
+      // Or just use it for the PDF generation as done below.
+      const newLicitacao = await addLicitacao(data, currentUser); // Pass user if needed by service
       if (newLicitacao) {
         toast({
           title: 'Sucesso!',
@@ -159,7 +206,7 @@ export default function NovaLicitacaoPage() {
 
         // Generate PDF after successful save
         try {
-          generateConfirmationPDF(newLicitacao, configuracoes);
+          generateConfirmationPDF(newLicitacao, configuracoes, currentUser); // Pass currentUser
         } catch (pdfError) {
            console.error("Erro ao gerar PDF de confirmação:", pdfError);
            toast({ title: "Aviso", description: "Licitação salva, mas houve um erro ao gerar o PDF de confirmação.", variant: "warning" });
@@ -224,3 +271,4 @@ export default function NovaLicitacaoPage() {
     </div>
   );
 }
+```

@@ -1,3 +1,4 @@
+
 'use client'; // Required for client-side hooks
 
 import React, { useState, useEffect } from 'react'; // Import React
@@ -16,22 +17,25 @@ import {ptBR} from 'date-fns/locale';
 import { fetchLicitacoes, type LicitacaoListItem, statusMap } from '@/services/licitacaoService'; // Import service
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils'; // Import cn utility
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'; // Import Tabs
 
 // Helper to get badge variant based on custom color mapping from service
-const getBadgeVariant = (color: string | undefined): 'default' | 'secondary' | 'destructive' | 'outline' => {
+const getBadgeVariant = (color: string | undefined): 'default' | 'secondary' | 'destructive' | 'outline' | 'success' | 'warning' | 'info' | 'accent' => {
   switch (color) {
     case 'secondary': return 'secondary';
-    case 'destructive':
-    case 'warning':
-      return 'destructive';
-    case 'success': return 'default'; // Map success to default (primary)
-    case 'info':
-    case 'accent':
+    case 'destructive': return 'destructive';
+    case 'warning': return 'warning';
+    case 'success': return 'success';
+    case 'info': return 'info';
+    case 'accent': return 'accent';
+    case 'default': return 'default';
     case 'outline':
     default:
       return 'outline';
   }
 };
+
+const finalizedStatuses = ['PROCESSO_HOMOLOGADO', 'PROCESSO_ENCERRADO'];
 
 
 export default function LicitacoesPage() {
@@ -39,6 +43,7 @@ export default function LicitacoesPage() {
   const [filteredLicitacoes, setFilteredLicitacoes] = useState<LicitacaoListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'ativas' | 'finalizadas'>('ativas');
 
   // Filtering state
   const [filterCliente, setFilterCliente] = useState('');
@@ -71,10 +76,18 @@ export default function LicitacoesPage() {
   useEffect(() => {
     let result = licitacoes;
 
+     // 1. Filter by Tab (Active/Finalized)
+     if (activeTab === 'ativas') {
+        result = result.filter(lic => !finalizedStatuses.includes(lic.status));
+     } else { // finalizadas
+        result = result.filter(lic => finalizedStatuses.includes(lic.status));
+     }
+
+
+    // 2. Apply other filters
     if (filterCliente) {
        result = result.filter(lic =>
          lic.clienteNome.toLowerCase().includes(filterCliente.toLowerCase())
-         // || (lic.cnpjCliente && lic.cnpjCliente.includes(filterCliente)) // Optional: filter by CNPJ
        );
     }
 
@@ -105,14 +118,27 @@ export default function LicitacoesPage() {
        });
     }
 
+    // Sort by start date descending (newest first)
+    result.sort((a, b) => {
+        try {
+             const dateA = a.dataInicio instanceof Date ? a.dataInicio : parseISO(a.dataInicio);
+             const dateB = b.dataInicio instanceof Date ? b.dataInicio : parseISO(b.dataInicio);
+             if (!(dateA instanceof Date) || isNaN(dateA.getTime())) return 1; // Invalid dates last
+             if (!(dateB instanceof Date) || isNaN(dateB.getTime())) return -1;
+             return dateB.getTime() - dateA.getTime();
+        } catch { return 0;}
+    });
+
+
     setFilteredLicitacoes(result);
-  }, [licitacoes, filterCliente, filterProtocolo, filterStatus, filterDate]);
+  }, [licitacoes, filterCliente, filterProtocolo, filterStatus, filterDate, activeTab]); // Added activeTab dependency
 
     // Safely format dates
     const formatDate = (date: Date | string | undefined | null, time = false): string => {
         if (!date) return 'N/A';
         try {
             const dateObj = typeof date === 'string' ? parseISO(date) : date;
+             if (!(dateObj instanceof Date) || isNaN(dateObj.getTime())) return 'Inválida';
             const formatString = time ? "dd/MM/yyyy HH:mm" : "dd/MM/yyyy";
             return format(dateObj, formatString, { locale: ptBR });
         } catch (e) {
@@ -154,7 +180,7 @@ export default function LicitacoesPage() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-lg flex items-center gap-2">
-             <Filter className="h-5 w-5" /> Filtros
+             <Filter className="h-5 w-5" /> Filtros ({activeTab === 'ativas' ? 'Ativas' : 'Finalizadas'})
           </CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
@@ -178,8 +204,15 @@ export default function LicitacoesPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all_status">Todos Status</SelectItem>
-                {Object.entries(statusMap).map(([key, {label}]) => (
-                  <SelectItem key={key} value={key}>{label}</SelectItem>
+                 {/* Filter status options based on the current tab */}
+                 {Object.entries(statusMap)
+                    .filter(([key]) =>
+                        activeTab === 'ativas'
+                            ? !finalizedStatuses.includes(key)
+                            : finalizedStatuses.includes(key)
+                    )
+                    .map(([key, { label }]) => (
+                        <SelectItem key={key} value={key}>{label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -214,81 +247,106 @@ export default function LicitacoesPage() {
         </CardContent>
       </Card>
 
+      {/* Tabs for Active/Finalized */}
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'ativas' | 'finalizadas')} className="w-full">
+         <TabsList className="mb-4">
+           <TabsTrigger value="ativas">Ativas</TabsTrigger>
+           <TabsTrigger value="finalizadas">Finalizadas</TabsTrigger>
+         </TabsList>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Licitações Registradas</CardTitle>
-          <CardDescription>Acompanhe o status e detalhes das licitações.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[100px]">Protocolo</TableHead>
-                <TableHead>Cliente</TableHead>
-                <TableHead>Modalidade</TableHead>
-                <TableHead>Número</TableHead>
-                <TableHead>Plataforma</TableHead>
-                <TableHead>Data Início</TableHead>
-                 <TableHead>Data Meta</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right w-[80px]">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={9} className="text-center h-24">
-                    <Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" />
-                  </TableCell>
-                </TableRow>
-              ) : !error && filteredLicitacoes.length > 0 ? (
-                filteredLicitacoes.map(lic => (
-                  <TableRow key={lic.id}>
-                    <TableCell className="font-medium">{lic.id}</TableCell>
-                    <TableCell>{lic.clienteNome}</TableCell>
-                    <TableCell>{lic.modalidade}</TableCell>
-                    <TableCell>{lic.numeroLicitacao}</TableCell>
-                    <TableCell>{lic.plataforma}</TableCell>
-                     <TableCell>
-                        {formatDate(lic.dataInicio, true)}
-                     </TableCell>
-                     <TableCell>
-                        {formatDate(lic.dataMetaAnalise)}
-                    </TableCell>
-                    <TableCell>
-                       <Badge variant={getBadgeVariant(statusMap[lic.status]?.color)} className="whitespace-nowrap">
-                        {statusMap[lic.status]?.icon && React.createElement(statusMap[lic.status].icon, {className:"h-3 w-3 mr-1 inline"})}
-                        {statusMap[lic.status]?.label || lic.status}
-                       </Badge>
-                    </TableCell>
-                    <TableCell className="text-right space-x-1">
-                      <Link href={`/licitacoes/${lic.id}`} passHref>
-                        <Button variant="ghost" size="icon" title="Visualizar/Gerenciar">
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      </Link>
-                      {/* Edit might be less common here, main edits on details page */}
-                      {/* <Link href={`/licitacoes/${lic.id}/editar`} passHref>
-                        <Button variant="ghost" size="icon" title="Editar Dados Principais">
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                      </Link> */}
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={9} className="text-center text-muted-foreground h-24">
-                    {error ? 'Não foi possível carregar as licitações.' : 'Nenhuma licitação encontrada com os filtros aplicados.'}
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-          {/* Add Pagination component here later */}
-        </CardContent>
-      </Card>
+         {/* Content for both tabs uses the same table structure, filtered by useEffect */}
+         <TabsContent value="ativas">
+            <LicitacaoTable loading={loading} error={error} filteredLicitacoes={filteredLicitacoes} formatDate={formatDate}/>
+         </TabsContent>
+         <TabsContent value="finalizadas">
+             <LicitacaoTable loading={loading} error={error} filteredLicitacoes={filteredLicitacoes} formatDate={formatDate}/>
+         </TabsContent>
+      </Tabs>
+
     </div>
   );
 }
+
+
+// --- Reusable Table Component ---
+interface LicitacaoTableProps {
+    loading: boolean;
+    error: string | null;
+    filteredLicitacoes: LicitacaoListItem[];
+    formatDate: (date: Date | string | undefined | null, time?: boolean) => string;
+}
+
+function LicitacaoTable({ loading, error, filteredLicitacoes, formatDate }: LicitacaoTableProps) {
+    return (
+        <Card>
+            {/* Removed CardHeader as title is implied by the Tab */}
+            <CardContent>
+                <Table>
+                    <TableHeader>
+                    <TableRow>
+                        <TableHead className="w-[100px]">Protocolo</TableHead>
+                        <TableHead>Cliente</TableHead>
+                        <TableHead>Modalidade</TableHead>
+                        <TableHead>Número</TableHead>
+                        <TableHead>Plataforma</TableHead>
+                        <TableHead>Data Início</TableHead>
+                        <TableHead>Data Meta</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right w-[80px]">Ações</TableHead>
+                    </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                    {loading ? (
+                        <TableRow>
+                        <TableCell colSpan={9} className="text-center h-24">
+                            <Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" />
+                        </TableCell>
+                        </TableRow>
+                    ) : !error && filteredLicitacoes.length > 0 ? (
+                        filteredLicitacoes.map(lic => {
+                             const statusInfo = statusMap[lic.status];
+                             const badgeVariant = statusInfo ? getBadgeVariant(statusInfo.color) : 'outline';
+                            return (
+                                <TableRow key={lic.id}>
+                                <TableCell className="font-medium">{lic.id}</TableCell>
+                                <TableCell>{lic.clienteNome}</TableCell>
+                                <TableCell>{lic.modalidade}</TableCell>
+                                <TableCell>{lic.numeroLicitacao}</TableCell>
+                                <TableCell>{lic.plataforma}</TableCell>
+                                <TableCell>
+                                    {formatDate(lic.dataInicio, true)}
+                                </TableCell>
+                                <TableCell>
+                                    {formatDate(lic.dataMetaAnalise)}
+                                </TableCell>
+                                <TableCell>
+                                <Badge variant={badgeVariant} className="whitespace-nowrap">
+                                    {statusInfo?.icon && React.createElement(statusInfo.icon, {className:"h-3 w-3 mr-1 inline"})}
+                                    {statusInfo?.label || lic.status}
+                                </Badge>
+                                </TableCell>
+                                <TableCell className="text-right space-x-1">
+                                <Link href={`/licitacoes/${lic.id}`} passHref>
+                                    <Button variant="ghost" size="icon" title="Visualizar/Gerenciar">
+                                    <Eye className="h-4 w-4" />
+                                    </Button>
+                                </Link>
+                                </TableCell>
+                            </TableRow>
+                            );
+                        })
+                    ) : (
+                        <TableRow>
+                        <TableCell colSpan={9} className="text-center text-muted-foreground h-24">
+                            {error ? 'Não foi possível carregar as licitações.' : 'Nenhuma licitação encontrada com os filtros aplicados.'}
+                        </TableCell>
+                        </TableRow>
+                    )}
+                    </TableBody>
+                </Table>
+                {/* Add Pagination component here later */}
+            </CardContent>
+        </Card>
+    );
+}
+```

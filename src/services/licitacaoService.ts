@@ -1,9 +1,11 @@
 
+
 'use client';
 
 import type { LicitacaoFormValues } from '@/components/licitacoes/licitacao-form';
 import { CalendarCheck, CheckCircle, Clock, FileWarning, HelpCircle, Loader2, Send, Target, XCircle, Gavel } from 'lucide-react';
-import { parseISO } from 'date-fns'; // Import parseISO
+import { parseISO, isValid } from 'date-fns'; // Import parseISO and isValid
+import { type User } from './userService'; // Import User type
 
 const LOCAL_STORAGE_KEY = 'licitaxLicitacoes';
 const DEBIT_STATUS_STORAGE_KEY = 'licitaxDebitStatuses'; // Key for finance statuses
@@ -15,18 +17,32 @@ const getLicitacoesFromStorage = (): LicitacaoDetails[] => {
   const storedData = localStorage.getItem(LOCAL_STORAGE_KEY);
   try {
     // Attempt to parse dates stored as ISO strings
-    const items = storedData ? JSON.parse(storedData) : [];
-    return items.map((item: any) => ({
-        ...item,
-        // Parse dates carefully, handling potential invalid strings
-        dataInicio: item.dataInicio ? (typeof item.dataInicio === 'string' ? parseISO(item.dataInicio) : item.dataInicio) : undefined,
-        dataMetaAnalise: item.dataMetaAnalise ? (typeof item.dataMetaAnalise === 'string' ? parseISO(item.dataMetaAnalise) : item.dataMetaAnalise) : undefined,
-        // Ensure dataHomologacao is also parsed if stored
-        dataHomologacao: item.dataHomologacao ? (typeof item.dataHomologacao === 'string' ? parseISO(item.dataHomologacao) : item.dataHomologacao) : undefined,
-        comentarios: (item.comentarios || []).map((c:any) => ({...c, data: c.data ? (typeof c.data === 'string' ? parseISO(c.data) : c.data) : undefined })),
-        // Ensure checklist is an object
-        checklist: typeof item.checklist === 'object' && item.checklist !== null ? item.checklist : {},
-    })).filter(item => item.dataInicio instanceof Date && !isNaN(item.dataInicio.getTime())); // Filter out items with invalid dates
+    const items: any[] = storedData ? JSON.parse(storedData) : [];
+     return items.map((item: any) => {
+       const parseDate = (date: string | Date | undefined): Date | undefined => {
+          if (!date) return undefined;
+          try {
+              const parsed = typeof date === 'string' ? parseISO(date) : date;
+              return parsed instanceof Date && !isNaN(parsed.getTime()) ? parsed : undefined;
+          } catch { return undefined; }
+       };
+
+       return {
+         ...item,
+         // Parse dates carefully, handling potential invalid strings
+         dataInicio: parseDate(item.dataInicio),
+         dataMetaAnalise: parseDate(item.dataMetaAnalise),
+         // Ensure dataHomologacao is also parsed if stored
+         dataHomologacao: parseDate(item.dataHomologacao),
+         comentarios: (item.comentarios || []).map((c:any) => ({...c, data: parseDate(c.data) })),
+         // Ensure checklist is an object
+         checklist: typeof item.checklist === 'object' && item.checklist !== null ? item.checklist : {},
+         // Ensure numeric fields are numbers
+         valorCobrado: typeof item.valorCobrado === 'number' ? item.valorCobrado : 0,
+         valorTotalLicitacao: typeof item.valorTotalLicitacao === 'number' ? item.valorTotalLicitacao : 0,
+         valorPrimeiroColocado: typeof item.valorPrimeiroColocado === 'number' ? item.valorPrimeiroColocado : undefined,
+       };
+     }).filter(item => item.dataInicio instanceof Date); // Filter out items with invalid start dates
   } catch (e) {
     console.error("Error parsing licitacoes from localStorage:", e);
     localStorage.removeItem(LOCAL_STORAGE_KEY); // Clear corrupted data
@@ -40,10 +56,10 @@ const saveLicitacoesToStorage = (licitacoes: LicitacaoDetails[]): void => {
     // Store dates as ISO strings for better compatibility
     const itemsToStore = licitacoes.map(item => ({
         ...item,
-        dataInicio: item.dataInicio instanceof Date ? item.dataInicio.toISOString() : item.dataInicio,
-        dataMetaAnalise: item.dataMetaAnalise instanceof Date ? item.dataMetaAnalise.toISOString() : item.dataMetaAnalise,
-        dataHomologacao: item.dataHomologacao instanceof Date ? item.dataHomologacao.toISOString() : item.dataHomologacao, // Save homologation date
-        comentarios: (item.comentarios || []).map(c => ({...c, data: c.data instanceof Date ? c.data.toISOString() : c.data })),
+        dataInicio: item.dataInicio instanceof Date && isValid(item.dataInicio) ? item.dataInicio.toISOString() : null,
+        dataMetaAnalise: item.dataMetaAnalise instanceof Date && isValid(item.dataMetaAnalise) ? item.dataMetaAnalise.toISOString() : null,
+        dataHomologacao: item.dataHomologacao instanceof Date && isValid(item.dataHomologacao) ? item.dataHomologacao.toISOString() : null, // Save homologation date
+        comentarios: (item.comentarios || []).map(c => ({...c, data: c.data instanceof Date && isValid(c.data) ? c.data.toISOString() : null })),
     }));
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(itemsToStore));
   } catch (e) {
@@ -64,12 +80,20 @@ export interface LicitacaoDetails extends LicitacaoFormValues {
   dataInicio: Date | string;
   dataMetaAnalise: Date | string;
   dataHomologacao?: Date | string; // Add homologation date
+  orgaoComprador: string; // Added field
+  valorTotalLicitacao?: number; // Added field (make optional if needed)
+  createdBy?: { // Store who created the bid
+      userId?: string; // If using IDs from userService
+      username: string;
+      fullName?: string;
+      cpf?: string;
+  }
 }
 
 
 export type LicitacaoListItem = Pick<
     LicitacaoDetails,
-    'id' | 'clienteNome' | 'modalidade' | 'numeroLicitacao' | 'plataforma' | 'dataInicio' | 'dataMetaAnalise' | 'status'
+    'id' | 'clienteNome' | 'modalidade' | 'numeroLicitacao' | 'plataforma' | 'dataInicio' | 'dataMetaAnalise' | 'status' | 'orgaoComprador'
 >;
 
 // Status mapping - Centralized here
@@ -115,11 +139,12 @@ export const fetchLicitacoes = async (): Promise<LicitacaoListItem[]> => {
   await new Promise(resolve => setTimeout(resolve, 350)); // Simulate API delay
   const licitacoes = getLicitacoesFromStorage();
   // Map to the ListItem format
-  return licitacoes.map(({ id, clienteNome, modalidade, numeroLicitacao, plataforma, dataInicio, dataMetaAnalise, status }) => ({
+  return licitacoes.map(({ id, clienteNome, modalidade, numeroLicitacao, plataforma, dataInicio, dataMetaAnalise, status, orgaoComprador }) => ({
     id,
     clienteNome,
     modalidade,
     numeroLicitacao,
+    orgaoComprador, // Include new field
     plataforma,
     dataInicio,
     dataMetaAnalise,
@@ -138,21 +163,23 @@ export const fetchLicitacaoDetails = async (id: string): Promise<LicitacaoDetail
   const licitacoes = getLicitacoesFromStorage();
   const licitacao = licitacoes.find(l => l.id === id);
 
+   const parseDate = (date: Date | string | undefined): Date | undefined => {
+       if (!date) return undefined;
+       try {
+           const parsed = typeof date === 'string' ? parseISO(date) : date;
+           return parsed instanceof Date && !isNaN(parsed.getTime()) ? parsed : undefined;
+       } catch { return undefined; }
+   }
+
+
   if (licitacao) {
       // Ensure dates are Date objects when returning details
-      const parseDate = (date: Date | string | undefined): Date | undefined => {
-          if (!date) return undefined;
-          try {
-              const parsed = typeof date === 'string' ? parseISO(date) : date;
-              return parsed instanceof Date && !isNaN(parsed.getTime()) ? parsed : undefined;
-          } catch { return undefined; }
-      }
       return {
           ...licitacao,
-          dataInicio: parseDate(licitacao.dataInicio),
-          dataMetaAnalise: parseDate(licitacao.dataMetaAnalise),
+          dataInicio: parseDate(licitacao.dataInicio) as Date, // Assert Date as it's filtered on load
+          dataMetaAnalise: parseDate(licitacao.dataMetaAnalise) as Date, // Assert Date
           dataHomologacao: parseDate(licitacao.dataHomologacao),
-          comentarios: (licitacao.comentarios || []).map(c => ({...c, data: parseDate(c.data) }))
+          comentarios: (licitacao.comentarios || []).map(c => ({...c, data: parseDate(c.data) as Date })), // Assert Date
       };
   }
 
@@ -162,9 +189,13 @@ export const fetchLicitacaoDetails = async (id: string): Promise<LicitacaoDetail
 /**
  * Adds a new licitacao.
  * @param data The data for the new licitacao (LicitacaoFormValues).
+ * @param currentUser The user creating the licitacao (optional, for signature).
  * @returns A promise that resolves to the newly created LicitacaoDetails (with ID) or null on failure.
  */
-export const addLicitacao = async (data: LicitacaoFormValues): Promise<LicitacaoDetails | null> => {
+export const addLicitacao = async (
+    data: LicitacaoFormValues,
+    currentUser?: { username: string; fullName?: string; cpf?: string } | null // Accept user info
+): Promise<LicitacaoDetails | null> => {
   console.log("Adding new licitação:", data);
   await new Promise(resolve => setTimeout(resolve, 600)); // Simulate API delay
 
@@ -188,6 +219,15 @@ export const addLicitacao = async (data: LicitacaoFormValues): Promise<Licitacao
     dataInicio: data.dataInicio,
     dataMetaAnalise: data.dataMetaAnalise,
     dataHomologacao: undefined, // Initialize homologation date
+    valorPrimeiroColocado: undefined, // Initialize
+    orgaoComprador: data.orgaoComprador, // Added field
+    valorTotalLicitacao: data.valorTotalLicitacao, // Added field
+    // Add creator info if available
+    createdBy: currentUser ? {
+        username: currentUser.username,
+        fullName: currentUser.fullName,
+        cpf: currentUser.cpf,
+    } : undefined,
   };
 
   const updatedLicitacoes = [...licitacoes, newLicitacao];
@@ -221,16 +261,30 @@ export const updateLicitacao = async (id: string, data: Partial<LicitacaoDetails
        homologationDate = new Date(); // Set homologation date to now
    }
 
+   // Ensure dates passed in `data` are converted to Date objects if they are strings
+    const parseUpdateDate = (date: Date | string | undefined): Date | undefined => {
+        if (!date) return undefined;
+        try {
+            const parsed = typeof date === 'string' ? parseISO(date) : date;
+            return parsed instanceof Date && !isNaN(parsed.getTime()) ? parsed : undefined;
+        } catch { return undefined; }
+    };
+
+
   // Merge existing data with new data
-  const updatedLicitacao = {
+  const updatedLicitacao: LicitacaoDetails = {
       ...existingLicitacao,
       ...data,
-      dataHomologacao: homologationDate, // Assign the potentially updated homologation date
-       // Ensure dates are handled correctly (might be string or Date)
-      dataInicio: data.dataInicio ? (typeof data.dataInicio === 'string' ? new Date(data.dataInicio) : data.dataInicio) : existingLicitacao.dataInicio,
-      dataMetaAnalise: data.dataMetaAnalise ? (typeof data.dataMetaAnalise === 'string' ? new Date(data.dataMetaAnalise) : data.dataMetaAnalise) : existingLicitacao.dataMetaAnalise,
+      dataHomologacao: homologationDate instanceof Date ? homologationDate : parseUpdateDate(homologationDate), // Assign parsed homologation date
+       // Ensure dates are handled correctly (prefer Date objects)
+      dataInicio: data.dataInicio ? parseUpdateDate(data.dataInicio) as Date : existingLicitacao.dataInicio as Date,
+      dataMetaAnalise: data.dataMetaAnalise ? parseUpdateDate(data.dataMetaAnalise) as Date : existingLicitacao.dataMetaAnalise as Date,
       // Ensure comments preserve Date objects if updated
-      comentarios: data.comentarios ? data.comentarios.map(c => ({...c, data: typeof c.data === 'string' ? new Date(c.data) : c.data })) : existingLicitacao.comentarios,
+       comentarios: data.comentarios ? data.comentarios.map(c => ({...c, data: parseUpdateDate(c.data) as Date })) : existingLicitacao.comentarios,
+       // Ensure numeric fields are numbers
+       valorCobrado: data.valorCobrado !== undefined ? Number(data.valorCobrado) : existingLicitacao.valorCobrado,
+       valorTotalLicitacao: data.valorTotalLicitacao !== undefined ? Number(data.valorTotalLicitacao) : existingLicitacao.valorTotalLicitacao,
+       valorPrimeiroColocado: data.valorPrimeiroColocado !== undefined ? Number(data.valorPrimeiroColocado) : existingLicitacao.valorPrimeiroColocado,
   };
 
   const updatedLicitacoes = [...licitacoes];
@@ -287,6 +341,7 @@ export const deleteLicitacao = async (id: string): Promise<boolean> => {
      return stored ? JSON.parse(stored) : {};
    } catch (e) {
      console.error("Error parsing debit statuses:", e);
+     localStorage.removeItem(DEBIT_STATUS_STORAGE_KEY); // Clear corrupted data
      return {};
    }
  };
@@ -319,28 +374,38 @@ export const deleteLicitacao = async (id: string): Promise<boolean> => {
    const debitos: Debito[] = [];
 
    await Promise.all(licitacoes.map(async lic => {
-       // Only create debit if status is homologado AND homologation date exists
+       // Only create debit if status is homologado AND homologation date exists and is valid
        if (lic.status === 'PROCESSO_HOMOLOGADO' && lic.dataHomologacao) {
-            const client = await fetchClientDetails(lic.clienteId);
             const homologationDate = typeof lic.dataHomologacao === 'string' ? parseISO(lic.dataHomologacao) : lic.dataHomologacao;
 
-            // Ensure homologationDate is valid before proceeding
-            if (homologationDate instanceof Date && !isNaN(homologationDate.getTime())) {
-               const currentStatus = debitStatuses[lic.id] || 'PENDENTE'; // Get persisted status or default to PENDENTE
-               debitos.push({
-                   id: lic.id,
-                   licitacaoNumero: lic.numeroLicitacao,
-                   clienteNome: lic.clienteNome,
-                   clienteCnpj: client?.cnpj || 'CNPJ N/A',
-                   valor: lic.valorCobrado,
-                   dataHomologacao: homologationDate,
-                   status: currentStatus,
-               });
+            if (homologationDate instanceof Date && isValid(homologationDate)) {
+               try {
+                   const client = await fetchClientDetails(lic.clienteId);
+                   const currentStatus = debitStatuses[lic.id] || 'PENDENTE'; // Get persisted status or default to PENDENTE
+                   debitos.push({
+                       id: lic.id,
+                       licitacaoNumero: lic.numeroLicitacao,
+                       clienteNome: lic.clienteNome,
+                       clienteCnpj: client?.cnpj || 'CNPJ N/A',
+                       valor: lic.valorCobrado,
+                       dataHomologacao: homologationDate,
+                       status: currentStatus,
+                   });
+               } catch (clientError) {
+                   console.error(`Error fetching client details for licitacao ${lic.id}:`, clientError);
+                   // Optionally create debit with fallback client name if needed
+                   // const currentStatus = debitStatuses[lic.id] || 'PENDENTE';
+                   // debitos.push({ ... , clienteNome: lic.clienteNome || 'Cliente N/A', clienteCnpj: 'CNPJ N/A', ... });
+               }
+
             } else {
                 console.warn(`Skipping debit creation for ${lic.id} due to invalid homologation date:`, lic.dataHomologacao);
             }
        }
    }));
+
+   // Sort debitos by homologation date descending
+   debitos.sort((a, b) => b.dataHomologacao.getTime() - a.dataHomologacao.getTime());
 
    console.log("Generated Debitos:", debitos);
    return debitos;

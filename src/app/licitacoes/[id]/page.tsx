@@ -1,8 +1,9 @@
+
 'use client'; // Required for state, effects, and client-side interactions
 
 import React, {useState, useEffect} from 'react'; // Import React
 import {useParams, useRouter} from 'next/navigation';
-import {format, parseISO} from 'date-fns';
+import {format, parseISO, isValid} from 'date-fns'; // Added isValid
 import {ptBR} from 'date-fns/locale';
 import {
   Card,
@@ -60,15 +61,15 @@ import { type ClientDetails } from '@/components/clientes/client-form'; // For C
 import { fetchClientDetails } from '@/services/clientService'; // To fetch client CNPJ
 
 // Helper to get badge variant based on custom color mapping from service
-const getBadgeVariant = (color: string | undefined): 'default' | 'secondary' | 'destructive' | 'outline' => {
+const getBadgeVariant = (color: string | undefined): 'default' | 'secondary' | 'destructive' | 'outline' | 'success' | 'warning' | 'info' | 'accent' => {
   switch (color) {
     case 'secondary': return 'secondary';
-    case 'destructive':
-    case 'warning':
-      return 'destructive';
-    case 'success': return 'default'; // Map success to default (primary)
-    case 'info':
-    case 'accent':
+    case 'destructive': return 'destructive';
+    case 'warning': return 'warning';
+    case 'success': return 'success';
+    case 'info': return 'info';
+    case 'accent': return 'accent';
+    case 'default': return 'default'; // Map default (primary) if needed
     case 'outline':
     default:
       return 'outline';
@@ -117,7 +118,7 @@ export default function LicitacaoDetalhesPage() {
             // Format initial value for display
             setValorPrimeiroColocadoInput(
               data.valorPrimeiroColocado !== undefined && data.valorPrimeiroColocado !== null
-                ? data.valorPrimeiroColocado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                ? formatCurrency(data.valorPrimeiroColocado) // Format the fetched number
                 : ''
             );
 
@@ -385,7 +386,7 @@ export default function LicitacaoDetalhesPage() {
   const parseCurrency = (value: string): number | undefined => {
       if (!value) return undefined;
       // Handle "0" or "R$ 0,00"
-      if (value.trim() === '0' || value.trim() === 'R$ 0,00') return 0;
+      if (value.trim() === '0' || value.trim() === 'R$ 0,00' || value.replace(/[^0-9,]/g, '') === '0') return 0;
       // Remove R$, spaces, dots, and replace comma with dot
       const cleaned = value.replace(/[R$\s.]/g, '').replace(',', '.');
       const num = parseFloat(cleaned);
@@ -420,15 +421,20 @@ export default function LicitacaoDetalhesPage() {
 
    // Calculate bid difference
    const calculateBidDifference = () => {
-      if (!licitacao || licitacao.valorPrimeiroColocado === undefined || licitacao.valorPrimeiroColocado === null || licitacao.valorCobrado <= 0) {
-          return null; // Use valorCobrado as the client's bid value
+      if (!licitacao || licitacao.valorPrimeiroColocado === undefined || licitacao.valorPrimeiroColocado === null || licitacao.valorCobrado === undefined || licitacao.valorCobrado === null || licitacao.valorCobrado < 0) {
+          return null; // Use valorCobrado as the client's bid value, ensure it exists
       }
-      const valorProprio = licitacao.valorCobrado;
+      const valorProprio = licitacao.valorCobrado; // This is the client's bid value (Assessoria's charged value)
       const valorPrimeiro = licitacao.valorPrimeiroColocado;
 
-      if (valorPrimeiro <= 0) { // Handle division by zero or non-positive competitor bid
-         return { absolute: formatCurrency(valorProprio - valorPrimeiro), percentage: valorPrimeiro === 0 ? 'N/A (1º foi R$ 0)' : 'Inválido (1º < 0)' };
+      if (valorPrimeiro < 0) { // Allow zero for competitor, but not negative
+         return { absolute: formatCurrency(valorProprio - valorPrimeiro), percentage: 'Inválido (1º < 0)' };
       }
+      if (valorPrimeiro === 0) {
+         // If competitor bid is 0, percentage difference is infinite or undefined. Handle appropriately.
+          return { absolute: formatCurrency(valorProprio - valorPrimeiro), percentage: 'N/A (1º foi R$ 0)' };
+      }
+
 
       const difference = valorProprio - valorPrimeiro;
       const percentageDifference = (difference / valorPrimeiro) * 100;
@@ -503,6 +509,11 @@ export default function LicitacaoDetalhesPage() {
         if (!date) return 'N/A';
         try {
             const dateObj = typeof date === 'string' ? parseISO(date) : date;
+            // Check if the parsed date is valid
+            if (!(dateObj instanceof Date) || !isValid(dateObj)) {
+                 console.warn("Invalid date encountered:", date);
+                 return 'Data inválida';
+            }
             const formatString = time ? "dd/MM/yyyy HH:mm" : "dd/MM/yyyy";
             return format(dateObj, formatString, { locale: ptBR });
         } catch (e) {
@@ -524,6 +535,7 @@ export default function LicitacaoDetalhesPage() {
                     <h2 className="text-2xl font-semibold">{licitacao.numeroLicitacao}</h2>
                 </div>
                <p className="text-muted-foreground ml-9">{licitacao.clienteNome} ({clientDetails?.cnpj || 'CNPJ não carregado'})</p>
+               <p className="text-sm text-muted-foreground ml-9">Órgão: {licitacao.orgaoComprador || 'N/A'}</p>
                <p className="text-sm text-muted-foreground ml-9">{licitacao.modalidade} - {licitacao.plataforma}</p>
             </div>
             <div className="flex flex-col items-end gap-2 flex-shrink-0">
@@ -594,9 +606,13 @@ export default function LicitacaoDetalhesPage() {
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-sm">
                    <div><span className="font-medium">Protocolo:</span> {licitacao.id}</div>
-                   <div><span className="font-medium">Valor Cobrado:</span> {formatCurrency(licitacao.valorCobrado)}</div>
+                    <div><span className="font-medium">Valor Total Licitação:</span> {formatCurrency(licitacao.valorTotalLicitacao)}</div>
+                   <div><span className="font-medium">Valor Cobrado (Assessoria):</span> {formatCurrency(licitacao.valorCobrado)}</div>
                    <div className="flex items-center gap-1"><Clock className="h-3.5 w-3.5 text-muted-foreground"/> <span className="font-medium">Início Disputa:</span> {formatDate(licitacao.dataInicio, true)}</div>
                    <div className="flex items-center gap-1"><CalendarCheck className="h-3.5 w-3.5 text-muted-foreground"/> <span className="font-medium">Meta Análise:</span> {formatDate(licitacao.dataMetaAnalise)}</div>
+                    {licitacao.dataHomologacao && (
+                        <div className="sm:col-span-2"><span className="font-medium">Data Homologação:</span> {formatDate(licitacao.dataHomologacao)}</div>
+                    )}
                    {licitacao.observacoes && (
                        <div className="sm:col-span-2 mt-2 pt-2 border-t"><span className="font-medium">Observações:</span> <p className="text-muted-foreground whitespace-pre-wrap">{licitacao.observacoes}</p></div>
                    )}
@@ -733,14 +749,13 @@ export default function LicitacaoDetalhesPage() {
                        <Input
                         id="valor-primeiro"
                         placeholder="R$ 0,00"
+                        type="text" // Use text to allow formatting
                         value={valorPrimeiroColocadoInput}
                         onChange={(e) => {
-                             const parsedValue = parseCurrency(e.target.value);
-                             // Format for display, allow partial input like "R$ 12"
-                             const displayValue = e.target.value; // Keep raw input for typing experience
-                             setValorPrimeiroColocadoInput(displayValue); // Update state with raw value
-                             // Update form value with parsed number (if valid)
-                             // form.setValue('valorPrimeiroColocado', parsedValue); // Assuming you add this to form later
+                             const rawValue = e.target.value;
+                             const parsedValue = parseCurrency(rawValue);
+                             setValorPrimeiroColocadoInput(rawValue); // Keep raw input for typing
+                             // Optionally trigger validation if needed
                          }}
                          onBlur={(e) => { // Format on blur
                              const parsedValue = parseCurrency(e.target.value);
@@ -748,6 +763,7 @@ export default function LicitacaoDetalhesPage() {
                          }}
                         disabled={isSavingBidResult}
                         className={parseCurrency(valorPrimeiroColocadoInput) === undefined && valorPrimeiroColocadoInput.trim() !== '' ? 'border-red-500' : ''} // Basic invalid style
+                        inputMode="decimal" // Hint for mobile keyboards
                       />
                       {parseCurrency(valorPrimeiroColocadoInput) === undefined && valorPrimeiroColocadoInput.trim() !== '' && <p className="text-xs text-destructive mt-1">Valor inválido.</p>}
                     </div>
@@ -756,15 +772,17 @@ export default function LicitacaoDetalhesPage() {
                     </Button>
                   </div>
                    {bidDifference && (
-                     <Alert variant={licitacao.valorCobrado <= (licitacao.valorPrimeiroColocado ?? Infinity) ? 'success' : 'warning'} className="text-sm">
-                         {licitacao.valorCobrado <= (licitacao.valorPrimeiroColocado ?? Infinity) ? <CheckCircle className="h-4 w-4" /> : <HelpCircle className="h-4 w-4"/> }
+                     <Alert variant={licitacao.valorCobrado !== undefined && licitacao.valorPrimeiroColocado !== undefined && licitacao.valorCobrado <= licitacao.valorPrimeiroColocado ? 'success' : 'warning'} className="text-sm">
+                         {licitacao.valorCobrado !== undefined && licitacao.valorPrimeiroColocado !== undefined && licitacao.valorCobrado <= licitacao.valorPrimeiroColocado ? <CheckCircle className="h-4 w-4" /> : <HelpCircle className="h-4 w-4"/> }
                        <AlertTitle>Análise de Lance</AlertTitle>
                        <AlertDescription>
                          {licitacao.valorPrimeiroColocado === licitacao.valorCobrado
                             ? `Seu lance (${formatCurrency(licitacao.valorCobrado)}) foi igual ao do primeiro colocado.`
-                            : licitacao.valorCobrado < (licitacao.valorPrimeiroColocado ?? Infinity)
+                            : (licitacao.valorCobrado !== undefined && licitacao.valorPrimeiroColocado !== undefined && licitacao.valorCobrado < licitacao.valorPrimeiroColocado)
                             ? `Seu lance (${formatCurrency(licitacao.valorCobrado)}) foi ${bidDifference.absolute} (${bidDifference.percentage}) abaixo do primeiro colocado (${formatCurrency(licitacao.valorPrimeiroColocado)}).`
-                            : `Seu lance (${formatCurrency(licitacao.valorCobrado)}) foi ${bidDifference.absolute} (${bidDifference.percentage}) acima do primeiro colocado (${formatCurrency(licitacao.valorPrimeiroColocado)}).`}
+                             : (licitacao.valorCobrado !== undefined && licitacao.valorPrimeiroColocado !== undefined && licitacao.valorCobrado > licitacao.valorPrimeiroColocado)
+                            ? `Seu lance (${formatCurrency(licitacao.valorCobrado)}) foi ${bidDifference.absolute} (${bidDifference.percentage}) acima do primeiro colocado (${formatCurrency(licitacao.valorPrimeiroColocado)}).`
+                             : 'Valores indisponíveis para análise.'}
 
                        </AlertDescription>
                      </Alert>
@@ -817,3 +835,4 @@ export default function LicitacaoDetalhesPage() {
     </div>
   );
 }
+```

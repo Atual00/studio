@@ -1,3 +1,4 @@
+
 'use client';
 
 import {zodResolver} from '@hookform/resolvers/zod';
@@ -23,31 +24,36 @@ import { type ClientListItem } from '@/services/clientService'; // Import Client
 const modalities = ['Pregão Eletrônico', 'Tomada de Preços', 'Convite', 'Concorrência', 'Leilão', 'Dispensa Eletrônica', 'Concurso', 'RDC'];
 const platforms = ['ComprasNet', 'Licitações-e (BB)', 'BEC/SP', 'BNC', 'BLL Compras', 'Portal de Compras Públicas', 'Outra Plataforma'];
 
+// Helper for parsing currency string to number
+const parseCurrencyString = (val: unknown): number | undefined => {
+  if (typeof val === 'number') return val; // Already a number
+  if (typeof val === 'string') {
+    // Allow "0", "0,00" etc. to be parsed as 0
+    if (val.match(/^R?\$\s?0([,.](0+))?$/) || val.trim() === '0') return 0;
+    const cleaned = val.replace(/[R$\s.]/g, '').replace(',', '.');
+    const num = parseFloat(cleaned);
+    return isNaN(num) ? undefined : num;
+  }
+  return undefined;
+};
+
 // Zod schema for validation
 const licitacaoFormSchema = z.object({
   clienteId: z.string({required_error: 'Selecione o cliente participante.'}).min(1, 'Selecione o cliente participante.'), // Ensure not empty string
   modalidade: z.string({required_error: 'Selecione a modalidade da licitação.'}),
   numeroLicitacao: z.string().min(1, {message: 'Número da licitação é obrigatório.'}),
+  orgaoComprador: z.string().min(1, {message: 'Órgão comprador é obrigatório.'}), // Added field
   plataforma: z.string({required_error: 'Selecione a plataforma onde ocorrerá.'}),
   dataInicio: z.date({required_error: 'Data e hora de início são obrigatórias.'}),
   dataMetaAnalise: z.date({required_error: 'Data meta para análise é obrigatória.'}),
   // Allow zero, handle string input for currency
   valorCobrado: z.preprocess(
-    (val) => {
-      if (typeof val === 'string') {
-        // Allow "0", "0,00" etc. to be parsed as 0
-        if (val.match(/^R?\$\s?0([,.](0+))?$/)) return 0;
-        const cleaned = val.replace(/[R$\s.]/g, '').replace(',', '.');
-        const num = parseFloat(cleaned);
-        return isNaN(num) ? undefined : num;
-      }
-       // Allow number 0 directly
-       if (typeof val === 'number') {
-         return val;
-       }
-      return val;
-    },
+    parseCurrencyString,
     z.number({required_error: 'Valor cobrado é obrigatório.', invalid_type_error: 'Valor cobrado deve ser um número.'}).min(0, { message: 'Valor deve ser zero ou positivo.' })
+  ),
+  valorTotalLicitacao: z.preprocess( // Added field
+     parseCurrencyString,
+     z.number({required_error: 'Valor total da licitação é obrigatório.', invalid_type_error: 'Valor total deve ser um número.'}).min(0, { message: 'Valor total deve ser zero ou positivo.' })
   ),
   observacoes: z.string().optional(),
 });
@@ -67,7 +73,9 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
     const parseInitialDate = (date: string | Date | undefined): Date | undefined => {
         if (!date) return undefined;
         try {
-            return typeof date === 'string' ? parseISO(date) : date;
+             const parsed = typeof date === 'string' ? parseISO(date) : date;
+             // Validate parsed date
+             return parsed instanceof Date && !isNaN(parsed.getTime()) ? parsed : undefined;
         } catch {
             return undefined;
         }
@@ -77,13 +85,17 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
   const form = useForm<LicitacaoFormValues>({
     resolver: zodResolver(licitacaoFormSchema),
     defaultValues: {
-      ...initialData,
       clienteId: initialData?.clienteId || undefined, // Ensure initial value is undefined for placeholder
-      // Ensure dates are Date objects for the form state
+      modalidade: initialData?.modalidade || undefined,
+      numeroLicitacao: initialData?.numeroLicitacao || '',
+      orgaoComprador: initialData?.orgaoComprador || '', // Initialize new field
+      plataforma: initialData?.plataforma || undefined,
       dataInicio: parseInitialDate(initialData?.dataInicio),
       dataMetaAnalise: parseInitialDate(initialData?.dataMetaAnalise),
       // Ensure valorCobrado is a number if provided, otherwise undefined
       valorCobrado: initialData?.valorCobrado !== undefined ? Number(initialData.valorCobrado) : undefined,
+      valorTotalLicitacao: initialData?.valorTotalLicitacao !== undefined ? Number(initialData.valorTotalLicitacao) : undefined, // Initialize new field
+      observacoes: initialData?.observacoes || '',
     },
   });
 
@@ -93,9 +105,13 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
             form.reset({
                 ...initialData,
                  clienteId: initialData?.clienteId || undefined, // Reset client ID correctly
+                 modalidade: initialData?.modalidade || undefined,
+                 orgaoComprador: initialData?.orgaoComprador || '',
+                 plataforma: initialData?.plataforma || undefined,
                  dataInicio: parseInitialDate(initialData?.dataInicio),
                  dataMetaAnalise: parseInitialDate(initialData?.dataMetaAnalise),
                  valorCobrado: initialData?.valorCobrado !== undefined ? Number(initialData.valorCobrado) : undefined,
+                 valorTotalLicitacao: initialData?.valorTotalLicitacao !== undefined ? Number(initialData.valorTotalLicitacao) : undefined,
             });
         }
     }, [initialData, form]);
@@ -115,11 +131,11 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
      let numberValue: number | undefined;
 
       // Check if the raw input aims to be zero
-      if (rawValue === '0' || rawValue === 'R$ 0,00' || rawValue.replace(/[^0-9]/g, '') === '0') {
+      if (rawValue.trim() === '0' || rawValue === 'R$ 0,00' || rawValue.replace(/[^0-9,]/g, '') === '0' || rawValue.replace(/[^0-9.]/g, '') === '0') {
           numberValue = 0;
           field.onChange(0); // Update form state with 0
-          // No need to manually set e.target.value, let the controlled component update
-          return; // Exit early
+          e.target.value = formatCurrency(0); // Format display immediately
+          return;
       }
 
       // Parse non-zero values
@@ -127,10 +143,13 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
       if (cleaned === '') {
           numberValue = undefined;
           field.onChange(undefined); // Update form state
+          e.target.value = ''; // Clear display
       } else {
           const parsedNum = parseInt(cleaned, 10) / 100;
           numberValue = isNaN(parsedNum) ? undefined : parsedNum;
           field.onChange(numberValue); // Update form state
+          // Don't format immediately onChange, format onBlur instead for better UX
+          // e.target.value = formatCurrency(numberValue);
       }
    };
 
@@ -161,8 +180,6 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
     }
   };
 
-  // Get the current formatted value for display
-  const currentValorCobradoFormatted = formatCurrency(form.watch('valorCobrado'));
 
   return (
     <Form {...form}>
@@ -226,13 +243,27 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
               <FormItem>
                 <FormLabel>Número da Licitação*</FormLabel>
                 <FormControl>
-                  <Input placeholder="Ex: Pregão 123/2024, TP 001/2024" {...field} disabled={isSubmitting}/>
+                  <Input placeholder="Ex: Pregão 123/2024, TP 001/2024" {...field} value={field.value || ''} disabled={isSubmitting}/>
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
         </div>
+        <FormField
+            control={form.control}
+            name="orgaoComprador"
+            render={({field}) => (
+              <FormItem>
+                <FormLabel>Órgão Comprador*</FormLabel>
+                <FormControl>
+                  <Input placeholder="Ex: Prefeitura Municipal de..., Ministério da..." {...field} value={field.value || ''} disabled={isSubmitting}/>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
            <FormField
@@ -264,15 +295,16 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
               name="valorCobrado"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Valor Cobrado*</FormLabel>
+                  <FormLabel>Valor Cobrado (Assessoria)*</FormLabel>
                   <FormControl>
                     <Input
                      placeholder="R$ 0,00"
-                     type="text" // Use text type for better control over formatting
-                     value={currentValorCobradoFormatted || ''} // Ensure value is always a string
+                     type="text" // Use text type for formatting control
+                     // Use a separate state or watch for formatted display
+                     value={formatCurrency(field.value)}
                      onChange={(e) => handleCurrencyChange(e, field)}
-                     onBlur={(e) => { // Format on blur using the reliable form state value
-                       e.target.value = formatCurrency(form.getValues('valorCobrado'));
+                     onBlur={(e) => { // Ensure formatting on blur
+                        e.target.value = formatCurrency(field.value);
                      }}
                      disabled={isSubmitting}
                      inputMode="decimal"
@@ -284,6 +316,32 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
               )}
             />
         </div>
+
+        <FormField
+            control={form.control}
+            name="valorTotalLicitacao"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Valor Total Estimado/Global (Licitação)*</FormLabel>
+                <FormControl>
+                  <Input
+                     placeholder="R$ 0,00"
+                     type="text"
+                     value={formatCurrency(field.value)}
+                     onChange={(e) => handleCurrencyChange(e, field)}
+                     onBlur={(e) => {
+                         e.target.value = formatCurrency(field.value);
+                      }}
+                     disabled={isSubmitting}
+                     inputMode="decimal"
+                  />
+                </FormControl>
+                <FormDescription>Valor total estimado ou global da licitação (para referência).</FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
 
          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
            <FormField
@@ -421,7 +479,7 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
               <FormItem>
                 <FormLabel>Observações</FormLabel>
                 <FormControl>
-                  <Textarea placeholder="Detalhes importantes, links adicionais, objeto resumido, etc." className="min-h-[100px]" {...field} disabled={isSubmitting} />
+                  <Textarea placeholder="Detalhes importantes, links adicionais, objeto resumido, etc." className="min-h-[100px]" {...field} value={field.value || ''} disabled={isSubmitting} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -438,3 +496,4 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
     </Form>
   );
 }
+```

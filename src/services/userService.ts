@@ -1,4 +1,5 @@
 
+
 'use client';
 
 const USER_STORAGE_KEY = 'licitaxUsers';
@@ -6,6 +7,8 @@ const USER_STORAGE_KEY = 'licitaxUsers';
 export interface User {
   id: string;
   username: string;
+  fullName?: string; // Added field
+  cpf?: string; // Added field
   // passwordHash: string; // In a real app, store hash, not plain password
   role: 'admin' | 'user';
 }
@@ -13,9 +16,9 @@ export interface User {
 // --- Mock Data (Replace with API) ---
 // This list serves as the initial seed for localStorage if it's empty.
 let initialMockUsers: User[] = [
-  { id: 'user-admin-001', username: 'admin', role: 'admin' },
-  { id: 'user-user-002', username: 'user', role: 'user' },
-  { id: 'user-joao-003', username: 'JOAO', role: 'admin' }, // Ensure JOAO is admin here too
+  { id: 'user-admin-001', username: 'admin', fullName: 'Administrador', cpf: '000.000.000-00', role: 'admin' },
+  { id: 'user-user-002', username: 'user', fullName: 'Usuário Padrão', cpf: '111.111.111-11', role: 'user' },
+  { id: 'user-joao-003', username: 'joao', fullName: 'Joao Silva', cpf: '123.456.789-00', role: 'admin' }, // Ensure JOAO is admin here too
 ];
 
 // --- Helper Functions (using localStorage for simulation) ---
@@ -27,13 +30,23 @@ const getUsersFromStorage = (): User[] => {
     let users: User[] = storedData ? JSON.parse(storedData) : [];
 
     // Ensure default mock users (including joao) are present if storage was cleared or empty initially
-    // And update JOAO role if found with a different role
+    // And update JOAO role and add missing fields (fullName, cpf) if found with old data
     initialMockUsers.forEach(mockUser => {
         const existingUserIndex = users.findIndex(u => u.username.toLowerCase() === mockUser.username.toLowerCase());
         if (existingUserIndex === -1) {
             users.push(mockUser); // Add if missing
-        } else if (users[existingUserIndex].role !== mockUser.role && mockUser.username.toLowerCase() === 'joao') {
-            users[existingUserIndex].role = mockUser.role; // Update JOAO's role if it differs
+        } else {
+            // Update role if it differs for known mock users (especially admin roles)
+            if (users[existingUserIndex].role !== mockUser.role && ['admin', 'joao'].includes(mockUser.username.toLowerCase())) {
+                 users[existingUserIndex].role = mockUser.role;
+            }
+            // Add missing fields
+            if (!users[existingUserIndex].fullName) {
+                 users[existingUserIndex].fullName = mockUser.fullName;
+            }
+             if (!users[existingUserIndex].cpf) {
+                 users[existingUserIndex].cpf = mockUser.cpf;
+            }
         }
     });
 
@@ -65,7 +78,7 @@ const saveUsersToStorage = (users: User[]): void => {
 
 // Initialize storage with potentially updated mock data if it doesn't exist or is outdated
 if (typeof window !== 'undefined') {
-    const existingUsers = getUsersFromStorage(); // Load potentially existing + ensure defaults + update roles
+    const existingUsers = getUsersFromStorage(); // Load potentially existing + ensure defaults + update roles/fields
     saveUsersToStorage(existingUsers); // Save the potentially updated list
 }
 
@@ -87,22 +100,36 @@ export const fetchUsers = async (): Promise<User[]> => {
  * @param username The username for the new user.
  * @param password The password for the new user (INSECURE - should be hashed).
  * @param role The role for the new user (defaults to 'user').
+ * @param fullName The full name of the user.
+ * @param cpf The CPF of the user.
  * @returns A promise that resolves to the newly created User or null on failure.
  */
-export const addUser = async (username: string, password?: string, role: 'admin' | 'user' = 'user'): Promise<User | null> => {
-  console.log("Adding new user:", username, " Role:", role);
+export const addUser = async (
+    username: string,
+    password?: string,
+    role: 'admin' | 'user' = 'user',
+    fullName?: string, // Added parameter
+    cpf?: string // Added parameter
+): Promise<User | null> => {
+  console.log("Adding new user:", username, " Role:", role, " FullName:", fullName, " CPF:", cpf);
   await new Promise(resolve => setTimeout(resolve, 400)); // Simulate API delay
 
-  if (!username || !password) { // Basic validation
-     throw new Error("Usuário e senha são obrigatórios.");
+  if (!username || !password || !fullName || !cpf) { // Basic validation including new fields
+     throw new Error("Nome completo, CPF, usuário e senha são obrigatórios.");
   }
 
   const users = getUsersFromStorage();
+  const lowerCaseUsername = username.toLowerCase();
 
   // Check for duplicate username (case-insensitive)
-  if (users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
+  if (users.some(u => u.username.toLowerCase() === lowerCaseUsername)) {
     throw new Error(`Usuário "${username}" já existe.`);
   }
+   // Check for duplicate CPF
+   if (users.some(u => u.cpf === cpf)) {
+    throw new Error(`CPF "${cpf}" já está cadastrado para outro usuário.`);
+  }
+
 
   // !!! IMPORTANT: HASH THE PASSWORD HERE in a real application !!!
   // const passwordHash = await bcrypt.hash(password, 10); // Example using bcrypt
@@ -110,6 +137,8 @@ export const addUser = async (username: string, password?: string, role: 'admin'
   const newUser: User = {
     id: `user-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
     username: username, // Store username as provided
+    fullName: fullName, // Store full name
+    cpf: cpf, // Store CPF
     // passwordHash: passwordHash,
     role: role,
   };
@@ -156,3 +185,4 @@ export const deleteUser = async (id: string): Promise<boolean> => {
 // --- Potential Future Functions ---
 // export const updateUser = async (id: string, data: Partial<User>): Promise<boolean> => { ... };
 // export const changePassword = async (id: string, newPassword: string): Promise<boolean> => { ... };
+```

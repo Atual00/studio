@@ -1,14 +1,15 @@
 
+
 'use client';
 
 import { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
-import { Loader2, AlertCircle, Users, Image as ImageIcon, Upload, Trash2, PlusCircle } from 'lucide-react'; // Added icons
+import { Loader2, AlertCircle, Users, Image as ImageIcon, Upload, Trash2, PlusCircle, User } from 'lucide-react'; // Added icons
 import { useToast } from '@/hooks/use-toast';
 import ConfiguracoesForm, { type ConfiguracoesFormValues } from '@/components/configuracoes/configuracoes-form';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { fetchConfiguracoes, updateConfiguracoes, saveLogo, deleteLogo } from '@/services/configuracoesService'; // Import services
-import { fetchUsers, addUser, deleteUser, type User } from '@/services/userService'; // Import user services
+import { fetchUsers, addUser, deleteUser, type User as AppUser } from '@/services/userService'; // Import user services, rename User to avoid conflict
 import { Button } from '@/components/ui/button'; // Import Button
 import { Input } from '@/components/ui/input'; // Import Input for file and user
 import { Label } from '@/components/ui/label'; // Import Label
@@ -21,11 +22,34 @@ import { useAuth } from '@/context/AuthContext'; // Import useAuth for role chec
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form"; // Import Form components
+
+
+// Helper to format CPF on input change
+const formatCpf = (value: string | undefined): string => {
+  if (!value) return '';
+  const digits = value.replace(/\D/g, '');
+  return digits
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d{1,2})$/, '$1-$2')
+    .slice(0, 14); // XXX.XXX.XXX-XX
+};
+
 
 const userSchema = z.object({
-    username: z.string().min(3, "Usuário deve ter pelo menos 3 caracteres."),
+    fullName: z.string().min(3, "Nome completo deve ter pelo menos 3 caracteres."),
+    cpf: z.string().regex(/^\d{3}\.\d{3}\.\d{3}-\d{2}$/, "CPF inválido. Use o formato XXX.XXX.XXX-XX."),
+    username: z.string().min(3, "Usuário deve ter pelo menos 3 caracteres.").toLowerCase(), // Store lowercase
     password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres."),
-    // Add role selection if needed
+    role: z.enum(['admin', 'user']).default('user'), // Add role selection
 });
 type UserFormData = z.infer<typeof userSchema>;
 
@@ -37,7 +61,7 @@ export default function ConfiguracoesPage() {
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [isDeletingLogo, setIsDeletingLogo] = useState(false);
 
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<AppUser[]>([]); // Use renamed AppUser type
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [userError, setUserError] = useState<string | null>(null);
   const [isAddingUser, setIsAddingUser] = useState(false);
@@ -52,7 +76,7 @@ export default function ConfiguracoesPage() {
 
   const userForm = useForm<UserFormData>({
       resolver: zodResolver(userSchema),
-      defaultValues: { username: '', password: '' },
+      defaultValues: { fullName: '', cpf: '', username: '', password: '', role: 'user' },
   });
 
 
@@ -202,7 +226,8 @@ export default function ConfiguracoesPage() {
         setIsAddingUser(true);
         setUserError(null);
         try {
-            const newUser = await addUser(data.username, data.password); // Add role if implemented
+            // Pass all required fields to addUser
+            const newUser = await addUser(data.username, data.password, data.role, data.fullName, data.cpf);
             if (newUser) {
                 setUsers(prev => [...prev, newUser]);
                 toast({ title: "Sucesso!", description: `Usuário ${newUser.username} adicionado.` });
@@ -222,7 +247,7 @@ export default function ConfiguracoesPage() {
     };
 
     const handleDeleteUser = async (userId: string, username: string) => {
-       if (user?.username === username) {
+       if (user?.username?.toLowerCase() === username.toLowerCase()) { // Compare lowercase
             toast({ title: "Ação Inválida", description: "Você não pode excluir sua própria conta.", variant: "destructive" });
             return;
        }
@@ -368,7 +393,9 @@ export default function ConfiguracoesPage() {
                       <Table>
                          <TableHeader>
                             <TableRow>
+                               <TableHead>Nome Completo</TableHead>
                                <TableHead>Usuário</TableHead>
+                               <TableHead>CPF</TableHead>
                                <TableHead>Role</TableHead> {/* Added Role column */}
                                <TableHead className="text-right">Ações</TableHead>
                             </TableRow>
@@ -377,15 +404,17 @@ export default function ConfiguracoesPage() {
                             {users.length > 0 ? (
                                 users.map((u) => (
                                 <TableRow key={u.id}>
+                                     <TableCell>{u.fullName || '-'}</TableCell>
                                     <TableCell>{u.username}</TableCell>
+                                     <TableCell>{u.cpf || '-'}</TableCell>
                                     <TableCell className="capitalize">{u.role}</TableCell> {/* Display Role */}
                                     <TableCell className="text-right">
                                     <Button
                                         variant="ghost"
                                         size="icon"
                                         onClick={() => handleDeleteUser(u.id, u.username)}
-                                        disabled={isDeletingUser === u.id || u.username === user?.username} // Disable delete for self
-                                        title={u.username === user?.username ? "Não é possível excluir a si mesmo" : "Excluir Usuário"}
+                                        disabled={isDeletingUser === u.id || u.username?.toLowerCase() === user?.username?.toLowerCase()} // Disable delete for self, case-insensitive
+                                        title={u.username?.toLowerCase() === user?.username?.toLowerCase() ? "Não é possível excluir a si mesmo" : "Excluir Usuário"}
                                     >
                                         {isDeletingUser === u.id ? (
                                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -398,7 +427,7 @@ export default function ConfiguracoesPage() {
                                 ))
                             ) : (
                                 <TableRow>
-                                <TableCell colSpan={3} className="text-center text-muted-foreground">Nenhum usuário cadastrado.</TableCell>
+                                <TableCell colSpan={5} className="text-center text-muted-foreground">Nenhum usuário cadastrado.</TableCell>
                                 </TableRow>
                             )}
                          </TableBody>
@@ -413,40 +442,111 @@ export default function ConfiguracoesPage() {
                             <PlusCircle className="mr-2 h-4 w-4"/> Adicionar Usuário
                          </Button>
                      </DialogTrigger>
-                     <DialogContent>
+                     <DialogContent className="sm:max-w-[425px]">
                          <DialogHeader>
                             <DialogTitle>Novo Usuário</DialogTitle>
                             <DialogDescription>Preencha os dados para criar um novo acesso.</DialogDescription>
                          </DialogHeader>
-                         <form onSubmit={userForm.handleSubmit(handleAddUserSubmit)} className="space-y-4 py-4">
-                              {userError && isAddingUser && ( // Show add user error inside dialog
-                                <Alert variant="destructive">
-                                    <AlertCircle className="h-4 w-4" />
-                                    <AlertTitle>Erro ao Adicionar</AlertTitle>
-                                    <AlertDescription>{userError}</AlertDescription>
-                                </Alert>
-                              )}
-                              <div className="space-y-2">
-                                <Label htmlFor="new-username">Usuário</Label>
-                                <Input id="new-username" {...userForm.register('username')} disabled={isAddingUser}/>
-                                 {userForm.formState.errors.username && <p className="text-sm text-destructive">{userForm.formState.errors.username.message}</p>}
-                              </div>
-                              <div className="space-y-2">
-                                <Label htmlFor="new-password">Senha</Label>
-                                <Input id="new-password" type="password" {...userForm.register('password')} disabled={isAddingUser} />
-                                 {userForm.formState.errors.password && <p className="text-sm text-destructive">{userForm.formState.errors.password.message}</p>}
-                              </div>
-                              {/* Add Role selection here if needed */}
-                             <DialogFooter>
-                                <DialogClose asChild>
-                                    <Button type="button" variant="outline" disabled={isAddingUser}>Cancelar</Button>
-                                </DialogClose>
-                                <Button type="submit" disabled={isAddingUser}>
-                                    {isAddingUser ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
-                                    {isAddingUser ? 'Adicionando...' : 'Adicionar'}
-                                </Button>
-                             </DialogFooter>
-                         </form>
+                         {/* User Form using react-hook-form */}
+                         <Form {...userForm}>
+                           <form onSubmit={userForm.handleSubmit(handleAddUserSubmit)} className="space-y-4 py-4">
+                                {userError && ( // Show add user error inside dialog
+                                  <Alert variant="destructive">
+                                      <AlertCircle className="h-4 w-4" />
+                                      <AlertTitle>Erro ao Adicionar</AlertTitle>
+                                      <AlertDescription>{userError}</AlertDescription>
+                                  </Alert>
+                                )}
+                                <FormField
+                                    control={userForm.control}
+                                    name="fullName"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Nome Completo</FormLabel>
+                                            <FormControl>
+                                                <Input placeholder="Nome e Sobrenome" {...field} disabled={isAddingUser} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={userForm.control}
+                                    name="cpf"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>CPF</FormLabel>
+                                            <FormControl>
+                                                <Input
+                                                    placeholder="XXX.XXX.XXX-XX"
+                                                    {...field}
+                                                    onChange={(e) => field.onChange(formatCpf(e.target.value))}
+                                                    disabled={isAddingUser}
+                                                />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={userForm.control}
+                                    name="username"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Usuário (login)</FormLabel>
+                                            <FormControl>
+                                                <Input placeholder="Nome de usuário para login" {...field} disabled={isAddingUser} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={userForm.control}
+                                    name="password"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Senha</FormLabel>
+                                            <FormControl>
+                                                <Input type="password" placeholder="Senha de acesso" {...field} disabled={isAddingUser} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                               <FormField
+                                  control={userForm.control}
+                                  name="role"
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>Permissão</FormLabel>
+                                        <Select onValueChange={field.onChange} value={field.value} disabled={isAddingUser}>
+                                          <FormControl>
+                                            <SelectTrigger>
+                                              <SelectValue placeholder="Selecione a permissão" />
+                                            </SelectTrigger>
+                                          </FormControl>
+                                          <SelectContent>
+                                            <SelectItem value="user">Usuário Padrão</SelectItem>
+                                            <SelectItem value="admin">Administrador</SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+
+                               <DialogFooter>
+                                  <DialogClose asChild>
+                                      <Button type="button" variant="outline" disabled={isAddingUser}>Cancelar</Button>
+                                  </DialogClose>
+                                  <Button type="submit" disabled={isAddingUser}>
+                                      {isAddingUser ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+                                      {isAddingUser ? 'Adicionando...' : 'Adicionar Usuário'}
+                                  </Button>
+                               </DialogFooter>
+                           </form>
+                        </Form>
                      </DialogContent>
                   </Dialog>
                </CardFooter>
@@ -455,3 +555,4 @@ export default function ConfiguracoesPage() {
     </div>
   );
 }
+```
