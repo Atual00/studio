@@ -1,5 +1,4 @@
 
-
 'use client';
 
 const USER_STORAGE_KEY = 'licitaxUsers';
@@ -185,4 +184,3 @@ export const deleteUser = async (id: string): Promise<boolean> => {
 // --- Potential Future Functions ---
 // export const updateUser = async (id: string, data: Partial<User>): Promise<boolean> => { ... };
 // export const changePassword = async (id: string, newPassword: string): Promise<boolean> => { ... };
-```
