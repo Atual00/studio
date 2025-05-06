@@ -3,11 +3,11 @@
 
 import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { fetchUsers } from '@/services/userService'; // Import fetchUsers
+import { fetchUsers, type User as AppUser } from '@/services/userService'; // Import fetchUsers and User type
 
 interface AuthContextType {
   isAuthenticated: boolean;
-  user: { username: string; role: 'admin' | 'user' } | null; // Add role
+  user: AppUser | null; // Use AppUser type from userService
   login: (username: string, password?: string) => Promise<boolean>; // Make password optional for direct login
   logout: () => void;
   isLoading: boolean; // Add loading state
@@ -17,10 +17,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const AUTH_STORAGE_KEY = 'licitaxAuthUser';
 
-// Remove the global MOCK_USERS definition here. We will fetch users.
-
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<{ username: string; role: 'admin' | 'user' } | null>(null);
+  const [user, setUser] = useState<AppUser | null>(null); // Use AppUser type
   const [isLoading, setIsLoading] = useState(true); // Start loading
   const router = useRouter();
   const pathname = usePathname();
@@ -31,9 +29,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const storedUser = localStorage.getItem(AUTH_STORAGE_KEY);
       if (storedUser) {
-        const parsedUser = JSON.parse(storedUser);
-        // Basic validation of stored user data
-        if (parsedUser?.username && parsedUser?.role) {
+        const parsedUser: AppUser = JSON.parse(storedUser);
+        // Basic validation of stored user data (ensure required fields exist)
+        if (parsedUser?.id && parsedUser?.username && parsedUser?.role) {
            setUser(parsedUser);
         } else {
             // Invalid data, clear storage
@@ -72,32 +70,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 
   const login = async (username: string, password?: string): Promise<boolean> => {
-    // Simulate API call & password check (using mock passwords for demo)
+    // Simulate API call delay
     await new Promise(resolve => setTimeout(resolve, 500));
 
-    // *** MOCK PASSWORD CHECK - Replace with real authentication ***
-    // This is highly insecure and only for demonstration.
-    let foundUser: { username: string; role: 'admin' | 'user' } | null = null;
-    // Case-insensitive username comparison
-    const lowerCaseUsername = username.toLowerCase();
+    try {
+        const users = await fetchUsers(); // Fetch users from storage/service
+        const lowerCaseUsername = username.toLowerCase();
 
-    if (lowerCaseUsername === 'admin' && password === 'password') {
-        foundUser = { username: 'admin', role: 'admin' };
-    } else if (lowerCaseUsername === 'user' && password === 'password') {
-        foundUser = { username: 'user', role: 'user' };
-    } else if (lowerCaseUsername === 'joao' && password === '305533') { // Updated JOAO password and role
-        foundUser = { username: 'JOAO', role: 'admin' }; // Assign admin role
-    }
-    // *** END MOCK PASSWORD CHECK ***
+        // Find the user by username (case-insensitive)
+        const foundUser = users.find(u => u.username.toLowerCase() === lowerCaseUsername);
 
-    if (foundUser) {
-        const userData = { username: foundUser.username, role: foundUser.role };
-        setUser(userData);
-        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(userData));
-        return true;
+        // *** SIMPLIFIED PASSWORD CHECK FOR PROTOTYPE ***
+        // In a real app, you would compare the provided password with a stored hash.
+        // For this prototype, we'll assume the password is correct if the user exists.
+        // We'll specifically check the hardcoded password for 'joao' as requested.
+        let passwordMatches = !!foundUser; // Assume true if user found
+
+        if (foundUser && foundUser.username.toLowerCase() === 'joao' && password !== '305533') {
+             passwordMatches = false; // Specific check for Joao's password
+        }
+        // You might add similar specific checks for 'admin' or 'user' if needed,
+        // or remove this logic entirely if any existing username should log in without password check.
+
+        if (foundUser && passwordMatches) {
+            // Use the complete user data fetched from the service
+            setUser(foundUser);
+            localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(foundUser));
+            return true;
+        }
+
+    } catch (error) {
+        console.error("Error during user fetch or login validation:", error);
+        return false; // Indicate login failure on error
     }
+
+    // If user not found or password doesn't match (in real app)
     return false;
   };
+
 
   const logout = () => {
     setUser(null);
