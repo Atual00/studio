@@ -396,7 +396,7 @@ export default function ConfiguracoesPage() {
                                <TableHead>Nome Completo</TableHead>
                                <TableHead>Usuário</TableHead>
                                <TableHead>CPF</TableHead>
-                               <TableHead>Role</TableHead> {/* Added Role column */}
+                               <TableHead>Role</TableHead>{/* Added Role column */}
                                <TableHead className="text-right">Ações</TableHead>
                             </TableRow>
                          </TableHeader>
@@ -407,7 +407,7 @@ export default function ConfiguracoesPage() {
                                      <TableCell>{u.fullName || '-'}</TableCell>
                                     <TableCell>{u.username}</TableCell>
                                      <TableCell>{u.cpf || '-'}</TableCell>
-                                    <TableCell className="capitalize">{u.role}</TableCell> {/* Display Role */}
+                                    <TableCell className="capitalize">{u.role}</TableCell>{/* Display Role */}
                                     <TableCell className="text-right">
                                     <Button
                                         variant="ghost"
@@ -555,4 +555,3 @@ export default function ConfiguracoesPage() {
     </div>
   );
 }
-    
