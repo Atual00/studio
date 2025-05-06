@@ -15,7 +15,7 @@ import { Calendar } from '@/components/ui/calendar'; // Import Calendar
 import { Checkbox } from '@/components/ui/checkbox'; // Import Checkbox
 import { DateRange } from 'react-day-picker'; // Import DateRange type
 import { Download, FileText, Filter, Loader2, Send, CheckCircle, Clock, CalendarIcon, X, Receipt, Mail } from 'lucide-react'; // Import icons + Receipt + Mail
-import { format, parseISO, startOfDay, endOfDay, isWithinInterval, addMonths, setDate } from 'date-fns'; // Updated date-fns imports
+import { format, parseISO, startOfDay, endOfDay, isWithinInterval, addMonths, setDate, isValid } from 'date-fns'; // Updated date-fns imports + isValid
 import { ptBR } from 'date-fns/locale';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable'; // Correct import for autoTable
@@ -120,7 +120,7 @@ export default function FinanceiroPage() {
                 try {
                     const homologacaoDate = typeof d.dataHomologacao === 'string' ? parseISO(d.dataHomologacao) : d.dataHomologacao;
                     // Ensure homologacaoDate is a valid Date before comparison
-                    if (!(homologacaoDate instanceof Date) || isNaN(homologacaoDate.getTime())) {
+                    if (!(homologacaoDate instanceof Date) || !isValid(homologacaoDate)) {
                         console.warn(`Invalid homologacaoDate for debit ${d.id}:`, d.dataHomologacao);
                         return false;
                     }
@@ -221,7 +221,7 @@ export default function FinanceiroPage() {
         try {
             const dateObj = typeof date === 'string' ? parseISO(date) : date;
             // Ensure it's a valid date
-            if (!(dateObj instanceof Date) || isNaN(dateObj.getTime())) {
+            if (!(dateObj instanceof Date) || !isValid(dateObj)) {
                 return 'Data Inválida';
             }
             const formatString = includeTime ? "dd/MM/yyyy HH:mm" : "dd/MM/yyyy";
@@ -238,7 +238,7 @@ export default function FinanceiroPage() {
         try {
             baseDate = typeof homologacaoDate === 'string' ? parseISO(homologacaoDate) : homologacaoDate;
             // Ensure it's a valid date
-            if (!(baseDate instanceof Date) || isNaN(baseDate.getTime())) {
+            if (!(baseDate instanceof Date) || !isValid(baseDate)) {
                 throw new Error("Invalid homologation date");
             }
         } catch {
@@ -997,7 +997,7 @@ function FinancialTable({
         if (!date) return 'N/A';
         try {
             const dateObj = typeof date === 'string' ? parseISO(date) : date;
-            if (!(dateObj instanceof Date) || isNaN(dateObj.getTime())) {
+            if (!(dateObj instanceof Date) || !isValid(dateObj)) {
                 return 'Inválida';
             }
             return format(dateObj, "dd/MM/yyyy", { locale: ptBR });
@@ -1113,4 +1113,5 @@ function FinancialTable({
         </div>
     );
 }
-```
+
+      

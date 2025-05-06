@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -30,6 +29,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form"; // Import Form components
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"; // Import Select
 
 
 // Helper to format CPF on input change
@@ -555,4 +555,4 @@ export default function ConfiguracoesPage() {
     </div>
   );
 }
-```
+    
