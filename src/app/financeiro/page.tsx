@@ -1,3 +1,4 @@
+
 'use client'; // Required for state and client-side interaction
 
 import React, { useState, useEffect, useMemo } from 'react'; // Import React
@@ -38,7 +39,7 @@ import {
   FormLabel,
 } from "@/components/ui/form";
 import { fetchClients, type ClientListItem } from '@/services/clientService';
-import { Alert, AlertTitle } from '@/components/ui/alert';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
 
 const statusFinanceiroMap: { [key: string]: { label: string; color: string; icon: React.ElementType } } = {
@@ -792,9 +793,11 @@ export default function FinanceiroPage() {
                  <h2 className="text-2xl font-semibold">Módulo Financeiro</h2>
                  <div className="flex gap-2 flex-wrap">
                     <Dialog open={isAcordoDialogOpen} onOpenChange={setIsAcordoDialogOpen}>
-                        <Button variant="outline" onClick={handleOpenAcordoDialog} disabled={selectedDebitos.size === 0 || loading || loadingConfig}>
-                            <Handshake className="mr-2 h-4 w-4" /> Criar Acordo
-                        </Button>
+                        <DialogTrigger asChild>
+                             <Button variant="outline" onClick={handleOpenAcordoDialog} disabled={selectedDebitos.size === 0 || loading || loadingConfig}>
+                                <Handshake className="mr-2 h-4 w-4" /> Criar Acordo
+                            </Button>
+                        </DialogTrigger>
                         {/* AcordoFormDialog content below */}
                          <DialogContent className="sm:max-w-2xl">
                             <DialogHeader>
@@ -1039,7 +1042,7 @@ function AcordoFormDialog({ debitos, config, onSubmit, isSubmitting, form }: Aco
                     <Alert variant="destructive">
                         <AlertCircle className="h-4 w-4" />
                         <AlertTitle>Valor do Desconto Inválido</AlertTitle>
-                        <FormDescription>O desconto não pode ser maior que o valor total atualizado.</FormDescription>
+                        <AlertDescription>O desconto não pode ser maior que o valor total atualizado.</AlertDescription>
                     </Alert>
                 )}
 
@@ -1070,9 +1073,7 @@ function AcordoFormDialog({ debitos, config, onSubmit, isSubmitting, form }: Aco
                         <FormItem> <FormLabel>Frequência Parcelas*</FormLabel>
                             <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
                                 <FormControl>
-                                  <span> {/* Wrap SelectTrigger */}
                                     <SelectTrigger><SelectValue /></SelectTrigger>
-                                  </span>
                                 </FormControl>
                                 <SelectContent>
                                     <SelectItem value="unica">Única</SelectItem>
