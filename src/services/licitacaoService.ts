@@ -1,7 +1,8 @@
+
 'use client';
 
 import type { LicitacaoFormValues } from '@/components/licitacoes/licitacao-form';
-import { CalendarCheck, CheckCircle, Clock, FileWarning, HelpCircle, Loader2, Send, Target, XCircle, Gavel } from 'lucide-react';
+import { CalendarCheck, CheckCircle, Clock, FileWarning, HelpCircle, Loader2, Send, Target, XCircle, Gavel, Handshake } from 'lucide-react'; // Added Handshake
 import { parseISO, isValid, addMonths, setDate } from 'date-fns';
 import { type User } from './userService';
 import { fetchConfiguracoes } from './configuracoesService'; // For calculating due dates
@@ -158,17 +159,22 @@ export const requiredDocuments = [
 ];
 
 export interface Debito {
-  id: string;
-  tipoDebito: 'LICITACAO' | 'AVULSO';
+  id: string; // Can be LIC-ID for licitacao debits, AVULSO-ID for avulsos, PARCELA-ID for agreement installments
+  tipoDebito: 'LICITACAO' | 'AVULSO' | 'ACORDO_PARCELA';
   clienteNome: string;
   clienteCnpj?: string;
   descricao: string;
-  valor: number;
+  valor: number; // Original value for LICITACAO/AVULSO, installment value for ACORDO_PARCELA
   dataVencimento: Date;
-  dataReferencia: Date; // Homologation date for LICITACAO, creation date for AVULSO
-  status: 'PENDENTE' | 'PAGO' | 'ENVIADO_FINANCEIRO';
-  licitacaoNumero?: string; // Only for LICITACAO type
+  dataReferencia: Date; // Homologation date for LICITACAO, creation date for AVULSO/ACORDO_PARCELA
+  status: 'PENDENTE' | 'PAGO' | 'ENVIADO_FINANCEIRO' | 'PAGO_VIA_ACORDO'; // PAGO_VIA_ACORDO for original debits settled by an agreement
+  licitacaoNumero?: string; // Only for LICITACAO type, or a reference for ACORDO_PARCELA
+  acordoId?: string; // Links installments to an agreement, or original debits to the agreement that settled them
+  originalDebitoIds?: string[]; // For ACORDO_PARCELA, lists original debit IDs it covers
+  // For display/calculation in UI, not stored persistently on Debito itself
+  jurosCalculado?: number;
 }
+
 
 // --- Service Functions ---
 
@@ -326,9 +332,13 @@ export const updateLicitacao = async (id: string, data: Partial<LicitacaoDetails
     };
 
     if (existingDebitIndex !== -1) {
-        // Update existing debit (e.g., if valorCobrado changed)
-        // Preserve existing status unless it's being reset due to re-homologation (unlikely scenario)
-        debitos[existingDebitIndex] = { ...debitos[existingDebitIndex], ...debitData, status: debitos[existingDebitIndex].status };
+        // Update existing debit, but preserve status if it was already manually changed (e.g., to PAGO)
+        const currentStatus = debitos[existingDebitIndex].status;
+        debitos[existingDebitIndex] = {
+             ...debitos[existingDebitIndex],
+             ...debitData,
+             status: currentStatus === 'PENDENTE' ? 'PENDENTE' : currentStatus // Only reset to PENDENTE if it was already PENDENTE.
+        };
     } else {
         debitos.push(debitData);
     }
@@ -424,7 +434,7 @@ export const fetchDebitos = async (): Promise<Debito[]> => {
   return debitos;
 };
 
-export const updateDebitoStatus = async (id: string, newStatus: 'PAGO' | 'ENVIADO_FINANCEIRO'): Promise<boolean> => {
+export const updateDebitoStatus = async (id: string, newStatus: 'PAGO' | 'ENVIADO_FINANCEIRO' | 'PAGO_VIA_ACORDO'): Promise<boolean> => {
   console.log(`Updating debit status for ID: ${id} to status: ${newStatus}`);
   await new Promise(resolve => setTimeout(resolve, 300));
   try {
@@ -473,4 +483,3 @@ export const addDebitoAvulso = async (data: DebitoAvulsoFormData): Promise<Debit
     saveDebitosToStorage(debitos);
     return newDebito;
 };
-

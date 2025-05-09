@@ -19,6 +19,10 @@ const getConfigFromStorage = (): ConfiguracoesFormValues | null => {
       parsedData.diaVencimentoPadrao = typeof parsedData.diaVencimentoPadrao === 'number'
         ? parsedData.diaVencimentoPadrao
         : 15; // Default if missing or wrong type
+      // Ensure taxaJurosDiaria is a number or default
+      parsedData.taxaJurosDiaria = typeof parsedData.taxaJurosDiaria === 'number'
+        ? parsedData.taxaJurosDiaria
+        : 0.0; // Default 0%
        // Add logoUrl from its storage
        parsedData.logoUrl = storedLogoUrl || ''; // Default to empty string if not found
       return parsedData;
@@ -42,10 +46,11 @@ const saveConfigToStorage = (config: ConfiguracoesFormValues): void => {
   try {
     // Separate logoUrl before saving main config
     const { logoUrl, ...mainConfig } = config;
-    // Ensure diaVencimentoPadrao is stored as a number
+    // Ensure diaVencimentoPadrao and taxaJurosDiaria are stored as numbers
     const configToSave = {
       ...mainConfig,
-      diaVencimentoPadrao: Number(mainConfig.diaVencimentoPadrao)
+      diaVencimentoPadrao: Number(mainConfig.diaVencimentoPadrao),
+      taxaJurosDiaria: mainConfig.taxaJurosDiaria !== undefined ? Number(mainConfig.taxaJurosDiaria) : undefined,
     };
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(configToSave));
     // Save logoUrl separately (or remove if empty/undefined)
@@ -77,6 +82,7 @@ const getDefaultConfig = (): ConfiguracoesFormValues => ({
   conta: '',
   chavePix: '',
   diaVencimentoPadrao: 15, // Default day
+  taxaJurosDiaria: 0.0, // Default 0% interest rate
   logoUrl: '', // Default empty logo URL
 });
 

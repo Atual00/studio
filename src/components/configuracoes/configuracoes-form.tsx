@@ -39,6 +39,19 @@ const configuracoesFormSchema = z.object({
     (val) => (typeof val === 'string' ? parseInt(val, 10) : val),
     z.number({ required_error: 'Dia de vencimento é obrigatório.', invalid_type_error: 'Dia deve ser um número.' }).min(1, 'Dia deve ser entre 1 e 31').max(31, 'Dia deve ser entre 1 e 31')
   ),
+  taxaJurosDiaria: z.preprocess( // Added field for daily interest rate
+    (val) => {
+      if (typeof val === 'string') {
+        const cleaned = val.replace('%', '').replace(',', '.').trim();
+        return cleaned === '' ? undefined : parseFloat(cleaned);
+      }
+      return val;
+    },
+    z.number({ invalid_type_error: "Taxa de juros deve ser um número." })
+     .min(0, "Taxa de juros não pode ser negativa.")
+     .max(100, "Taxa de juros diária não pode exceder 100%.") // Practical limit
+     .optional()
+  ),
   // Logo (Optional - only for type, handled separately in UI)
   logoUrl: z.string().url("URL inválida").optional().or(z.literal('')),
 });
@@ -73,6 +86,7 @@ export default function ConfiguracoesForm({ initialData, onSubmit, isSubmitting 
       conta: '',
       chavePix: '',
       diaVencimentoPadrao: 15, // Default to 15
+      taxaJurosDiaria: 0.0, // Default to 0%
       logoUrl: '',
     },
   });
@@ -88,6 +102,7 @@ export default function ConfiguracoesForm({ initialData, onSubmit, isSubmitting 
         ...initialData,
         // Ensure diaVencimentoPadrao is a number or default
         diaVencimentoPadrao: typeof initialData.diaVencimentoPadrao === 'number' ? initialData.diaVencimentoPadrao : 15,
+        taxaJurosDiaria: typeof initialData.taxaJurosDiaria === 'number' ? initialData.taxaJurosDiaria : 0.0,
       });
     }
   }, [initialData, form]);
@@ -128,7 +143,8 @@ export default function ConfiguracoesForm({ initialData, onSubmit, isSubmitting 
       await onSubmit({
         ...data,
         // Ensure diaVencimentoPadrao is submitted as a number
-        diaVencimentoPadrao: Number(data.diaVencimentoPadrao)
+        diaVencimentoPadrao: Number(data.diaVencimentoPadrao),
+        taxaJurosDiaria: data.taxaJurosDiaria !== undefined ? Number(data.taxaJurosDiaria) : undefined,
       });
     } else {
       console.log('Submitting configuration data (default action)...', data);
@@ -159,6 +175,13 @@ export default function ConfiguracoesForm({ initialData, onSubmit, isSubmitting 
 
   // Generate options for day selection
   const dayOptions = Array.from({ length: 31 }, (_, i) => (i + 1).toString());
+
+  // Format percentage for display
+  const formatPercentage = (value: number | undefined | null): string => {
+      if (value === undefined || value === null) return '';
+      return `${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}%`;
+  };
+
 
   return (
     <Form {...form}>
@@ -407,33 +430,70 @@ export default function ConfiguracoesForm({ initialData, onSubmit, isSubmitting 
         {/* Financial Settings */}
         <section className="space-y-4 p-4 border rounded-md">
           <h3 className="text-lg font-medium mb-4">Configurações Financeiras</h3>
-          <FormField
-            control={form.control}
-            name="diaVencimentoPadrao"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Dia Padrão de Vencimento*</FormLabel>
-                <Select
-                  onValueChange={(value) => field.onChange(parseInt(value, 10))} // Ensure value is number
-                  value={field.value?.toString()} // Convert number to string for Select value
-                  disabled={isSubmitting}
-                >
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione o dia do mês" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {dayOptions.map(day => (
-                      <SelectItem key={day} value={day}>{day}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormDescription>Dia do mês seguinte à homologação para vencimento das faturas.</FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <FormField
+                control={form.control}
+                name="diaVencimentoPadrao"
+                render={({ field }) => (
+                <FormItem>
+                    <FormLabel>Dia Padrão de Vencimento*</FormLabel>
+                    <Select
+                    onValueChange={(value) => field.onChange(parseInt(value, 10))} // Ensure value is number
+                    value={field.value?.toString()} // Convert number to string for Select value
+                    disabled={isSubmitting}
+                    >
+                    <FormControl>
+                        <SelectTrigger>
+                        <SelectValue placeholder="Selecione o dia do mês" />
+                        </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                        {dayOptions.map(day => (
+                        <SelectItem key={day} value={day}>{day}</SelectItem>
+                        ))}
+                    </SelectContent>
+                    </Select>
+                    <FormDescription>Dia do mês seguinte à homologação para vencimento das faturas.</FormDescription>
+                    <FormMessage />
+                </FormItem>
+                )}
+            />
+            <FormField
+                control={form.control}
+                name="taxaJurosDiaria"
+                render={({ field }) => (
+                <FormItem>
+                    <FormLabel>Taxa de Juros Diária por Atraso (%)</FormLabel>
+                    <FormControl>
+                    <Input
+                        type="text"
+                        placeholder="Ex: 0,10 para 0,10%"
+                        value={field.value !== undefined ? formatPercentage(field.value) : ''}
+                        onChange={(e) => {
+                            const rawValue = e.target.value;
+                            const cleaned = rawValue.replace('%', '').replace(',', '.').trim();
+                            if (cleaned === '') {
+                                field.onChange(undefined);
+                            } else {
+                                const numValue = parseFloat(cleaned);
+                                field.onChange(isNaN(numValue) ? undefined : numValue);
+                            }
+                        }}
+                        onBlur={(e) => { // Format on blur
+                            if (field.value !== undefined) {
+                                e.target.value = formatPercentage(field.value);
+                            }
+                        }}
+                        disabled={isSubmitting}
+                        inputMode="decimal"
+                    />
+                    </FormControl>
+                    <FormDescription>Percentual de juros ao dia sobre o valor original do débito.</FormDescription>
+                    <FormMessage />
+                </FormItem>
+                )}
+            />
+          </div>
         </section>
 
         {/* Note: Logo Upload UI is handled in configuracoes/page.tsx */}
