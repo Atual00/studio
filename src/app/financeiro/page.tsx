@@ -14,15 +14,31 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar'; // Import Calendar
 import { Checkbox } from '@/components/ui/checkbox'; // Import Checkbox
 import { DateRange } from 'react-day-picker'; // Import DateRange type
-import { Download, FileText, Filter, Loader2, Send, CheckCircle, Clock, CalendarIcon, X, Receipt, Mail } from 'lucide-react'; // Import icons + Receipt + Mail
+import { Download, FileText, Filter, Loader2, Send, CheckCircle, Clock, CalendarIcon, X, Receipt, Mail, PlusCircle } from 'lucide-react'; // Import icons + Receipt + Mail
 import { format, parseISO, startOfDay, endOfDay, isWithinInterval, addMonths, setDate, isValid } from 'date-fns'; // Updated date-fns imports + isValid
 import { ptBR } from 'date-fns/locale';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable'; // Correct import for autoTable
 import { useToast } from '@/hooks/use-toast';
 import type { ConfiguracoesFormValues } from '@/components/configuracoes/configuracoes-form'; // Import settings type
-import { fetchDebitos, updateDebitoStatus, type Debito } from '@/services/licitacaoService'; // Import from licitacaoService
+import { fetchDebitos, updateDebitoStatus, type Debito, addDebitoAvulso, type DebitoAvulsoFormData } from '@/services/licitacaoService'; // Import from licitacaoService
 import { fetchConfiguracoes } from '@/services/configuracoesService'; // Import config service
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger, DialogClose } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { useForm, Controller } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import { cn } from '@/lib/utils';
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormMessage,
+} from "@/components/ui/form";
+import { fetchClients, type ClientListItem } from '@/services/clientService';
 
 
 const statusFinanceiroMap: { [key: string]: { label: string; color: string; icon: React.ElementType } } = {
@@ -41,6 +57,18 @@ const getBadgeVariantFinanceiro = (color: string): 'default' | 'secondary' | 'de
     }
 }
 
+// Zod Schema for Debito Avulso Form
+const debitoAvulsoSchema = z.object({
+  clienteNome: z.string().min(1, "Nome do cliente é obrigatório."),
+  clienteCnpj: z.string().regex(/^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/, {message: 'CNPJ inválido. Use o formato XX.XXX.XXX/XXXX-XX.'}).optional().or(z.literal('')),
+  descricao: z.string().min(1, "Descrição é obrigatória."),
+  valor: z.preprocess(
+    (val) => typeof val === 'string' ? parseFloat(val.replace(/[R$\s.]/g, '').replace(',', '.')) : val,
+    z.number({required_error: "Valor é obrigatório."}).min(0.01, "Valor deve ser maior que zero.")
+  ),
+  dataVencimento: z.date({required_error: "Data de vencimento é obrigatória."}),
+});
+
 
 // --- Component ---
 export default function FinanceiroPage() {
@@ -56,7 +84,24 @@ export default function FinanceiroPage() {
     const [updatingStatus, setUpdatingStatus] = useState<{ [key: string]: boolean }>({}); // Track loading state per item
     const [selectedDebitos, setSelectedDebitos] = useState<Set<string>>(new Set()); // State for selected debit IDs
     const [isSendingBatch, setIsSendingBatch] = useState(false); // State for batch send loading
+    const [isDebitoAvulsoDialogOpen, setIsDebitoAvulsoDialogOpen] = useState(false);
+    const [isSubmittingDebitoAvulso, setIsSubmittingDebitoAvulso] = useState(false);
+    const [clients, setClients] = useState<ClientListItem[]>([]); // For Debito Avulso client selection
+    const [loadingClients, setLoadingClients] = useState(true);
+
+
     const { toast } = useToast();
+
+    const debitoAvulsoForm = useForm<z.infer<typeof debitoAvulsoSchema>>({
+        resolver: zodResolver(debitoAvulsoSchema),
+        defaultValues: {
+            clienteNome: '',
+            clienteCnpj: '',
+            descricao: '',
+            valor: undefined,
+            dataVencimento: undefined,
+        },
+    });
 
 
     // Fetch data on mount (Debits and Config)
@@ -64,21 +109,25 @@ export default function FinanceiroPage() {
         const loadInitialData = async () => {
             setLoading(true);
             setLoadingConfig(true);
+            setLoadingClients(true);
             try {
                 // Fetch debits generated from licitacoes service
-                const [debitosData, configData] = await Promise.all([
+                const [debitosData, configData, clientsData] = await Promise.all([
                     fetchDebitos(),
-                    fetchConfiguracoes() // Use service to fetch configs
+                    fetchConfiguracoes(), // Use service to fetch configs
+                    fetchClients()
                 ]);
                 setAllDebitos(debitosData); // Store all fetched data
                 setFilteredDebitos(debitosData); // Initialize filtered list
                 setConfiguracoes(configData);
+                setClients(clientsData);
             } catch (err) {
                 console.error('Erro ao carregar dados financeiros ou configurações:', err);
                 toast({ title: "Erro", description: `Falha ao carregar dados financeiros ou configurações. ${err instanceof Error ? err.message : ''}`, variant: "destructive" });
             } finally {
                 setLoading(false);
                 setLoadingConfig(false);
+                setLoadingClients(false);
             }
         };
         loadInitialData();
@@ -100,33 +149,34 @@ export default function FinanceiroPage() {
         if (filterCliente) {
             result = result.filter(d =>
                 d.clienteNome.toLowerCase().includes(filterCliente.toLowerCase()) ||
-                d.clienteCnpj.includes(filterCliente) // Allow filtering by CNPJ as well
+                (d.clienteCnpj && d.clienteCnpj.includes(filterCliente)) // Allow filtering by CNPJ as well
             );
         }
 
         // 3. Filter by Licitação/Protocolo
         if (filterLicitacao) {
             result = result.filter(d =>
-                d.licitacaoNumero.toLowerCase().includes(filterLicitacao.toLowerCase()) ||
+                (d.licitacaoNumero && d.licitacaoNumero.toLowerCase().includes(filterLicitacao.toLowerCase())) ||
                 d.id.toLowerCase().includes(filterLicitacao.toLowerCase()) // Allow filtering by protocol ID
             );
         }
 
-        // 4. Filter by Date Range (Data Homologação)
+        // 4. Filter by Date Range (Data Homologação for Licitacao, Data Referencia for Avulso)
         if (dateRange?.from) {
             const start = startOfDay(dateRange.from);
             const end = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from); // Use end of 'from' day if 'to' is not set
             result = result.filter(d => {
                 try {
-                    const homologacaoDate = typeof d.dataHomologacao === 'string' ? parseISO(d.dataHomologacao) : d.dataHomologacao;
-                    // Ensure homologacaoDate is a valid Date before comparison
-                    if (!(homologacaoDate instanceof Date) || !isValid(homologacaoDate)) {
-                        console.warn(`Invalid homologacaoDate for debit ${d.id}:`, d.dataHomologacao);
+                    // Use dataReferencia which covers both homologacao and avulso creation date
+                    const refDate = typeof d.dataReferencia === 'string' ? parseISO(d.dataReferencia) : d.dataReferencia;
+                    // Ensure refDate is a valid Date before comparison
+                    if (!(refDate instanceof Date) || !isValid(refDate)) {
+                        console.warn(`Invalid dataReferencia for debit ${d.id}:`, d.dataReferencia);
                         return false;
                     }
-                    return isWithinInterval(homologacaoDate, { start, end });
+                    return isWithinInterval(refDate, { start, end });
                 } catch (e) {
-                    console.error("Error parsing homologacaoDate during filtering:", d.id, e);
+                    console.error("Error parsing dataReferencia during filtering:", d.id, e);
                     return false;
                 }
             });
@@ -257,7 +307,10 @@ export default function FinanceiroPage() {
         const doc = new jsPDF();
         const hoje = formatDateForPDF(new Date());
         const config = configuracoes;
-        const dueDate = calculateDueDate(debito.dataHomologacao);
+        // For avulso, dataReferencia is creation, for licitacao it's homologacao. Due date calc needs this context.
+        const baseDateForDueDate = debito.tipoDebito === 'LICITACAO' ? debito.dataReferencia : debito.dataVencimento; // Simpler: use vencimento if avulso
+        const dueDate = debito.tipoDebito === 'LICITACAO' ? calculateDueDate(baseDateForDueDate) : debito.dataVencimento;
+
         const logoUrl = config.logoUrl;
         const logoDim = 25;
         const margin = 14;
@@ -318,7 +371,7 @@ export default function FinanceiroPage() {
         contentY += 7;
         doc.text(`Razão Social: ${debito.clienteNome}`, margin, contentY);
         contentY += 7;
-        doc.text(`CNPJ: ${debito.clienteCnpj}`, margin, contentY);
+        doc.text(`CNPJ: ${debito.clienteCnpj || 'N/A'}`, margin, contentY);
         contentY += 10;
 
         doc.line(margin, contentY, 196, contentY); // Separator line
@@ -331,12 +384,12 @@ export default function FinanceiroPage() {
         doc.setFont(undefined, 'normal');
         autoTable(doc, {
             startY: contentY + 5,
-            head: [['Referência', 'Descrição', 'Data Homologação', 'Valor']],
+            head: [['Referência', 'Descrição', 'Data Referência', 'Valor']],
             body: [
                 [
                     debito.id,
-                    `Serviços de Assessoria - Licitação ${debito.licitacaoNumero}`,
-                    formatDateForPDF(debito.dataHomologacao),
+                    debito.descricao,
+                    formatDateForPDF(debito.dataReferencia),
                     debito.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
                 ]
             ],
@@ -446,13 +499,13 @@ export default function FinanceiroPage() {
         // Receipt Body
         doc.setFontSize(11);
         let currentY = headerY + 35;
-        doc.text(`Recebemos de ${debito.clienteNome} (CNPJ: ${debito.clienteCnpj}),`, margin, currentY);
+        doc.text(`Recebemos de ${debito.clienteNome} (CNPJ: ${debito.clienteCnpj || 'N/A'}),`, margin, currentY);
         currentY += 7;
         doc.text(`a importância de ${debito.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}, referente ao pagamento`, margin, currentY);
         currentY += 7;
-        doc.text(`dos serviços de assessoria prestados na licitação ${debito.licitacaoNumero} (Protocolo: ${debito.id}),`, margin, currentY);
+        doc.text(`dos serviços: ${debito.descricao},`, margin, currentY);
         currentY += 7;
-        doc.text(`homologada em ${formatDateForPDF(debito.dataHomologacao)}.`, margin, currentY);
+        doc.text(`com referência em ${formatDateForPDF(debito.dataReferencia)}.`, margin, currentY);
         currentY += 14; // More space
 
         doc.text(`Data do Pagamento (Baixa): ${paymentDate}`, margin, currentY); // Placeholder payment date
@@ -523,7 +576,7 @@ export default function FinanceiroPage() {
             doc.setFontSize(10);
             doc.text(`Gerado em: ${hoje}`, textX, textY);
              textY += 5;
-            doc.text(`Filtros: ${filterCliente || 'Todos Clientes'}, ${filterLicitacao || 'Todas Licitações'}, ${dateRange ? `${formatDateForPDF(dateRange.from)} a ${formatDateForPDF(dateRange.to)}` : 'Qualquer Data'}`, textX, textY);
+            doc.text(`Filtros: ${filterCliente || 'Todos Clientes'}, ${filterLicitacao || 'Todas Licitações/Débitos'}, ${dateRange ? `${formatDateForPDF(dateRange.from)} a ${formatDateForPDF(dateRange.to)}` : 'Qualquer Data'}`, textX, textY);
              headerY = textY + 8;
 
         };
@@ -536,13 +589,13 @@ export default function FinanceiroPage() {
         // Table
         autoTable(doc, {
             startY: contentY,
-            head: [['Protocolo', 'Cliente', 'CNPJ', 'Licitação', 'Data Homolog.', 'Valor Pendente']],
+            head: [['Protocolo', 'Cliente', 'CNPJ', 'Descrição', 'Data Referência', 'Valor Pendente']],
             body: pendingDebits.map(d => [
                 d.id,
                 d.clienteNome,
-                d.clienteCnpj,
-                d.licitacaoNumero,
-                formatDateForPDF(d.dataHomologacao),
+                d.clienteCnpj || 'N/A',
+                d.descricao,
+                formatDateForPDF(d.dataReferencia),
                 d.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
             ]),
             theme: 'striped',
@@ -610,7 +663,7 @@ export default function FinanceiroPage() {
             doc.setFontSize(11);
             doc.text(`De: ${config.nomeFantasia || config.razaoSocial} (CNPJ: ${config.cnpj})`, textX, textY);
              textY += 6;
-            doc.text(`Para: ${firstDebit.clienteNome} (CNPJ: ${firstDebit.clienteCnpj})`, textX, textY);
+            doc.text(`Para: ${firstDebit.clienteNome} (CNPJ: ${firstDebit.clienteCnpj || 'N/A'})`, textX, textY);
              textY += 6;
             doc.setFontSize(10);
             doc.text(`Data de Emissão: ${hoje}`, textX, textY);
@@ -628,19 +681,19 @@ export default function FinanceiroPage() {
         doc.setFontSize(11);
         doc.text("Prezados,", margin, contentY);
         contentY += 7;
-        doc.text(`Constam em aberto os seguintes débitos referentes aos serviços de assessoria em licitações prestados pela ${config.nomeFantasia || config.razaoSocial}:`, margin, contentY, { maxWidth: 180 });
+        doc.text(`Constam em aberto os seguintes débitos referentes aos serviços prestados pela ${config.nomeFantasia || config.razaoSocial}:`, margin, contentY, { maxWidth: 180 });
         contentY += 10;
 
         // Table of Debits
         autoTable(doc, {
             startY: contentY,
-            head: [['Protocolo', 'Licitação', 'Data Homologação', 'Valor', 'Vencimento']],
+            head: [['Protocolo', 'Descrição', 'Data Referência', 'Valor', 'Vencimento']],
             body: clientDebits.map(d => {
-                const dueDate = calculateDueDate(d.dataHomologacao);
+                const dueDate = d.tipoDebito === 'LICITACAO' ? calculateDueDate(d.dataReferencia) : d.dataVencimento;
                 return [
                     d.id,
-                    d.licitacaoNumero,
-                    formatDateForPDF(d.dataHomologacao),
+                    d.descricao,
+                    formatDateForPDF(d.dataReferencia),
                     d.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
                     formatDateForPDF(dueDate)
                 ];
@@ -737,13 +790,13 @@ export default function FinanceiroPage() {
         // Table of Sent Debits
         autoTable(doc, {
             startY: contentY,
-            head: [['Protocolo', 'Cliente', 'CNPJ', 'Licitação', 'Data Homolog.', 'Valor']],
+            head: [['Protocolo', 'Cliente', 'CNPJ', 'Descrição', 'Data Referência', 'Valor']],
             body: sentDebits.map(d => [
                 d.id,
                 d.clienteNome,
-                d.clienteCnpj,
-                d.licitacaoNumero,
-                formatDateForPDF(d.dataHomologacao),
+                d.clienteCnpj || 'N/A',
+                d.descricao,
+                formatDateForPDF(d.dataReferencia),
                 d.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
             ]),
             theme: 'striped',
@@ -803,10 +856,248 @@ export default function FinanceiroPage() {
 
     const isAllSelected = filteredDebitos.length > 0 && selectedDebitos.size === filteredDebitos.length;
 
+    const handleDebitoAvulsoSubmit = async (data: z.infer<typeof debitoAvulsoSchema>) => {
+        setIsSubmittingDebitoAvulso(true);
+        try {
+            const newDebito = await addDebitoAvulso({
+                ...data,
+                // CNPJ is optional on form, but DebitoAvulsoFormData expects it to be potentially undefined
+                clienteCnpj: data.clienteCnpj || undefined,
+            });
+            if (newDebito) {
+                setAllDebitos(prev => [newDebito, ...prev]); // Add to the beginning for immediate visibility
+                toast({ title: "Sucesso!", description: "Débito avulso adicionado." });
+                setIsDebitoAvulsoDialogOpen(false);
+                debitoAvulsoForm.reset();
+            } else {
+                throw new Error("Falha ao adicionar débito avulso.");
+            }
+        } catch (error) {
+            console.error("Erro ao adicionar débito avulso:", error);
+            toast({ title: "Erro", description: `Não foi possível adicionar o débito. ${error instanceof Error ? error.message : ''}`, variant: "destructive" });
+        } finally {
+            setIsSubmittingDebitoAvulso(false);
+        }
+    };
+
+    // Format CNPJ input
+    const formatCnpjInput = (value: string | undefined): string => {
+        if (!value) return '';
+        const digits = value.replace(/\D/g, '');
+        return digits
+            .replace(/^(\d{2})(\d)/, '$1.$2')
+            .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+            .replace(/\.(\d{3})(\d)/, '.$1/$2')
+            .replace(/(\d{4})(\d)/, '$1-$2')
+            .slice(0, 18); // XX.XXX.XXX/XXXX-XX
+    };
+
+    const formatCurrencyInput = (value: string | undefined): string => {
+        if (!value) return '';
+        const digits = value.replace(/\D/g, '');
+        if (digits === '') return '';
+
+        const number = parseFloat(digits) / 100;
+        return number.toLocaleString('pt-BR', {
+            style: 'currency',
+            currency: 'BRL',
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        });
+    };
+
 
     return (
         <div className="space-y-6">
-            <h2 className="text-2xl font-semibold">Módulo Financeiro</h2>
+            <div className="flex flex-col md:flex-row justify-between md:items-center gap-2">
+                 <h2 className="text-2xl font-semibold">Módulo Financeiro</h2>
+                 <Dialog open={isDebitoAvulsoDialogOpen} onOpenChange={setIsDebitoAvulsoDialogOpen}>
+                    <DialogTrigger asChild>
+                        <Button variant="outline">
+                            <PlusCircle className="mr-2 h-4 w-4" /> Lançar Débito Avulso
+                        </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-[525px]">
+                        <DialogHeader>
+                            <DialogTitle>Lançar Novo Débito Avulso</DialogTitle>
+                            <DialogDescription>
+                                Preencha as informações para criar um novo débito manualmente.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <Form {...debitoAvulsoForm}>
+                            <form onSubmit={debitoAvulsoForm.handleSubmit(handleDebitoAvulsoSubmit)} className="space-y-4 py-4">
+                                <FormField
+                                    control={debitoAvulsoForm.control}
+                                    name="clienteNome"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Nome do Cliente*</FormLabel>
+                                            <Select
+                                                onValueChange={(value) => {
+                                                    field.onChange(value);
+                                                    const selectedClient = clients.find(c => c.name === value);
+                                                    if (selectedClient) {
+                                                        debitoAvulsoForm.setValue('clienteCnpj', selectedClient.cnpj, { shouldValidate: true });
+                                                    } else {
+                                                        debitoAvulsoForm.setValue('clienteCnpj', '', { shouldValidate: true }); // Clear if not found or custom name
+                                                    }
+                                                }}
+                                                value={field.value}
+                                                disabled={isSubmittingDebitoAvulso || loadingClients}
+                                            >
+                                                <FormControl>
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder="Selecione um cliente ou digite um novo" />
+                                                    </SelectTrigger>
+                                                </FormControl>
+                                                <SelectContent>
+                                                    {loadingClients ? (
+                                                        <SelectItem value="loading" disabled>Carregando clientes...</SelectItem>
+                                                    ) : (
+                                                        clients.map(client => (
+                                                            <SelectItem key={client.id} value={client.name}>
+                                                                {client.name} ({client.cnpj})
+                                                            </SelectItem>
+                                                        ))
+                                                    )}
+                                                </SelectContent>
+                                            </Select>
+                                            <FormDescription>Você pode selecionar um cliente existente (CNPJ será preenchido) ou digitar um novo nome.</FormDescription>
+                                             {/* Allow manual input if desired or if client not in list */}
+                                            <Input
+                                                placeholder="Ou digite o nome do cliente"
+                                                value={field.value}
+                                                onChange={(e) => {
+                                                    field.onChange(e.target.value);
+                                                    // If user types, assume it's a new client, clear CNPJ
+                                                    if (!clients.some(c => c.name === e.target.value)) {
+                                                        debitoAvulsoForm.setValue('clienteCnpj', '', { shouldValidate: true });
+                                                    }
+                                                }}
+                                                className="mt-1"
+                                                disabled={isSubmittingDebitoAvulso}
+                                            />
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                 <FormField
+                                    control={debitoAvulsoForm.control}
+                                    name="clienteCnpj"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>CNPJ do Cliente</FormLabel>
+                                            <FormControl>
+                                                <Input
+                                                    placeholder="XX.XXX.XXX/XXXX-XX (Opcional)"
+                                                    {...field}
+                                                    onChange={(e) => field.onChange(formatCnpjInput(e.target.value))}
+                                                    disabled={isSubmittingDebitoAvulso}
+                                                />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={debitoAvulsoForm.control}
+                                    name="descricao"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Descrição do Débito*</FormLabel>
+                                            <FormControl>
+                                                <Textarea placeholder="Ex: Consultoria XYZ, Taxa de Serviço..." {...field} disabled={isSubmittingDebitoAvulso} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={debitoAvulsoForm.control}
+                                    name="valor"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Valor do Débito*</FormLabel>
+                                            <FormControl>
+                                                <Input
+                                                    type="text"
+                                                    placeholder="R$ 0,00"
+                                                    value={field.value !== undefined ? formatCurrencyInput(field.value.toString()) : ''}
+                                                    onChange={(e) => {
+                                                        const rawValue = e.target.value;
+                                                        const cleaned = rawValue.replace(/\D/g, '');
+                                                        if (cleaned === '') {
+                                                            field.onChange(undefined);
+                                                        } else {
+                                                            const numValue = parseFloat(cleaned) / 100;
+                                                            field.onChange(isNaN(numValue) ? undefined : numValue);
+                                                        }
+                                                    }}
+                                                    onBlur={(e) => { // Format on blur
+                                                        if (field.value !== undefined) {
+                                                            e.target.value = formatCurrencyInput(field.value.toString());
+                                                        }
+                                                    }}
+                                                    disabled={isSubmittingDebitoAvulso}
+                                                    inputMode="decimal"
+                                                />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={debitoAvulsoForm.control}
+                                    name="dataVencimento"
+                                    render={({ field }) => (
+                                        <FormItem className="flex flex-col">
+                                            <FormLabel>Data de Vencimento*</FormLabel>
+                                            <Popover>
+                                                <PopoverTrigger asChild>
+                                                    <FormControl>
+                                                        <Button
+                                                            variant={"outline"}
+                                                            className={cn(
+                                                                "w-full pl-3 text-left font-normal",
+                                                                !field.value && "text-muted-foreground"
+                                                            )}
+                                                            disabled={isSubmittingDebitoAvulso}
+                                                        >
+                                                            {field.value ? (
+                                                                format(field.value, "dd/MM/yyyy", { locale: ptBR })
+                                                            ) : (
+                                                                <span>Selecione a data</span>
+                                                            )}
+                                                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                                        </Button>
+                                                    </FormControl>
+                                                </PopoverTrigger>
+                                                <PopoverContent className="w-auto p-0" align="start">
+                                                    <Calendar
+                                                        mode="single"
+                                                        selected={field.value}
+                                                        onSelect={field.onChange}
+                                                        disabled={(date) => date < startOfDay(new Date()) || isSubmittingDebitoAvulso }
+                                                        initialFocus
+                                                    />
+                                                </PopoverContent>
+                                            </Popover>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <DialogFooter>
+                                    <DialogClose asChild><Button type="button" variant="outline" disabled={isSubmittingDebitoAvulso}>Cancelar</Button></DialogClose>
+                                    <Button type="submit" disabled={isSubmittingDebitoAvulso}>
+                                        {isSubmittingDebitoAvulso && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                        Adicionar Débito
+                                    </Button>
+                                </DialogFooter>
+                            </form>
+                        </Form>
+                    </DialogContent>
+                </Dialog>
+            </div>
             <p className="text-muted-foreground">Gerencie os débitos gerados a partir das licitações homologadas.</p>
 
             {/* Filter Section */}
@@ -845,7 +1136,7 @@ export default function FinanceiroPage() {
                                             format(dateRange.from, "dd/MM/yyyy")
                                         )
                                     ) : (
-                                        <span>Data Homologação</span>
+                                        <span>Data Referência</span>
                                     )}
                                 </Button>
                             </PopoverTrigger>
@@ -910,7 +1201,7 @@ export default function FinanceiroPage() {
                     <Card>
                         <CardHeader>
                             <CardTitle>Débitos Pendentes</CardTitle>
-                            <CardDescription>Licitações homologadas aguardando ação financeira.</CardDescription>
+                            <CardDescription>Débitos aguardando ação financeira.</CardDescription>
                         </CardHeader>
                         <CardContent>
                             <FinancialTable
@@ -1012,32 +1303,19 @@ function FinancialTable({
             <Table>
                 <TableHeader>
                     <TableRow>
-                        {showActions && ( // Conditionally render select all checkbox
-                           <TableHead className="w-[50px]">
-                               <Checkbox
-                                   checked={isAllSelected}
-                                   onCheckedChange={(checked) => onSelectAll(Boolean(checked))}
-                                   aria-label="Selecionar todos"
-                                   disabled={loading || debitos.length === 0}
-                               />
-                           </TableHead>
-                        )}
+                        {showActions && (<TableHead className="w-[50px]"><Checkbox checked={isAllSelected} onCheckedChange={(checked) => onSelectAll(Boolean(checked))} aria-label="Selecionar todos" disabled={loading || debitos.length === 0}/></TableHead>)}
                         <TableHead className="w-[120px]">Protocolo</TableHead>
                         <TableHead>Cliente</TableHead>
-                        <TableHead>Licitação</TableHead>
-                        <TableHead>Data Homolog.</TableHead>
+                        <TableHead>Descrição</TableHead>
+                        <TableHead>Data Referência</TableHead>
                         <TableHead>Valor</TableHead>
                         <TableHead>Status</TableHead>
-                        <TableHead className="text-right w-[200px]">Ações</TableHead> {/* Increased width */}
+                        <TableHead className="text-right w-[200px]">Ações</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
                     {loading ? (
-                        <TableRow>
-                            <TableCell colSpan={showActions ? 8 : 7} className="text-center h-24">
-                                <Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" />
-                            </TableCell>
-                        </TableRow>
+                        <TableRow><TableCell colSpan={showActions ? 8 : 7} className="text-center h-24"><Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" /></TableCell></TableRow>
                     ) : debitos.length > 0 ? (
                         debitos.map(debito => {
                             const isLoading = updatingStatus[debito.id];
@@ -1046,19 +1324,12 @@ function FinancialTable({
                             return (
                                 <TableRow key={debito.id} data-state={isSelected ? "selected" : ""}>
                                      {showActions && (
-                                        <TableCell>
-                                            <Checkbox
-                                                checked={isSelected}
-                                                onCheckedChange={(checked) => onSelectDebito(debito.id, Boolean(checked))}
-                                                aria-label={`Selecionar débito ${debito.id}`}
-                                                disabled={actionsDisabled}
-                                            />
-                                        </TableCell>
+                                        <TableCell><Checkbox checked={isSelected} onCheckedChange={(checked) => onSelectDebito(debito.id, Boolean(checked))} aria-label={`Selecionar débito ${debito.id}`} disabled={actionsDisabled}/></TableCell>
                                      )}
                                     <TableCell className="font-medium">{debito.id}</TableCell>
                                     <TableCell>{debito.clienteNome}</TableCell>
-                                    <TableCell>{debito.licitacaoNumero}</TableCell>
-                                    <TableCell>{formatDate(debito.dataHomologacao)}</TableCell>
+                                    <TableCell>{debito.descricao}</TableCell>
+                                    <TableCell>{formatDate(debito.dataReferencia)}</TableCell>
                                     <TableCell>{debito.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</TableCell>
                                     <TableCell>
                                         {statusInfo ? (
@@ -1068,7 +1339,6 @@ function FinancialTable({
                                             </Badge>
                                         ) : (
                                             <Badge variant="outline" className="flex items-center gap-1 w-fit whitespace-nowrap">
-                                                 {/* Fallback icon */}
                                                 <Clock className="h-3 w-3" />
                                                 {debito.status || 'Desconhecido'}
                                             </Badge>
@@ -1078,7 +1348,6 @@ function FinancialTable({
                                         <Button variant="outline" size="sm" onClick={() => onGenerateInvoice(debito)} title="Gerar Fatura PDF" disabled={actionsDisabled}>
                                             {actionsDisabled ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
                                         </Button>
-                                        {/* Add Receipt Button - visible for PAID status */}
                                         {debito.status === 'PAGO' && (
                                             <Button variant="outline" size="sm" onClick={() => onGenerateReceipt(debito)} title="Gerar Recibo PDF" disabled={actionsDisabled}>
                                                 {actionsDisabled ? <Loader2 className="h-4 w-4 animate-spin" /> : <Receipt className="h-4 w-4" />}
@@ -1089,12 +1358,6 @@ function FinancialTable({
                                                 <Button variant="default" size="sm" onClick={() => onUpdateStatus(debito.id, 'PAGO')} disabled={isLoading || actionsDisabled} title="Marcar como Pago (Baixar)">
                                                     {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
                                                 </Button>
-                                                {/* Disable individual send button when batch actions are present */}
-                                                {/*
-                                                <Button variant="secondary" size="sm" onClick={() => onUpdateStatus(debito.id, 'ENVIADO_FINANCEIRO')} disabled={isLoading || actionsDisabled} title="Marcar como Enviado p/ Financeiro">
-                                                    {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                                                </Button>
-                                                */}
                                             </>
                                         )}
                                     </TableCell>
@@ -1102,16 +1365,10 @@ function FinancialTable({
                             );
                         })
                     ) : (
-                        <TableRow>
-                            <TableCell colSpan={showActions ? 8 : 7} className="text-center text-muted-foreground h-24">
-                                Nenhum débito encontrado para esta visualização.
-                            </TableCell>
-                        </TableRow>
+                        <TableRow><TableCell colSpan={showActions ? 8 : 7} className="text-center text-muted-foreground h-24">Nenhum débito encontrado para esta visualização.</TableCell></TableRow>
                     )}
                 </TableBody>
             </Table>
         </div>
     );
 }
-
-      
