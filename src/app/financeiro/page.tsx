@@ -815,6 +815,7 @@ export default function FinanceiroPage() {
                                 onSubmit={handleAcordoSubmit}
                                 isSubmitting={isSubmittingAcordo}
                                 form={acordoForm}
+                                formatCurrencyInput={formatCurrencyInput}
                             />
                         </DialogContent>
                     </Dialog>
@@ -976,9 +977,10 @@ interface AcordoFormDialogProps {
     onSubmit: (data: AcordoFormData) => Promise<void>;
     isSubmitting: boolean;
     form: any; // react-hook-form useForm return type
+    formatCurrencyInput: (value: string | undefined) => string; // Added prop
 }
 
-function AcordoFormDialog({ debitos, config, onSubmit, isSubmitting, form }: AcordoFormDialogProps) {
+function AcordoFormDialog({ debitos, config, onSubmit, isSubmitting, form, formatCurrencyInput }: AcordoFormDialogProps) {
     const { control, watch, setValue } = form;
     const numeroParcelas = watch('numeroParcelas');
     const desconto = watch('desconto') || 0;
