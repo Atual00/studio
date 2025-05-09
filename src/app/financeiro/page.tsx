@@ -88,6 +88,23 @@ const acordoFormSchema = z.object({
 });
 type AcordoFormData = z.infer<typeof acordoFormSchema>;
 
+// Helper function moved to module scope
+const parseAndValidateDate = (dateInput: string | Date | null | undefined): Date | null => {
+    if (!dateInput) return null;
+    if (dateInput instanceof Date) {
+        return isValid(dateInput) ? dateInput : null;
+    }
+    if (typeof dateInput === 'string') {
+       try {
+          const parsed = parseISO(dateInput);
+          return isValid(parsed) ? parsed : null;
+       } catch {
+          return null;
+       }
+    }
+    return null;
+}
+
 
 // --- Component ---
 export default function FinanceiroPage() {
@@ -305,21 +322,6 @@ export default function FinanceiroPage() {
         return format(parsed, formatString, { locale: ptBR });
     };
     
-    const parseAndValidateDate = (dateInput: string | Date | null | undefined): Date | null => {
-        if (!dateInput) return null;
-        if (dateInput instanceof Date) {
-            return isValid(dateInput) ? dateInput : null;
-        }
-        if (typeof dateInput === 'string') {
-           try {
-              const parsed = parseISO(dateInput);
-              return isValid(parsed) ? parsed : null;
-           } catch {
-              return null;
-           }
-        }
-        return null;
-    }
 
     const calculateDueDate = (baseDateInput: Date | string, config: ConfiguracoesFormValues | null): Date => {
         const defaultDueDay = config?.diaVencimentoPadrao || 15;
@@ -847,18 +849,16 @@ export default function FinanceiroPage() {
                         <Popover>
                             <PopoverTrigger asChild>
                                 <Button id="date" variant={"outline"} className={cn("w-full justify-start text-left font-normal", !dateRange && "text-muted-foreground")}>
-                                    <span className="flex items-center">
-                                        <CalendarIcon className="mr-2 h-4 w-4" />
-                                        {dateRange?.from ? (
-                                            dateRange.to ? (
-                                                <>{format(dateRange.from, "dd/MM/yy", { locale: ptBR })} - {format(dateRange.to, "dd/MM/yy", { locale: ptBR })}</>
-                                            ) : (
-                                                format(dateRange.from, "dd/MM/yyyy", { locale: ptBR })
-                                            )
+                                    <CalendarIcon className="mr-2 h-4 w-4" />
+                                    {dateRange?.from ? (
+                                        dateRange.to ? (
+                                            <>{format(dateRange.from, "dd/MM/yy", { locale: ptBR })} - {format(dateRange.to, "dd/MM/yy", { locale: ptBR })}</>
                                         ) : (
-                                            "Data Referência"
-                                        )}
-                                    </span>
+                                            format(dateRange.from, "dd/MM/yyyy", { locale: ptBR })
+                                        )
+                                    ) : (
+                                        "Data Referência"
+                                    )}
                                 </Button>
                             </PopoverTrigger>
                             <PopoverContent className="w-auto p-0" align="start">
