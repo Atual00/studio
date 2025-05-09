@@ -142,18 +142,3 @@ const validateBidDocumentsFlow = ai.defineFlow<
     }
   }
 );
-
-// Helper function to convert File objects to the required input format
-export const filesToValidateInput = async (files: File[], bidCriteria: string): Promise<ValidateBidDocumentsInput> => {
-  const documents = await Promise.all(
-    files.map(file => {
-      return new Promise<{ filename: string; dataUri: string }>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve({ filename: file.name, dataUri: reader.result as string });
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-    })
-  );
-  return { documents, bidCriteria };
-};

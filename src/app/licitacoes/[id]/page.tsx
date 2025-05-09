@@ -54,7 +54,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import {validateBidDocuments, type ValidateBidDocumentsOutput, filesToValidateInput} from '@/ai/flows/document-validator';
+import {validateBidDocuments, type ValidateBidDocumentsOutput } from '@/ai/flows/document-validator';
+import { filesToValidateInput } from '@/lib/file-utils'; // Updated import path
 import {useToast} from '@/hooks/use-toast';
 import { fetchLicitacaoDetails, updateLicitacao, deleteLicitacao, type LicitacaoDetails, statusMap, requiredDocuments } from '@/services/licitacaoService';
 import { type ClientDetails } from '@/components/clientes/client-form'; // For Client info type if needed
