@@ -15,13 +15,13 @@ import { Calendar } from '@/components/ui/calendar'; // Import Calendar
 import { Checkbox } from '@/components/ui/checkbox'; // Import Checkbox
 import { type DateRange } from 'react-day-picker'; // Import DateRange type
 import { Download, FileText, Filter, Loader2, Send, CheckCircle, Clock, CalendarIcon, X, Receipt, Mail, PlusCircle, Handshake, AlertCircle } from 'lucide-react'; // Import icons + Receipt + Mail + Handshake
-import { format, parseISO, startOfDay, endOfDay, isWithinInterval, addMonths, setDate, isValid, differenceInDays, addDays, addWeeks } from 'date-fns'; // Updated date-fns imports + isValid + differenceInDays
+import { format, parseISO, startOfDay, endOfDay, isWithinInterval, addMonths, setDate, isValid, differenceInDays, addDays, addWeeks, isBefore } from 'date-fns'; // Updated date-fns imports + isValid + differenceInDays
 import { ptBR } from 'date-fns/locale';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable'; // Correct import for autoTable
 import { useToast } from '@/hooks/use-toast';
 import type { ConfiguracoesFormValues } from '@/components/configuracoes/configuracoes-form'; // Import settings type
-import { fetchDebitos, updateDebitoStatus, type Debito, addDebitoAvulso, type DebitoAvulsoFormData } from '@/services/licitacaoService'; // Import from licitacaoService
+import { fetchDebitos, updateDebitoStatus, type Debito, addDebitoAvulso, type DebitoAvulsoFormData, saveDebitosToStorage } from '@/services/licitacaoService'; // Import from licitacaoService
 import { fetchConfiguracoes } from '@/services/configuracoesService'; // Import config service
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger, DialogClose } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
@@ -431,10 +431,10 @@ export default function FinanceiroPage() {
 
     const generatePendingReportPDF = () => {
         if (!checkConfig() || !configuracoes) return; const config = configuracoes;
-        const doc = new jsPDF(); const hoje = formatDateForPDF(new Date());
         const pendingDebitsWithInterest = filteredDebitos
             .filter(d => d.status === 'PENDENTE' || d.status === 'ACORDO_PARCELA')
             .map(d => ({ ...d, juros: calculateInterest(d), valorAtual: d.valor + calculateInterest(d) }));
+        const doc = new jsPDF(); const hoje = formatDateForPDF(new Date());
         const logoUrl = config.logoUrl; const logoDim = 25; const margin = 14; let headerY = 20;
         const drawHeader = () => {
             let textX = margin; let textY = headerY;
@@ -706,7 +706,7 @@ export default function FinanceiroPage() {
         const cliente = debitosOriginais[0]; // Assume all from same client
         const logoUrl = config.logoUrl; const logoDim = 25; const margin = 14; let headerY = 20;
 
-        const drawHeader = () => { /* ... (same as other PDF headers) ... */ 
+        const drawHeader = () => { 
             let textX = margin; let textY = headerY;
             if (logoUrl) { try { const img = new Image(); img.src = logoUrl; const imageType = logoUrl.startsWith("data:image/jpeg") ? "JPEG" : "PNG"; if (imageType === "PNG" || imageType === "JPEG") { doc.addImage(img, imageType, margin, textY - 5, logoDim, logoDim); textX += logoDim + 8; textY += 4; } } catch (e) { console.error("Error adding logo to PDF:", e); } }
             doc.setFontSize(14); doc.text(config.nomeFantasia || config.razaoSocial, textX, textY); textY += 6;
@@ -843,7 +843,27 @@ export default function FinanceiroPage() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
                         <Input placeholder="Filtrar por Cliente ou CNPJ..." value={filterCliente} onChange={(e) => setFilterCliente(e.target.value)} />
                         <Input placeholder="Filtrar por Licitação ou Prot..." value={filterLicitacao} onChange={(e) => setFilterLicitacao(e.target.value)} />
-                        <Popover> <PopoverTrigger asChild> <Button id="date" variant={"outline"} className={`w-full justify-start text-left font-normal ${!dateRange && "text-muted-foreground"}`} > <CalendarIcon className="mr-2 h-4 w-4" /> {dateRange?.from ? ( dateRange.to ? ( <>{format(dateRange.from, "dd/MM/yy")} - {format(dateRange.to, "dd/MM/yy")}</> ) : ( format(dateRange.from, "dd/MM/yyyy") ) ) : ( <span>Data Referência</span> )} </Button> </PopoverTrigger> <PopoverContent className="w-auto p-0" align="start"> <Calendar initialFocus mode="range" defaultMonth={dateRange?.from} selected={dateRange} onSelect={setDateRange} numberOfMonths={2} locale={ptBR} /> </PopoverContent> </Popover>
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button id="date" variant={"outline"} className={cn("w-full justify-start text-left font-normal", !dateRange && "text-muted-foreground")}>
+                                    <span className="flex items-center">
+                                        <CalendarIcon className="mr-2 h-4 w-4" />
+                                        {dateRange?.from ? (
+                                            dateRange.to ? (
+                                                <>{format(dateRange.from, "dd/MM/yy", { locale: ptBR })} - {format(dateRange.to, "dd/MM/yy", { locale: ptBR })}</>
+                                            ) : (
+                                                format(dateRange.from, "dd/MM/yyyy", { locale: ptBR })
+                                            )
+                                        ) : (
+                                            "Data Referência"
+                                        )}
+                                    </span>
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                                <Calendar initialFocus mode="range" defaultMonth={dateRange?.from} selected={dateRange} onSelect={setDateRange} numberOfMonths={2} locale={ptBR} />
+                            </PopoverContent>
+                        </Popover>
                         <div></div> <Button variant="ghost" onClick={clearFilters} className="text-muted-foreground hover:text-primary lg:justify-self-end"> <X className="mr-2 h-4 w-4" /> Limpar Filtros </Button>
                     </div>
                 </CardContent>
@@ -908,7 +928,19 @@ function FinancialTable({ debitos, loading, updatingStatus, onUpdateStatus, onGe
     return (
         <div className="overflow-x-auto">
             <Table>
-                <TableHeader> <TableRow> {showActions && (<TableHead className="w-[50px]"><Checkbox checked={isAllSelected} onCheckedChange={(checked) => onSelectAll(Boolean(checked))} aria-label="Selecionar todos" disabled={loading || debitos.filter(d=> d.status === 'PENDENTE' || d.status === 'ACORDO_PARCELA').length === 0}/></TableHead>)} <TableHead className="w-[120px]">Protocolo</TableHead> <TableHead>Cliente</TableHead> <TableHead>Descrição</TableHead> <TableHead>Data Referência</TableHead> <TableHead>Vencimento</TableHead> <TableHead className="text-right">Valor</TableHead> <TableHead>Status</TableHead> <TableHead className="text-right w-[200px]">Ações</TableHead> </TableRow> </TableHeader>
+                <TableHeader> 
+                    <TableRow> 
+                        {showActions && (<TableHead className="w-[50px]"><Checkbox checked={isAllSelected} onCheckedChange={(checked) => onSelectAll(Boolean(checked))} aria-label="Selecionar todos" disabled={loading || debitos.filter(d=> d.status === 'PENDENTE' || d.status === 'ACORDO_PARCELA').length === 0}/></TableHead>)} 
+                        <TableHead className="w-[120px]">Protocolo</TableHead> 
+                        <TableHead>Cliente</TableHead> 
+                        <TableHead>Descrição</TableHead> 
+                        <TableHead>Data Referência</TableHead> 
+                        <TableHead>Vencimento</TableHead> 
+                        <TableHead className="text-right">Valor</TableHead> 
+                        <TableHead>Status</TableHead> 
+                        <TableHead className="text-right w-[200px]">Ações</TableHead> 
+                    </TableRow> 
+                </TableHeader>
                 <TableBody>
                     {loading ? ( <TableRow><TableCell colSpan={showActions ? 9 : 8} className="text-center h-24"><Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" /></TableCell></TableRow> ) :
                      debitos.length > 0 ? ( debitos.map(debito => {
@@ -917,7 +949,11 @@ function FinancialTable({ debitos, loading, updatingStatus, onUpdateStatus, onGe
                             return (
                                 <TableRow key={debito.id} data-state={isSelected ? "selected" : ""}>
                                      {showActions && ( <TableCell><Checkbox checked={isSelected} onCheckedChange={(checked) => onSelectDebito(debito.id, Boolean(checked))} aria-label={`Selecionar débito ${debito.id}`} disabled={actionsDisabled || !canSelect}/> </TableCell> )}
-                                    <TableCell className="font-medium">{debito.id}</TableCell> <TableCell>{debito.clienteNome}</TableCell> <TableCell>{debito.descricao}</TableCell> <TableCell>{formatDate(debito.dataReferencia)}</TableCell> <TableCell>{formatDate(debito.dataVencimento)}</TableCell>
+                                    <TableCell className="font-medium">{debito.id}</TableCell> 
+                                    <TableCell>{debito.clienteNome}</TableCell> 
+                                    <TableCell>{debito.descricao}</TableCell> 
+                                    <TableCell>{formatDate(debito.dataReferencia)}</TableCell> 
+                                    <TableCell>{formatDate(debito.dataVencimento)}</TableCell>
                                     <TableCell className="text-right">{getDisplayValue(debito)}</TableCell>
                                     <TableCell> {statusInfo ? ( <Badge variant={getBadgeVariantFinanceiro(statusInfo.color)} className="flex items-center gap-1 w-fit whitespace-nowrap"> <statusInfo.icon className="h-3 w-3" /> {statusInfo.label} </Badge> ) : ( <Badge variant="outline"> {debito.status || 'Desconhecido'} </Badge> )} </TableCell>
                                     <TableCell className="text-right space-x-1">
