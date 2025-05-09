@@ -88,7 +88,7 @@ const getDebitosFromStorage = (): Debito[] => {
   }
 };
 
-const saveDebitosToStorage = (debitos: Debito[]): void => {
+export const saveDebitosToStorage = (debitos: Debito[]): void => {
   if (typeof window === 'undefined') return;
   try {
     const itemsToStore = debitos.map(debito => ({
