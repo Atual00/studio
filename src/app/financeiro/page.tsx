@@ -1,5 +1,3 @@
-
-
 'use client'; // Required for state and client-side interaction
 
 import React, { useState, useEffect, useMemo } from 'react'; // Import React
@@ -1071,7 +1069,11 @@ function AcordoFormDialog({ debitos, config, onSubmit, isSubmitting, form }: Aco
                     <FormField control={control} name="tipoParcelamento" render={({ field }) => (
                         <FormItem> <FormLabel>Frequência Parcelas*</FormLabel>
                             <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
-                                <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                                <FormControl>
+                                  <span> {/* Wrap SelectTrigger */}
+                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                  </span>
+                                </FormControl>
                                 <SelectContent>
                                     <SelectItem value="unica">Única</SelectItem>
                                     <SelectItem value="semanal">Semanal</SelectItem>
@@ -1083,11 +1085,13 @@ function AcordoFormDialog({ debitos, config, onSubmit, isSubmitting, form }: Aco
                 </div>
                  <FormField control={control} name="dataVencimentoPrimeiraParcela" render={({ field }) => (
                     <FormItem className="flex flex-col"> <FormLabel>Vencimento 1ª Parcela*</FormLabel>
-                        <Popover> <PopoverTrigger asChild> <FormControl>
+                        <Popover> <PopoverTrigger asChild> 
+                        <FormControl>
                             <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal",!field.value && "text-muted-foreground")} disabled={isSubmitting}>
                                 {field.value ? format(new Date(field.value), "dd/MM/yyyy", {locale: ptBR}) : <span>Selecione a data</span>} <CalendarIcon className="ml-auto h-4 w-4 opacity-50"/>
                             </Button>
-                        </FormControl> </PopoverTrigger>
+                        </FormControl>
+                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-0" align="start">
                             <Calendar mode="single" selected={field.value ? new Date(field.value) : undefined} onSelect={field.onChange} disabled={(date) => date < startOfDay(new Date()) || isSubmitting} initialFocus/>
                         </PopoverContent> </Popover> <FormMessage/>
@@ -1123,4 +1127,3 @@ function AcordoFormDialog({ debitos, config, onSubmit, isSubmitting, form }: Aco
         </Form>
     );
 }
-
