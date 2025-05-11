@@ -1,4 +1,3 @@
-
 "use client"
 
 import * as React from "react"
@@ -7,7 +6,7 @@ import { Slot } from "@radix-ui/react-slot"
 import {
   Controller,
   FormProvider,
-  useFormContext, // Correctly import useFormContext
+  useFormContext, 
   type ControllerProps,
   type FieldPath,
   type FieldValues,
@@ -45,14 +44,25 @@ const FormField = <
 const useFormField = () => {
   const fieldContext = React.useContext(FormFieldContext)
   const itemContext = React.useContext(FormItemContext)
-  const { getFieldState, formState } = useFormContext() // Now correctly referencing the imported hook
+  const formMethods = useFormContext()
 
   if (!fieldContext) {
     throw new Error("useFormField should be used within <FormField>")
   }
   const { id } = itemContext
 
-  // Assume getFieldState exists if useFormContext is used correctly within FormProvider
+  if (!formMethods) {
+    throw new Error("useFormContext returned null or undefined. Ensure FormField is used within a FormProvider.")
+  }
+  
+  const { getFieldState, formState } = formMethods;
+
+  // Check if getFieldState is actually a function
+  if (typeof getFieldState !== 'function') {
+    console.error("useFormContext did not return an object with getFieldState function.", formMethods);
+    throw new Error("getFieldState is not a function. Check react-hook-form version or context provider.");
+  }
+  
   const fieldState = getFieldState(fieldContext.name, formState)
 
 
@@ -108,7 +118,7 @@ FormLabel.displayName = "FormLabel"
 const FormControl = React.forwardRef<
   React.ElementRef<typeof Slot>,
   React.ComponentPropsWithoutRef<typeof Slot>
->(({ ...props }, ref) => {
+>(({ children, ...restProps }, ref) => { // Destructure children explicitly
   const { error, formItemId, formDescriptionId, formMessageId } = useFormField()
 
   return (
@@ -121,8 +131,10 @@ const FormControl = React.forwardRef<
           : `${formDescriptionId} ${formMessageId}`
       }
       aria-invalid={!!error}
-      {...props}
-    />
+      {...restProps} // Pass other props
+    >
+      {children} {/* Pass children explicitly to Slot */}
+    </Slot>
   )
 })
 FormControl.displayName = "FormControl"
@@ -178,3 +190,4 @@ export {
   FormMessage,
   FormField,
 }
+
