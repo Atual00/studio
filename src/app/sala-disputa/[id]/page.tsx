@@ -340,9 +340,9 @@ export default function DisputaIndividualPage() {
       doc.setFontSize(12); doc.setFont(undefined, 'bold');
       doc.text("Registro da Disputa:", margin, yPos); yPos += 7;
       doc.setFont(undefined, 'normal'); doc.setFontSize(11);
-      const formatDateLog = (date: Date | string | undefined) => date ? format(date instanceof Date ? date : parseISO(date as string), "dd/MM/yyyy HH:mm:ss", {locale: ptBR}) : 'N/A';
-      addDetail("Início da Disputa", formatDateLog(lic.disputaLog?.iniciadaEm));
-      addDetail("Fim da Disputa", formatDateLog(lic.disputaLog?.finalizadaEm));
+      const formatDateLogAta = (date: Date | string | undefined) => date ? format(date instanceof Date ? date : parseISO(date as string), "dd/MM/yyyy HH:mm:ss", {locale: ptBR}) : 'N/A';
+      addDetail("Início da Disputa", formatDateLogAta(lic.disputaLog?.iniciadaEm));
+      addDetail("Fim da Disputa", formatDateLogAta(lic.disputaLog?.finalizadaEm));
       addDetail("Duração Total", lic.disputaLog?.duracao || 'N/A');
       yPos += 4;
 
@@ -375,6 +375,17 @@ export default function DisputaIndividualPage() {
   const isDisputaConfiguravel = licitacao.status === 'AGUARDANDO_DISPUTA';
   const isDisputaFinalizada = licitacao.status === 'DISPUTA_CONCLUIDA';
 
+  let displayDataInicio = 'Data Inválida';
+  if (licitacao.dataInicio) {
+    // Ensure dataInicio is a Date object before formatting
+    const dateToFormat = licitacao.dataInicio instanceof Date 
+      ? licitacao.dataInicio 
+      : parseISO(licitacao.dataInicio as string); // Fallback if it's a string
+    if (isValid(dateToFormat)) {
+      displayDataInicio = format(dateToFormat, "dd/MM/yyyy HH:mm", { locale: ptBR });
+    }
+  }
+
 
   return (
     <div className="space-y-6">
@@ -387,7 +398,7 @@ export default function DisputaIndividualPage() {
                 {statusMap[licitacao.status]?.label || licitacao.status}
             </Badge>
           </CardTitle>
-          <CardDescription>{licitacao.orgaoComprador} | Plataforma: {licitacao.plataforma} | Início: {format(parseISO(licitacao.dataInicio as string), "dd/MM/yyyy HH:mm", { locale: ptBR })}</CardDescription>
+          <CardDescription>{licitacao.orgaoComprador} | Plataforma: {licitacao.plataforma} | Início: {displayDataInicio}</CardDescription>
         </CardHeader>
 
         {isDisputaConfiguravel && (
