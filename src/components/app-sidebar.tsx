@@ -13,6 +13,7 @@ import {
   CalendarDays,
   Settings,
   Briefcase,
+  Flame, // Icon for Sala de Disputa
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
@@ -31,6 +32,7 @@ const baseMenuItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/clientes', label: 'Clientes', icon: Users },
   { href: '/licitacoes', label: 'Licitações', icon: Gavel },
+  { href: '/sala-disputa', label: 'Sala de Disputa', icon: Flame },
   { href: '/financeiro', label: 'Financeiro', icon: DollarSign },
   { href: '/documentos', label: 'Documentos', icon: FileText },
   { href: '/senhas', label: 'Senhas', icon: KeyRound },
@@ -51,6 +53,10 @@ export default function AppSidebar() {
     if (href === '/') {
       return pathname === '/';
     }
+    // For nested calendar routes, ensure base calendar link isn't active if a sub-route is.
+    if (href === '/calendario/metas' && pathname.startsWith('/calendario/disputas')) return false;
+    if (href === '/calendario/disputas' && pathname.startsWith('/calendario/metas')) return false;
+
     return pathname.startsWith(href);
   };
 
@@ -95,3 +101,4 @@ export default function AppSidebar() {
     </>
   );
 }
+

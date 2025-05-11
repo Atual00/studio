@@ -2,8 +2,9 @@
 'use client';
 
 import type { LicitacaoFormValues } from '@/components/licitacoes/licitacao-form';
-import { CalendarCheck, CheckCircle, Clock, FileWarning, HelpCircle, Loader2, Send, Target, XCircle, Gavel, Handshake } from 'lucide-react'; // Added Handshake
-import { parseISO, isValid, addMonths, setDate } from 'date-fns';
+import { CalendarCheck, CheckCircle, Clock, FileWarning, HelpCircle, Loader2, Send, Target, XCircle, Gavel, Handshake, PlayCircle, Flag } from 'lucide-react'; // Added PlayCircle, Flag
+import { parseISO, isValid, addMonths, setDate, differenceInSeconds, formatDistanceStrict } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import { type User } from './userService';
 import { fetchConfiguracoes } from './configuracoesService'; // For calculating due dates
 import { fetchClientDetails as fetchServiceClientDetails } from './clientService'; // Renamed import
@@ -36,6 +37,12 @@ const getLicitacoesFromStorage = (): LicitacaoDetails[] => {
          valorCobrado: typeof item.valorCobrado === 'number' ? item.valorCobrado : 0,
          valorTotalLicitacao: typeof item.valorTotalLicitacao === 'number' ? item.valorTotalLicitacao : 0,
          valorPrimeiroColocado: typeof item.valorPrimeiroColocado === 'number' ? item.valorPrimeiroColocado : undefined,
+         disputaConfig: item.disputaConfig || {}, // Initialize if missing
+         disputaLog: item.disputaLog ? { // Parse dates in disputaLog
+            ...item.disputaLog,
+            iniciadaEm: parseDate(item.disputaLog.iniciadaEm),
+            finalizadaEm: parseDate(item.disputaLog.finalizadaEm),
+         } : {}, // Initialize if missing
        };
      }).filter(item => item.dataInicio instanceof Date);
   } catch (e) {
@@ -54,6 +61,11 @@ const saveLicitacoesToStorage = (licitacoes: LicitacaoDetails[]): void => {
         dataMetaAnalise: item.dataMetaAnalise instanceof Date && isValid(item.dataMetaAnalise) ? item.dataMetaAnalise.toISOString() : null,
         dataHomologacao: item.dataHomologacao instanceof Date && isValid(item.dataHomologacao) ? item.dataHomologacao.toISOString() : null,
         comentarios: (item.comentarios || []).map(c => ({...c, data: c.data instanceof Date && isValid(c.data) ? c.data.toISOString() : null })),
+        disputaLog: item.disputaLog ? {
+            ...item.disputaLog,
+            iniciadaEm: item.disputaLog.iniciadaEm instanceof Date && isValid(item.disputaLog.iniciadaEm) ? item.disputaLog.iniciadaEm.toISOString() : null,
+            finalizadaEm: item.disputaLog.finalizadaEm instanceof Date && isValid(item.disputaLog.finalizadaEm) ? item.disputaLog.finalizadaEm.toISOString() : null,
+        } : undefined,
     }));
     localStorage.setItem(LOCAL_STORAGE_KEY_LICITACOES, JSON.stringify(itemsToStore));
   } catch (e) {
@@ -104,6 +116,20 @@ export const saveDebitosToStorage = (debitos: Debito[]): void => {
 
 
 // --- Types and Constants ---
+export interface DisputaConfig {
+  limiteTipo?: 'valor' | 'percentual';
+  limiteValor?: number; // Absolute value or percentage (e.g., 10 for 10%)
+  valorCalculadoAteOndePodeChegar?: number;
+}
+
+export interface DisputaLog {
+  iniciadaEm?: Date | string;
+  finalizadaEm?: Date | string;
+  duracao?: string; // e.g., "00:15:30"
+  clienteVenceu?: boolean;
+  posicaoCliente?: number;
+}
+
 
 export interface LicitacaoDetails extends LicitacaoFormValues {
   id: string;
@@ -122,12 +148,14 @@ export interface LicitacaoDetails extends LicitacaoFormValues {
       username: string;
       fullName?: string;
       cpf?: string;
-  }
+  };
+  disputaConfig?: DisputaConfig;
+  disputaLog?: DisputaLog;
 }
 
 export type LicitacaoListItem = Pick<
     LicitacaoDetails,
-    'id' | 'clienteNome' | 'modalidade' | 'numeroLicitacao' | 'plataforma' | 'dataInicio' | 'dataMetaAnalise' | 'status' | 'orgaoComprador'
+    'id' | 'clienteNome' | 'modalidade' | 'numeroLicitacao' | 'plataforma' | 'dataInicio' | 'dataMetaAnalise' | 'status' | 'orgaoComprador' | 'valorTotalLicitacao'
 >;
 
 export const statusMap: {[key: string]: {label: string; color: string; icon: React.ElementType}} = {
@@ -135,7 +163,9 @@ export const statusMap: {[key: string]: {label: string; color: string; icon: Rea
   EM_ANALISE: {label: 'Em Análise', color: 'info', icon: Loader2 },
   DOCUMENTACAO_CONCLUIDA: {label: 'Documentação OK', color: 'success', icon: CheckCircle},
   FALTA_DOCUMENTACAO: {label: 'Falta Documento', color: 'warning', icon: FileWarning},
-  AGUARDANDO_DISPUTA: {label: 'Aguardando Disputa', color: 'accent', icon: Gavel},
+  AGUARDANDO_DISPUTA: {label: 'Aguardando Disputa', color: 'accent', icon: PlayCircle},
+  EM_DISPUTA: {label: 'Em Disputa', color: 'destructive', icon: Gavel}, // New status
+  DISPUTA_CONCLUIDA: {label: 'Disputa Concluída', color: 'default', icon: Flag}, // New status
   EM_HOMOLOGACAO: {label: 'Em Homologação', color: 'default', icon: Target},
   AGUARDANDO_RECURSO: {label: 'Aguardando Recurso', color: 'outline', icon: HelpCircle},
   EM_PRAZO_CONTRARRAZAO: {label: 'Prazo Contrarrazão', color: 'outline', icon: CalendarCheck},
@@ -182,7 +212,7 @@ export const fetchLicitacoes = async (): Promise<LicitacaoListItem[]> => {
   console.log('Fetching all licitações...');
   await new Promise(resolve => setTimeout(resolve, 350));
   const licitacoes = getLicitacoesFromStorage();
-  return licitacoes.map(({ id, clienteNome, modalidade, numeroLicitacao, plataforma, dataInicio, dataMetaAnalise, status, orgaoComprador }) => ({
+  return licitacoes.map(({ id, clienteNome, modalidade, numeroLicitacao, plataforma, dataInicio, dataMetaAnalise, status, orgaoComprador, valorTotalLicitacao }) => ({
     id,
     clienteNome,
     modalidade,
@@ -192,6 +222,7 @@ export const fetchLicitacoes = async (): Promise<LicitacaoListItem[]> => {
     dataInicio,
     dataMetaAnalise,
     status,
+    valorTotalLicitacao,
   }));
 };
 
@@ -216,6 +247,12 @@ export const fetchLicitacaoDetails = async (id: string): Promise<LicitacaoDetail
           dataMetaAnalise: parseDate(licitacao.dataMetaAnalise) as Date,
           dataHomologacao: parseDate(licitacao.dataHomologacao),
           comentarios: (licitacao.comentarios || []).map(c => ({...c, data: parseDate(c.data) as Date })),
+          disputaConfig: licitacao.disputaConfig || {},
+          disputaLog: licitacao.disputaLog ? {
+            ...licitacao.disputaLog,
+            iniciadaEm: parseDate(licitacao.disputaLog.iniciadaEm),
+            finalizadaEm: parseDate(licitacao.disputaLog.finalizadaEm),
+          } : {},
       };
   }
   return null;
@@ -252,6 +289,8 @@ export const addLicitacao = async (
         fullName: currentUser.fullName,
         cpf: currentUser.cpf,
     } : undefined,
+    disputaConfig: {}, // Initialize empty
+    disputaLog: {}, // Initialize empty
   };
 
   const updatedLicitacoes = [...licitacoes, newLicitacao];
@@ -302,6 +341,13 @@ export const updateLicitacao = async (id: string, data: Partial<LicitacaoDetails
       valorCobrado: data.valorCobrado !== undefined ? Number(data.valorCobrado) : existingLicitacao.valorCobrado,
       valorTotalLicitacao: data.valorTotalLicitacao !== undefined ? Number(data.valorTotalLicitacao) : existingLicitacao.valorTotalLicitacao,
       valorPrimeiroColocado: data.valorPrimeiroColocado !== undefined ? Number(data.valorPrimeiroColocado) : existingLicitacao.valorPrimeiroColocado,
+      disputaConfig: data.disputaConfig ? { ...existingLicitacao.disputaConfig, ...data.disputaConfig } : existingLicitacao.disputaConfig,
+      disputaLog: data.disputaLog ? {
+          ...existingLicitacao.disputaLog,
+          ...data.disputaLog,
+          iniciadaEm: data.disputaLog.iniciadaEm ? parseUpdateDate(data.disputaLog.iniciadaEm) : existingLicitacao.disputaLog?.iniciadaEm,
+          finalizadaEm: data.disputaLog.finalizadaEm ? parseUpdateDate(data.disputaLog.finalizadaEm) : existingLicitacao.disputaLog?.finalizadaEm,
+      } : existingLicitacao.disputaLog,
   };
 
   const updatedLicitacoes = [...licitacoes];
@@ -483,3 +529,12 @@ export const addDebitoAvulso = async (data: DebitoAvulsoFormData): Promise<Debit
     saveDebitosToStorage(debitos);
     return newDebito;
 };
+
+// Helper function to format elapsed time
+export const formatElapsedTime = (seconds: number): string => {
+    const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
+    const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
+    const s = Math.floor(seconds % 60).toString().padStart(2, '0');
+    return `${h}:${m}:${s}`;
+};
+
