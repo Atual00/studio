@@ -11,7 +11,7 @@ import {ptBR} from 'date-fns/locale';
 import {Calendar as CalendarIcon, Loader2} from 'lucide-react';
 
 import {Button} from '@/components/ui/button';
-import {Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage} from '@/components/ui/form';
+import {Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage, useFormField} from '@/components/ui/form'; // Import useFormField
 import {Input} from '@/components/ui/input';
 import {Textarea} from '@/components/ui/textarea';
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@/components/ui/select';
@@ -349,12 +349,13 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
            <FormField
               control={form.control}
               name="dataInicio"
-              render={({ field }) => (
+              render={({ field }) => {
+                const { formItemId, formDescriptionId, formMessageId, error } = useFormField();
+                return (
                 <FormItem className="flex flex-col">
                   <FormLabel>Data e Hora Início*</FormLabel>
                   <Popover>
                     <PopoverTrigger asChild>
-                      <FormControl>
                         <Button
                           variant={"outline"}
                           className={cn(
@@ -362,6 +363,9 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
                             !field.value && "text-muted-foreground"
                           )}
                            disabled={isSubmitting}
+                           id={formItemId}
+                           aria-describedby={!error ? formDescriptionId : `${formDescriptionId} ${formMessageId}`}
+                           aria-invalid={!!error}
                         >
                           {field.value ? (
                             format(field.value, "dd/MM/yyyy HH:mm", { locale: ptBR })
@@ -370,7 +374,6 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
                           )}
                           <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                         </Button>
-                      </FormControl>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
                       <Calendar
@@ -417,17 +420,18 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
-              )}
+              )}}
             />
              <FormField
               control={form.control}
               name="dataMetaAnalise"
-              render={({ field }) => (
+              render={({ field }) => {
+                const { formItemId, formDescriptionId, formMessageId, error } = useFormField();
+                return (
                 <FormItem className="flex flex-col">
                   <FormLabel>Data Meta Análise*</FormLabel>
                    <Popover>
                     <PopoverTrigger asChild>
-                      <FormControl>
                         <Button
                           variant={"outline"}
                           className={cn(
@@ -435,6 +439,9 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
                             !field.value && "text-muted-foreground"
                           )}
                            disabled={isSubmitting}
+                           id={formItemId}
+                           aria-describedby={!error ? formDescriptionId : `${formDescriptionId} ${formMessageId}`}
+                           aria-invalid={!!error}
                         >
                           {field.value ? (
                             format(field.value, "dd/MM/yyyy", { locale: ptBR })
@@ -443,7 +450,6 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
                           )}
                           <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                         </Button>
-                      </FormControl>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
                       <Calendar
@@ -469,7 +475,7 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
-              )}
+              )}}
             />
         </div>
 
@@ -498,3 +504,4 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
     </Form>
   );
 }
+
