@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge'; // Import Badge component
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger, DialogClose } from '@/components/ui/dialog';
 import { Loader2, Play, StopCircle, AlertCircle, Check, X, Percent, FileText, Info, ExternalLink } from 'lucide-react';
@@ -190,6 +190,7 @@ export default function DisputaIndividualPage() {
         setLicitacao(prev => prev ? { ...prev, status: 'EM_DISPUTA', valorTotalLicitacao: valorTotalNum, disputaConfig, disputaLog } : null);
         toast({ title: "Sucesso", description: "Disputa iniciada." });
         // Start timer
+        setElapsedTime(0); // Reset elapsed time
         const interval = setInterval(() => setElapsedTime(prev => prev + 1), 1000);
         setTimerIntervalId(interval);
       } else {
@@ -274,8 +275,13 @@ export default function DisputaIndividualPage() {
           const img = new Image();
           img.src = logoUrl;
           const imageType = logoUrl.startsWith("data:image/jpeg") ? "JPEG" : "PNG";
-          doc.addImage(img, imageType, margin, yPos - 5, logoDim, logoDim);
-          yPos += logoDim - 5; // Adjust yPos based on logo
+          if (imageType === "PNG" || imageType === "JPEG") {
+            doc.addImage(img, imageType, margin, yPos - 5, logoDim, logoDim);
+            yPos += logoDim - 5; // Adjust yPos based on logo
+          } else {
+            console.warn("Formato do logo não suportado para PDF, pulando logo.");
+            yPos +=5;
+          }
         } catch (e) { console.error("Error adding logo:", e); yPos += 5; }
       } else {
         yPos += 5;
