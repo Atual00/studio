@@ -813,7 +813,6 @@ export default function FinanceiroPage() {
                                 onSubmit={handleAcordoSubmit}
                                 isSubmitting={isSubmittingAcordo}
                                 form={acordoForm}
-                                formatCurrencyInput={formatCurrencyInput}
                             />
                         </DialogContent>
                     </Dialog>
@@ -825,10 +824,10 @@ export default function FinanceiroPage() {
                             <DialogHeader> <DialogTitle>Lançar Novo Débito Avulso</DialogTitle> <DialogDescription> Preencha as informações para criar um novo débito manualmente. </DialogDescription> </DialogHeader>
                             <Form {...debitoAvulsoForm}>
                                 <form onSubmit={debitoAvulsoForm.handleSubmit(handleDebitoAvulsoSubmit)} className="space-y-4 py-4">
-                                    <FormField control={debitoAvulsoForm.control} name="clienteNome" render={({ field }) => ( <FormItem> <FormLabel>Nome do Cliente*</FormLabel> <Select onValueChange={(value) => { field.onChange(value); const selectedClient = clients.find(c => c.name === value); if (selectedClient) { debitoAvulsoForm.setValue('clienteCnpj', selectedClient.cnpj, { shouldValidate: true }); } else { debitoAvulsoForm.setValue('clienteCnpj', '', { shouldValidate: true }); } }} value={field.value} disabled={isSubmittingDebitoAvulso || loadingClients} > <FormControl> <SelectTrigger> <SelectValue placeholder="Selecione um cliente ou digite um novo" /> </SelectTrigger> </FormControl> <SelectContent> {loadingClients ? ( <SelectItem value="loading" disabled>Carregando clientes...</SelectItem> ) : ( clients.map(client => ( <SelectItem key={client.id} value={client.name}> {client.name} ({client.cnpj}) </SelectItem> )) )} </SelectContent> </Select> <FormDescription>Você pode selecionar um cliente existente (CNPJ será preenchido) ou digitar um novo nome.</FormDescription> <Input placeholder="Ou digite o nome do cliente" value={field.value} onChange={(e) => { field.onChange(e.target.value); if (!clients.some(c => c.name === e.target.value)) { debitoAvulsoForm.setValue('clienteCnpj', '', { shouldValidate: true }); } }} className="mt-1" disabled={isSubmittingDebitoAvulso} /> <FormMessage /> </FormItem> )}/>
-                                    <FormField control={debitoAvulsoForm.control} name="clienteCnpj" render={({ field }) => ( <FormItem> <FormLabel>CNPJ do Cliente</FormLabel> <FormControl> <Input placeholder="XX.XXX.XXX/XXXX-XX (Opcional)" {...field} onChange={(e) => field.onChange(formatCnpjInput(e.target.value))} disabled={isSubmittingDebitoAvulso} /> </FormControl> <FormMessage /> </FormItem> )}/>
-                                    <FormField control={debitoAvulsoForm.control} name="descricao" render={({ field }) => ( <FormItem> <FormLabel>Descrição do Débito*</FormLabel> <FormControl> <Textarea placeholder="Ex: Consultoria XYZ, Taxa de Serviço..." {...field} disabled={isSubmittingDebitoAvulso} /> </FormControl> <FormMessage /> </FormItem> )}/>
-                                    <FormField control={debitoAvulsoForm.control} name="valor" render={({ field }) => ( <FormItem> <FormLabel>Valor do Débito*</FormLabel> <FormControl> <Input type="text" placeholder="R$ 0,00" value={field.value !== undefined ? formatCurrencyInput(field.value.toString()) : ''} onChange={(e) => { const rawValue = e.target.value; const cleaned = rawValue.replace(/\D/g, ''); if (cleaned === '') { field.onChange(undefined); } else { const numValue = parseFloat(cleaned) / 100; field.onChange(isNaN(numValue) ? undefined : numValue); } }} onBlur={(e) => { if (field.value !== undefined) { e.target.value = formatCurrencyInput(field.value.toString()); } }} disabled={isSubmittingDebitoAvulso} inputMode="decimal" /> </FormControl> <FormMessage /> </FormItem> )}/>
+                                    <FormField control={debitoAvulsoForm.control} name="clienteNome" render={({ field }) => ( <FormItem> <FormLabel>Nome do Cliente*</FormLabel> <Select onValueChange={(value) => { field.onChange(value); const selectedClient = clients.find(c => c.name === value); if (selectedClient) { debitoAvulsoForm.setValue('clienteCnpj', selectedClient.cnpj, { shouldValidate: true }); } else { debitoAvulsoForm.setValue('clienteCnpj', '', { shouldValidate: true }); } }} value={field.value} disabled={isSubmittingDebitoAvulso || loadingClients} > <FormControl><SelectTrigger> <SelectValue placeholder="Selecione um cliente ou digite um novo" /> </SelectTrigger></FormControl> <SelectContent> {loadingClients ? ( <SelectItem value="loading" disabled>Carregando clientes...</SelectItem> ) : ( clients.map(client => ( <SelectItem key={client.id} value={client.name}> {client.name} ({client.cnpj}) </SelectItem> )) )} </SelectContent> </Select> <FormDescription>Você pode selecionar um cliente existente (CNPJ será preenchido) ou digitar um novo nome.</FormDescription> <FormControl><Input placeholder="Ou digite o nome do cliente" value={field.value} onChange={(e) => { field.onChange(e.target.value); if (!clients.some(c => c.name === e.target.value)) { debitoAvulsoForm.setValue('clienteCnpj', '', { shouldValidate: true }); } }} className="mt-1" disabled={isSubmittingDebitoAvulso} /></FormControl> <FormMessage /> </FormItem> )}/>
+                                    <FormField control={debitoAvulsoForm.control} name="clienteCnpj" render={({ field }) => ( <FormItem> <FormLabel>CNPJ do Cliente</FormLabel> <FormControl><Input placeholder="XX.XXX.XXX/XXXX-XX (Opcional)" {...field} onChange={(e) => field.onChange(formatCnpjInput(e.target.value))} disabled={isSubmittingDebitoAvulso} /></FormControl> <FormMessage /> </FormItem> )}/>
+                                    <FormField control={debitoAvulsoForm.control} name="descricao" render={({ field }) => ( <FormItem> <FormLabel>Descrição do Débito*</FormLabel> <FormControl><Textarea placeholder="Ex: Consultoria XYZ, Taxa de Serviço..." {...field} disabled={isSubmittingDebitoAvulso} /></FormControl> <FormMessage /> </FormItem> )}/>
+                                    <FormField control={debitoAvulsoForm.control} name="valor" render={({ field }) => ( <FormItem> <FormLabel>Valor do Débito*</FormLabel> <FormControl><Input type="text" placeholder="R$ 0,00" value={field.value !== undefined ? formatCurrencyInput(field.value.toString()) : ''} onChange={(e) => { const rawValue = e.target.value; const cleaned = rawValue.replace(/\D/g, ''); if (cleaned === '') { field.onChange(undefined); } else { const numValue = parseFloat(cleaned) / 100; field.onChange(isNaN(numValue) ? undefined : numValue); } }} onBlur={(e) => { if (field.value !== undefined) { e.target.value = formatCurrencyInput(field.value.toString()); } }} disabled={isSubmittingDebitoAvulso} inputMode="decimal" /></FormControl> <FormMessage /> </FormItem> )}/>
                                     <FormField control={debitoAvulsoForm.control} name="dataVencimento" render={({ field }) => ( <FormItem className="flex flex-col"> <FormLabel>Data de Vencimento*</FormLabel> <Popover> <PopoverTrigger asChild> <FormControl> 
                                         <Button variant={"outline"} className={cn( "w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground" )} disabled={isSubmittingDebitoAvulso} > 
                                             <span className="flex w-full items-center justify-between">
@@ -837,7 +836,7 @@ export default function FinanceiroPage() {
                                                 </span>
                                                 <CalendarIcon className="h-4 w-4 opacity-50" />
                                             </span>
-                                        </Button> </FormControl> </PopoverTrigger> <PopoverContent className="w-auto p-0" align="start"> <Calendar mode="single" selected={field.value} onSelect={field.onChange} disabled={(date) => date < startOfDay(new Date()) || isSubmittingDebitoAvulso } initialFocus /> </PopoverContent> </Popover> <FormMessage /> </FormItem> )}/>
+                                        </Button></FormControl> </PopoverTrigger> <PopoverContent className="w-auto p-0" align="start"> <Calendar mode="single" selected={field.value} onSelect={field.onChange} disabled={(date) => date < startOfDay(new Date()) || isSubmittingDebitoAvulso } initialFocus /> </PopoverContent> </Popover> <FormMessage /> </FormItem> )}/>
                                     <DialogFooter> <DialogClose asChild><Button type="button" variant="outline" disabled={isSubmittingDebitoAvulso}>Cancelar</Button></DialogClose> <Button type="submit" disabled={isSubmittingDebitoAvulso}> {isSubmittingDebitoAvulso && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Adicionar Débito </Button> </DialogFooter>
                                 </form>
                             </Form>
@@ -987,10 +986,9 @@ interface AcordoFormDialogProps {
     onSubmit: (data: AcordoFormData) => Promise<void>;
     isSubmitting: boolean;
     form: any; // react-hook-form useForm return type
-    formatCurrencyInput: (value: string | undefined) => string; // Added prop
 }
 
-function AcordoFormDialog({ debitos, config, onSubmit, isSubmitting, form, formatCurrencyInput }: AcordoFormDialogProps) {
+function AcordoFormDialog({ debitos, config, onSubmit, isSubmitting, form }: AcordoFormDialogProps) {
     const { control, watch, setValue } = form;
     const numeroParcelas = watch('numeroParcelas');
     const desconto = watch('desconto') || 0;
@@ -1061,14 +1059,12 @@ function AcordoFormDialog({ debitos, config, onSubmit, isSubmitting, form, forma
 
                 <FormField control={control} name="desconto" render={({ field }) => (
                     <FormItem> <FormLabel>Valor do Desconto</FormLabel>
-                        <FormControl>
-                            <Input type="text" placeholder="R$ 0,00"
+                        <FormControl><Input type="text" placeholder="R$ 0,00"
                                 value={field.value !== undefined ? formatCurrencyInput(field.value.toString()) : ''}
                                 onChange={(e) => { const rawValue = e.target.value; const cleaned = rawValue.replace(/\D/g, ''); if (cleaned === '') { field.onChange(undefined); } else { const numValue = parseFloat(cleaned) / 100; field.onChange(isNaN(numValue) ? undefined : numValue); } }}
                                 onBlur={(e) => { if (field.value !== undefined) { e.target.value = formatCurrencyInput(field.value.toString()); } }}
                                 disabled={isSubmitting} inputMode="decimal"
-                            />
-                        </FormControl> <FormMessage />
+                            /></FormControl> <FormMessage />
                     </FormItem> )}/>
 
                 <div className="p-2 border rounded-md">
@@ -1079,14 +1075,12 @@ function AcordoFormDialog({ debitos, config, onSubmit, isSubmitting, form, forma
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FormField control={control} name="numeroParcelas" render={({ field }) => (
                         <FormItem> <FormLabel>Número de Parcelas*</FormLabel>
-                            <FormControl> <Input type="number" min="1" {...field} onChange={e => field.onChange(parseInt(e.target.value,10) || 1)} disabled={isSubmitting}/> </FormControl> <FormMessage />
+                            <FormControl><Input type="number" min="1" {...field} onChange={e => field.onChange(parseInt(e.target.value,10) || 1)} disabled={isSubmitting}/></FormControl> <FormMessage />
                         </FormItem> )}/>
                     <FormField control={control} name="tipoParcelamento" render={({ field }) => (
                         <FormItem> <FormLabel>Frequência Parcelas*</FormLabel>
                             <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
-                                <FormControl>
-                                    <SelectTrigger><SelectValue /></SelectTrigger>
-                                </FormControl>
+                                <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                                 <SelectContent>
                                     <SelectItem value="unica">Única</SelectItem>
                                     <SelectItem value="semanal">Semanal</SelectItem>
@@ -1099,16 +1093,14 @@ function AcordoFormDialog({ debitos, config, onSubmit, isSubmitting, form, forma
                  <FormField control={control} name="dataVencimentoPrimeiraParcela" render={({ field }) => (
                     <FormItem className="flex flex-col"> <FormLabel>Vencimento 1ª Parcela*</FormLabel>
                         <Popover> <PopoverTrigger asChild> 
-                        <FormControl>
-                            <Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal",!field.value && "text-muted-foreground")} disabled={isSubmitting}>
+                        <FormControl><Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal",!field.value && "text-muted-foreground")} disabled={isSubmitting}>
                                 <span className="flex w-full items-center justify-between">
                                     <span>
                                         {field.value ? format(new Date(field.value), "dd/MM/yyyy", {locale: ptBR}) : "Selecione a data"}
                                     </span>
                                     <CalendarIcon className="h-4 w-4 opacity-50"/>
                                 </span>
-                            </Button>
-                        </FormControl>
+                            </Button></FormControl>
                          </PopoverTrigger>
                         <PopoverContent className="w-auto p-0" align="start">
                             <Calendar mode="single" selected={field.value ? new Date(field.value) : undefined} onSelect={field.onChange} disabled={(date) => date < startOfDay(new Date()) || isSubmitting} initialFocus/>
@@ -1134,7 +1126,7 @@ function AcordoFormDialog({ debitos, config, onSubmit, isSubmitting, form, forma
                 )}
                 <FormField control={control} name="observacoes" render={({ field }) => (
                     <FormItem> <FormLabel>Observações do Acordo</FormLabel>
-                        <FormControl> <Textarea placeholder="Detalhes adicionais sobre o acordo..." {...field} disabled={isSubmitting}/> </FormControl> <FormMessage />
+                        <FormControl><Textarea placeholder="Detalhes adicionais sobre o acordo..." {...field} disabled={isSubmitting}/></FormControl> <FormMessage />
                     </FormItem> )}/>
 
                 <DialogFooter className="mt-4 pt-4 border-t">
@@ -1145,3 +1137,4 @@ function AcordoFormDialog({ debitos, config, onSubmit, isSubmitting, form, forma
         </Form>
     );
 }
+
