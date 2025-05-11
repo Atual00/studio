@@ -1,4 +1,5 @@
 
+
 'use client'; // Required for state and client-side interaction
 
 import React, { useState, useEffect, useMemo } from 'react'; // Import React
@@ -23,6 +24,7 @@ import type { ConfiguracoesFormValues } from '@/components/configuracoes/configu
 import { fetchDebitos, updateDebitoStatus, type Debito, addDebitoAvulso, type DebitoAvulsoFormData, saveDebitosToStorage } from '@/services/licitacaoService'; // Import from licitacaoService
 import { fetchConfiguracoes } from '@/services/configuracoesService'; // Import config service
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger, DialogClose } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -36,7 +38,6 @@ import {
   FormMessage,
   FormLabel,
   FormItem, // Added FormItem
-  useFormField, // Added useFormField
 } from "@/components/ui/form";
 import { fetchClients, type ClientListItem } from '@/services/clientService';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
@@ -104,6 +105,18 @@ const parseAndValidateDate = (dateInput: string | Date | null | undefined): Date
     }
     return null;
 }
+
+const formatCnpjInput = (value: string | undefined): string => {
+    if (!value) return ''; const digits = value.replace(/\D/g, '');
+    return digits.replace(/^(\d{2})(\d)/, '$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d)/, '.$1/$2').replace(/(\d{4})(\d)/, '$1-$2').slice(0, 18);
+};
+
+const formatCurrencyInput = (value: string | undefined | number): string => {
+    if (value === undefined || value === null) return '';
+    const numValue = typeof value === 'number' ? value : parseFloat(value.replace(/[R$\s.]/g, '').replace(',', '.'));
+    if (isNaN(numValue)) return '';
+    return numValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
 
 
 // --- Component ---
@@ -588,17 +601,6 @@ export default function FinanceiroPage() {
         } finally { setIsSubmittingDebitoAvulso(false); }
     };
 
-    const formatCnpjInput = (value: string | undefined): string => {
-        if (!value) return ''; const digits = value.replace(/\D/g, '');
-        return digits.replace(/^(\d{2})(\d)/, '$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d)/, '.$1/$2').replace(/(\d{4})(\d)/, '$1-$2').slice(0, 18);
-    };
-
-    const formatCurrencyInput = (value: string | undefined): string => {
-        if (!value) return ''; const digits = value.replace(/\D/g, ''); if (digits === '') return '';
-        const number = parseFloat(digits) / 100;
-        return number.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    };
-
     const handleOpenAcordoDialog = () => {
         const selected = allDebitos.filter(d => selectedDebitos.has(d.id) && (d.status === 'PENDENTE' || d.status === 'ACORDO_PARCELA'));
         if (selected.length === 0) {
@@ -635,7 +637,7 @@ export default function FinanceiroPage() {
             setIsSubmittingAcordo(false);
             return;
         }
-        const valorParcela = numeroParcelas > 0 ? parseFloat((valorFinalAcordo / data.numeroParcelas).toFixed(2)) : 0;
+        const valorParcela = data.numeroParcelas > 0 ? parseFloat((valorFinalAcordo / data.numeroParcelas).toFixed(2)) : 0;
 
         let proximoVencimento = startOfDay(data.dataVencimentoPrimeiraParcela);
 
@@ -830,43 +832,16 @@ export default function FinanceiroPage() {
                                     <FormField control={debitoAvulsoForm.control} name="clienteCnpj" render={({ field }) => ( <FormItem> <FormLabel>CNPJ do Cliente</FormLabel> <FormControl><Input placeholder="XX.XXX.XXX/XXXX-XX (Opcional)" {...field} onChange={(e) => field.onChange(formatCnpjInput(e.target.value))} disabled={isSubmittingDebitoAvulso} /></FormControl> <FormMessage /> </FormItem> )}/>
                                     <FormField control={debitoAvulsoForm.control} name="descricao" render={({ field }) => ( <FormItem> <FormLabel>Descrição do Débito*</FormLabel> <FormControl><Textarea placeholder="Ex: Consultoria XYZ, Taxa de Serviço..." {...field} disabled={isSubmittingDebitoAvulso} /></FormControl> <FormMessage /> </FormItem> )}/>
                                     <FormField control={debitoAvulsoForm.control} name="valor" render={({ field }) => ( <FormItem> <FormLabel>Valor do Débito*</FormLabel> <FormControl><Input type="text" placeholder="R$ 0,00" value={field.value !== undefined ? formatCurrencyInput(field.value.toString()) : ''} onChange={(e) => { const rawValue = e.target.value; const cleaned = rawValue.replace(/\D/g, ''); if (cleaned === '') { field.onChange(undefined); } else { const numValue = parseFloat(cleaned) / 100; field.onChange(isNaN(numValue) ? undefined : numValue); } }} onBlur={(e) => { if (field.value !== undefined) { e.target.value = formatCurrencyInput(field.value.toString()); } }} disabled={isSubmittingDebitoAvulso} inputMode="decimal" /></FormControl> <FormMessage /> </FormItem> )}/>
-                                    <FormField control={debitoAvulsoForm.control} name="dataVencimento" render={({ field }) => {
-                                        const { formItemId, formDescriptionId, formMessageId, error } = useFormField();
-                                        return (
-                                            <FormItem className="flex flex-col">
-                                                <FormLabel>Data de Vencimento*</FormLabel>
-                                                <Popover>
-                                                    <PopoverTrigger asChild>
-                                                        <Button
-                                                            variant={"outline"}
-                                                            className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}
-                                                            disabled={isSubmittingDebitoAvulso}
-                                                            id={formItemId}
-                                                            aria-describedby={!error ? formDescriptionId : `${formDescriptionId} ${formMessageId}`}
-                                                            aria-invalid={!!error}
-                                                        >
-                                                            <span className="flex w-full items-center justify-between">
-                                                                <span>
-                                                                    {field.value ? (format(field.value, "dd/MM/yyyy", { locale: ptBR })) : ("Selecione a data")}
-                                                                </span>
-                                                                <CalendarIcon className="h-4 w-4 opacity-50" />
-                                                            </span>
-                                                        </Button>
-                                                    </PopoverTrigger>
-                                                    <PopoverContent className="w-auto p-0" align="start">
-                                                        <Calendar
-                                                            mode="single"
-                                                            selected={field.value}
-                                                            onSelect={(date) => field.onChange(date || null)}
-                                                            disabled={(dateParam) => (dateParam ? dateParam < startOfDay(new Date()) : false) || isSubmittingDebitoAvulso}
-                                                            initialFocus
-                                                        />
-                                                    </PopoverContent>
-                                                </Popover>
-                                                <FormMessage />
-                                            </FormItem>
-                                        );
-                                    }} />
+                                    <FormField control={debitoAvulsoForm.control} name="dataVencimento" render={({ field }) => ( <FormItem className="flex flex-col"> <FormLabel>Data de Vencimento*</FormLabel> <Popover> <PopoverTrigger asChild> <FormControl>
+                                        <Button variant={"outline"} className={cn( "w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground" )} disabled={isSubmittingDebitoAvulso} > 
+                                            <span className="flex w-full items-center justify-between">
+                                                <span>
+                                                    {field.value ? (format(field.value, "dd/MM/yyyy", { locale: ptBR })) : ("Selecione a data")}
+                                                </span>
+                                                <CalendarIcon className="h-4 w-4 opacity-50"/>
+                                            </span>
+                                        </Button>
+                                    </FormControl> </PopoverTrigger> <PopoverContent className="w-auto p-0" align="start"> <Calendar mode="single" selected={field.value} onSelect={(date) => field.onChange(date || null)} disabled={(dateParam) => (dateParam ? dateParam < startOfDay(new Date()) : false) || isSubmittingDebitoAvulso} initialFocus /> </PopoverContent> </Popover> <FormMessage/> </FormItem> )}/>
                                     <DialogFooter> <DialogClose asChild><Button type="button" variant="outline" disabled={isSubmittingDebitoAvulso}>Cancelar</Button></DialogClose> <Button type="submit" disabled={isSubmittingDebitoAvulso}> {isSubmittingDebitoAvulso && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Adicionar Débito </Button> </DialogFooter>
                                 </form>
                             </Form>
@@ -885,18 +860,16 @@ export default function FinanceiroPage() {
                         <Popover>
                             <PopoverTrigger asChild>
                                 <Button id="date" variant={"outline"} className={cn("w-full justify-start text-left font-normal", !dateRange && "text-muted-foreground")}>
-                                    
-                                        <CalendarIcon className="mr-2 h-4 w-4 inline-block" />
-                                        {dateRange?.from ? (
-                                            dateRange.to ? (
-                                                <>{format(dateRange.from, "dd/MM/yy", { locale: ptBR })} - {format(dateRange.to, "dd/MM/yy", { locale: ptBR })}</>
-                                            ) : (
-                                                format(dateRange.from, "dd/MM/yyyy", { locale: ptBR })
-                                            )
+                                    <CalendarIcon className="mr-2 h-4 w-4 inline-block" />
+                                    {dateRange?.from ? (
+                                        dateRange.to ? (
+                                            <>{format(dateRange.from, "dd/MM/yy", { locale: ptBR })} - {format(dateRange.to, "dd/MM/yy", { locale: ptBR })}</>
                                         ) : (
-                                            "Data Referência"
-                                        )}
-                                    
+                                            format(dateRange.from, "dd/MM/yyyy", { locale: ptBR })
+                                        )
+                                    ) : (
+                                        "Data Referência"
+                                    )}
                                 </Button>
                             </PopoverTrigger>
                             <PopoverContent className="w-auto p-0" align="start">
@@ -1118,17 +1091,13 @@ function AcordoFormDialog({ debitos, config, onSubmit, isSubmitting, form }: Aco
                             </Select> <FormMessage />
                         </FormItem> )}/>
                 </div>
-                 <FormField control={control} name="dataVencimentoPrimeiraParcela" render={({ field }) => {
-                    const { formItemId, formDescriptionId, formMessageId, error } = useFormField();
-                    return (
+                 <FormField control={control} name="dataVencimentoPrimeiraParcela" render={({ field }) => ( 
                     <FormItem className="flex flex-col"> <FormLabel>Vencimento 1ª Parcela*</FormLabel>
                         <Popover> <PopoverTrigger asChild> 
+                        <FormControl>
                         <Button variant={"outline"}
                             className={cn("w-full pl-3 text-left font-normal",!field.value && "text-muted-foreground")}
                             disabled={isSubmitting}
-                            id={formItemId}
-                            aria-describedby={!error ? formDescriptionId : `${formDescriptionId} ${formMessageId}`}
-                            aria-invalid={!!error}
                         >
                                 <span className="flex w-full items-center justify-between">
                                     <span>
@@ -1137,13 +1106,13 @@ function AcordoFormDialog({ debitos, config, onSubmit, isSubmitting, form }: Aco
                                     <CalendarIcon className="h-4 w-4 opacity-50"/>
                                 </span>
                             </Button>
+                        </FormControl>
                          </PopoverTrigger>
                         <PopoverContent className="w-auto p-0" align="start">
                             <Calendar mode="single" selected={field.value ? new Date(field.value) : undefined} onSelect={(date) => field.onChange(date || null)} disabled={(dateParam) => (dateParam ? dateParam < startOfDay(new Date()) : false) || isSubmitting} initialFocus/>
                         </PopoverContent> </Popover> <FormMessage/>
                     </FormItem> 
-                    );
-                 }}/>
+                 )}/>
 
                 {parcelasPreview.length > 0 && (
                     <div className="mt-4 space-y-2">
