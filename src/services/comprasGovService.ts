@@ -158,7 +158,7 @@ export const consultarContratacoesPNCP = async (params: ConsultarContratacoesPNC
   if (params.contratacaoDesconsiderada !== undefined) {
     apiParams.contratacaoDesconsiderada = params.contratacaoDesconsiderada;
   }
-  return fetchFromComprasGov<any>('/modulo-contratacoes/1_consultarContratacoes_PNCP_14133', apiParams);
+  return fetchFromComprasGov<any>('/modulocontratacoes/1_consultarContratacoes_PNCP_14133', apiParams);
 };
 
 
@@ -190,7 +190,7 @@ export const consultarItensContratacoesPNCP = async (params: ConsultarItensContr
   if (params.bps !== undefined) apiParams.bps = params.bps;
   if (params.margemPreferenciaNormal !== undefined) apiParams.margemPreferenciaNormal = params.margemPreferenciaNormal;
   
-  return fetchFromComprasGov<any>('/modulo-contratacoes/2_consultarItensContratacoes_PNCP_14133', apiParams);
+  return fetchFromComprasGov<any>('/modulocontratacoes/2_consultarItensContratacoes_PNCP_14133', apiParams);
 };
 
 // 3. Consultar Resultado dos Itens das Contratações PNCP (Lei 14.133/2021)
@@ -219,6 +219,99 @@ export const consultarResultadoItensPNCP = async (params: ConsultarResultadoIten
   if (params.aplicacaoBeneficioMeepp !== undefined) apiParams.aplicacaoBeneficioMeepp = params.aplicacaoBeneficioMeepp;
   if (params.aplicacaoCriterioDesempate !== undefined) apiParams.aplicacaoCriterioDesempate = params.aplicacaoCriterioDesempate;
 
-  return fetchFromComprasGov<any>('/modulo-contratacoes/3_consultarResultadoItensContratacoes_PNCP_14133', apiParams);
+  return fetchFromComprasGov<any>('/modulocontratacoes/3_consultarResultadoItensContratacoes_PNCP_14133', apiParams);
 };
 
+
+// --- MÓDULO LEGADO ENDPOINTS ---
+// The user seems to have pasted the PNCP docs again, but the intent was to create legacy module functions.
+// The existing stubs for legacy are good, just need to ensure they use the correct path structure.
+// The legacy path typically is /modulo-legado/ENDPOINT_NAME
+
+// 1. Consultar Licitação (Lei 8.666/93)
+export interface ConsultarLicitacaoLegadoParams {
+  pagina?: number;
+  tamanhoPagina?: number;
+  uasg?: number;
+  numero_aviso?: number; // Snake case as per typical API patterns
+  modalidade?: number;
+  data_publicacao_inicial: string; // YYYY-MM-DD
+  data_publicacao_final: string;   // YYYY-MM-DD
+}
+export const consultarLicitacaoLegado = (params: ConsultarLicitacaoLegadoParams) =>
+  fetchFromComprasGov<any>('/modulo-legado/1_consultarLicitacao', params);
+
+// 2. Consultar Itens de Licitações (Lei 8.666/93)
+export interface ConsultarItemLicitacaoLegadoParams {
+  pagina?: number;
+  tamanhoPagina?: number;
+  uasg?: number;
+  numero_aviso?: number;
+  modalidade: number; // Obrigatório
+  codigo_item_material?: number;
+  codigo_item_servico?: number;
+  cnpj_fornecedor?: string;
+  cpfVencedor?: string; // Assuming this is correct from user's initial prompt
+}
+export const consultarItemLicitacaoLegado = (params: ConsultarItemLicitacaoLegadoParams) =>
+  fetchFromComprasGov<any>('/modulo-legado/2_consultarItemLicitacao', params);
+
+// 3. Consultar Pregão
+export interface ConsultarPregoesLegadoParams {
+  pagina?: number;
+  tamanhoPagina?: number;
+  co_uasg?: number;
+  numero?: number;
+  dt_data_edital_inicial: string; // YYYY-MM-DD
+  dt_data_edital_final: string;   // YYYY-MM-DD
+}
+export const consultarPregoesLegado = (params: ConsultarPregoesLegadoParams) =>
+  fetchFromComprasGov<any>('/modulo-legado/3_consultarPregoes', params);
+
+// 4. Consultar Itens de Pregões
+export interface ConsultarItensPregoesLegadoParams {
+  pagina?: number;
+  tamanhoPagina?: number;
+  co_uasg?: number;
+  dt_hom_inicial: string; // YYYY-MM-DD
+  dt_hom_final: string;   // YYYY-MM-DD
+}
+export const consultarItensPregoesLegado = (params: ConsultarItensPregoesLegadoParams) =>
+  fetchFromComprasGov<any>('/modulo-legado/4_consultarItensPregoes', params);
+
+// 5. Consultar Compra sem Licitação (Dispensa/Inexigibilidade)
+export interface ConsultarComprasSemLicitacaoLegadoParams {
+  pagina?: number;
+  tamanhoPagina?: number;
+  dt_ano_aviso: number; // Obrigatório
+  co_uasg?: number;
+  co_modalidade_licitacao?: 6 | 7; // 6: Dispensa, 7: Inexigibilidade
+  // Add other optional date params if needed: dt_declaracao_dispensa, dt_ratificacao, dt_publicacao
+}
+export const consultarComprasSemLicitacaoLegado = (params: ConsultarComprasSemLicitacaoLegadoParams) =>
+  fetchFromComprasGov<any>('/modulo-legado/5_consultarComprasSemLicitacao', params);
+
+// 6. Consultar Itens de Compras sem Licitação
+export interface ConsultarCompraItensSemLicitacaoLegadoParams {
+  pagina?: number;
+  tamanhoPagina?: number;
+  dt_ano_aviso_licitacao: number; // Obrigatório
+  co_uasg?: number;
+  co_modalidade_licitacao?: number;
+  co_conjunto_materiais?: number;
+  co_servico?: number;
+  nu_cpf_cnpj_fornecedor?: string;
+}
+export const consultarCompraItensSemLicitacaoLegado = (params: ConsultarCompraItensSemLicitacaoLegadoParams) =>
+  fetchFromComprasGov<any>('/modulo-legado/6_consultarCompraItensSemLicitacao', params);
+
+// 7. Consultar RDC (Regime Diferenciado de Contratações)
+export interface ConsultarRdcLegadoParams {
+  pagina?: number;
+  tamanhoPagina?: number;
+  data_publicacao_min: string; // YYYY-MM-DD Obrigatório
+  data_publicacao_max: string;   // YYYY-MM-DD Obrigatório
+  // Add other optional params as needed: uasg, modalidade, numero_aviso, objeto, etc.
+}
+export const consultarRdcLegado = (params: ConsultarRdcLegadoParams) =>
+  fetchFromComprasGov<any>('/modulo-legado/7_consultarRdc', params);
