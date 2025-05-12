@@ -1,17 +1,21 @@
+
 'use client';
 
 import { format, parseISO, isValid } from 'date-fns'; // Added parseISO and isValid
 
-const PLACEHOLDER_PROXY_URL = '!!CONFIGURE_PROXY_URL_IN_ENV_VARIABLE!!';
+// IMPORTANT: REPLACE THIS WITH YOUR ACTUAL CLOUD FUNCTION URL
+const PLACEHOLDER_PROXY_URL = 'https://YOUR_REGION-YOUR_PROJECT_ID.cloudfunctions.net/consultarApiComprasGov';
 const PROXY_URL = process.env.NEXT_PUBLIC_COMPRAS_GOV_PROXY_URL || PLACEHOLDER_PROXY_URL;
 
-if (PROXY_URL === PLACEHOLDER_PROXY_URL) {
+if (PROXY_URL === PLACEHOLDER_PROXY_URL && process.env.NODE_ENV !== 'test') { // Added NODE_ENV check for testing
   console.error(
     "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n" +
     "CRITICAL ERROR: A URL da Cloud Function para o Compras.gov.br NÃO ESTÁ CONFIGURADA!\n" +
     `Por favor, defina a variável de ambiente NEXT_PUBLIC_COMPRAS_GOV_PROXY_URL no seu arquivo .env (ou similar).\n` +
     `O valor atual é o placeholder: "${PLACEHOLDER_PROXY_URL}".\n` +
     "As consultas à API do Compras.gov.br NÃO FUNCIONARÃO até que isso seja corrigido.\n" +
+    "Você deve substituir o valor acima pela URL da sua Cloud Function implantada.\n" +
+    "Exemplo: https://southamerica-east1-meuprojeto-12345.cloudfunctions.net/consultarApiComprasGov\n"+
     "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
   );
 }
@@ -46,7 +50,7 @@ async function fetchFromComprasGov<T>(
   params: ComprasGovParams
 ): Promise<ComprasGovApiResponse<T>> {
   // Upfront check for placeholder URL
-  if (PROXY_URL === PLACEHOLDER_PROXY_URL) {
+  if (PROXY_URL === PLACEHOLDER_PROXY_URL && process.env.NODE_ENV !== 'test') {
     const configErrorMsg = "CONFIGURAÇÃO NECESSÁRIA: A URL do proxy (NEXT_PUBLIC_COMPRAS_GOV_PROXY_URL) não está configurada. " +
                            "Por favor, defina esta variável no seu arquivo .env com a URL da sua Cloud Function. " +
                            "As consultas à API do Compras.gov.br não podem continuar sem esta configuração.";
@@ -68,7 +72,7 @@ async function fetchFromComprasGov<T>(
     }
   }
 
-  queryParams.set('endpoint', apiEndpointPath);
+  queryParams.set('endpoint', apiEndpointPath); // Pass the target Compras.gov.br endpoint path to the proxy
 
   const url = `${PROXY_URL}?${queryParams.toString()}`;
   console.log(`Consultando API Compras.gov.br via Proxy: ${url}`);
@@ -99,12 +103,11 @@ async function fetchFromComprasGov<T>(
       console.error(`Error from proxy/API for target endpoint ${apiEndpointPath}: Status ${response.status}`, "Raw body sample:", errorBodyText, "Parsed error data:", errorData);
 
       let detailedMessage = `Falha na consulta via proxy para o endpoint '${apiEndpointPath}' (Status: ${response.status}).`;
-      // This specific check for placeholder is now less likely to be hit here due to the upfront check,
-      // but kept for robustness in case the placeholder value changes or the upfront check is bypassed.
-      if (response.status === 404 && PROXY_URL === PLACEHOLDER_PROXY_URL) {
-        detailedMessage += ` A URL do proxy está configurada com o valor placeholder. Verifique a configuração de NEXT_PUBLIC_COMPRAS_GOV_PROXY_URL no seu arquivo .env.`;
+      
+      if (response.status === 404 && PROXY_URL === PLACEHOLDER_PROXY_URL && process.env.NODE_ENV !== 'test') {
+        detailedMessage += ` A URL do proxy (NEXT_PUBLIC_COMPRAS_GOV_PROXY_URL) está configurada com o valor placeholder. Verifique a configuração no seu arquivo .env.`;
       } else if (response.status === 404) {
-         detailedMessage += ` Verifique se a URL do proxy (NEXT_PUBLIC_COMPRAS_GOV_PROXY_URL=${PROXY_URL}) está correta e se a função/serviço no proxy está implantada e acessível no caminho esperado. URL completa da requisição ao proxy: ${url}.`;
+         detailedMessage += ` Verifique se a URL do proxy (NEXT_PUBLIC_COMPRAS_GOV_PROXY_URL=${PROXY_URL}) está correta e se a Cloud Function está implantada e acessível no caminho esperado ('${new URL(PROXY_URL).pathname}'). URL completa da requisição ao proxy: ${url}. O endpoint de destino na API do Compras.gov.br ('${apiEndpointPath}') pode não existir ou a Cloud Function não conseguiu encontrá-lo.`;
       }
       
       const serviceErrorMessage = errorData?.message || errorData?.fault?.faultstring || errorData?.errors?.[0]?.message || errorData?._embedded?.errors?.[0]?.message || response.statusText || "Erro desconhecido do serviço.";
@@ -123,8 +126,7 @@ async function fetchFromComprasGov<T>(
     console.error('Network or other error in fetchFromComprasGov for endpoint', apiEndpointPath, 'using proxy URL', PROXY_URL, 'Full URL attempted:', url, 'Error:', error);
     if (error instanceof TypeError && error.message.toLowerCase().includes('failed to fetch')) {
       let additionalInfo = "";
-      // This check for placeholder in TypeError is now less likely due to upfront check.
-      if (PROXY_URL === PLACEHOLDER_PROXY_URL) {
+      if (PROXY_URL === PLACEHOLDER_PROXY_URL && process.env.NODE_ENV !== 'test') {
         additionalInfo = "A URL do proxy (NEXT_PUBLIC_COMPRAS_GOV_PROXY_URL) está configurada com o valor placeholder. Configure NEXT_PUBLIC_COMPRAS_GOV_PROXY_URL no seu arquivo .env.";
       }
       throw new Error(
@@ -136,7 +138,8 @@ async function fetchFromComprasGov<T>(
         `Erro original: ${error.message}`
       );
     } else if (error instanceof Error) {
-      if (error.message.startsWith('Falha na consulta via proxy')) {
+      // Re-throw specific errors from the try block if they are already detailed
+      if (error.message.startsWith('Falha na consulta via proxy para o endpoint')) {
         throw error;
       }
       throw new Error(`Erro ao processar consulta para '${apiEndpointPath}': ${error.message}`);
@@ -238,6 +241,10 @@ export const consultarResultadoItensPNCP = async (params: ConsultarResultadoIten
 
 
 // --- MÓDULO LEGADO ENDPOINTS ---
+// Note: These endpoints are less likely to work if the proxy path is '/consultarApiComprasGov' 
+// which was designed for '/modulo-contratacoes'. If the proxy is generic enough to handle 
+// '/modulo-legado' as well, these might work. Otherwise, a separate proxy or a modified
+// proxy function might be needed if the base path in the proxy is hardcoded for contratacoes.
 
 // 1. Consultar Licitação (Lei 8.666/93)
 export interface ConsultarLicitacaoLegadoParams {
