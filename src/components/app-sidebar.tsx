@@ -14,6 +14,7 @@ import {
   Settings,
   Briefcase,
   Flame, // Icon for Sala de Disputa
+  DatabaseZap, // Icon for Consulta Legado
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
@@ -38,6 +39,7 @@ const baseMenuItems = [
   { href: '/senhas', label: 'Senhas', icon: KeyRound },
   { href: '/calendario/metas', label: 'Calendário Metas', icon: CalendarDays },
   { href: '/calendario/disputas', label: 'Calendário Disputas', icon: CalendarDays },
+  { href: '/consulta-legado', label: 'Consulta Legado', icon: DatabaseZap },
   // { href: '/crm', label: 'CRM', icon: Briefcase }, // Placeholder
 ];
 
@@ -101,4 +103,3 @@ export default function AppSidebar() {
     </>
   );
 }
-
