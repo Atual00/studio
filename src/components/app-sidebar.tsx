@@ -39,8 +39,7 @@ const baseMenuItems = [
   { href: '/senhas', label: 'Senhas', icon: KeyRound },
   { href: '/calendario/metas', label: 'Calendário Metas', icon: CalendarDays },
   { href: '/calendario/disputas', label: 'Calendário Disputas', icon: CalendarDays },
-  { href: '/consulta-legado', label: 'Consulta Legado', icon: DatabaseZap },
-  // { href: '/crm', label: 'CRM', icon: Briefcase }, // Placeholder
+  { href: '/consulta-pncp', label: 'Consulta Licitações', icon: DatabaseZap }, // Updated
 ];
 
 const adminMenuItems = [
@@ -58,6 +57,15 @@ export default function AppSidebar() {
     // For nested calendar routes, ensure base calendar link isn't active if a sub-route is.
     if (href === '/calendario/metas' && pathname.startsWith('/calendario/disputas')) return false;
     if (href === '/calendario/disputas' && pathname.startsWith('/calendario/metas')) return false;
+
+    // For consulta-pncp and its sub-routes
+    if (href === '/consulta-pncp' && pathname.startsWith('/consulta-pncp/')) {
+        return pathname === '/consulta-pncp' || pathname.startsWith('/consulta-pncp');
+    }
+    if (pathname.startsWith('/consulta-pncp/') && href === '/consulta-pncp') {
+        return true; // Keep main link active for sub-routes
+    }
+
 
     return pathname.startsWith(href);
   };

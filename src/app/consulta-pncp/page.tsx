@@ -1,7 +1,7 @@
 
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { ListChecks, Search, FileText, Package, FileArchive, Users, Gavel } from 'lucide-react'; // Added Gavel
+import { FileSearch, FileCheck2, ListFilter } from 'lucide-react';
 
 interface ConsultaLink {
   href: string;
@@ -12,56 +12,26 @@ interface ConsultaLink {
 
 const consultaLinks: ConsultaLink[] = [
   {
-    href: '/consulta-legado/licitacoes',
-    title: 'Consultar Licitações (Lei 8.666/93)',
-    description: 'Obtenha dados sobre Convites, Tomadas de Preços e Concorrências.',
-    icon: ListChecks,
+    href: '/consulta-pncp/itens-contratacoes',
+    title: 'Consultar Itens de Contratações (PNCP Lei 14.133/2021)',
+    description: 'Obtenha dados sobre itens de contratações publicados no PNCP.',
+    icon: FileSearch,
   },
   {
-    href: '/consulta-legado/itens-licitacoes',
-    title: 'Consultar Itens de Licitações',
-    description: 'Detalhes dos itens das licitações (Convite, TP, Concorrência).',
-    icon: Package,
-  },
-  {
-    href: '/consulta-legado/pregoes',
-    title: 'Consultar Pregões',
-    description: 'Acesse informações gerais sobre pregões realizados.',
-    icon: Search,
-  },
-  {
-    href: '/consulta-legado/itens-pregoes',
-    title: 'Consultar Itens de Pregões',
-    description: 'Detalhes dos itens de pregões, incluindo informações de homologação.',
-    icon: FileArchive,
-  },
-  {
-    href: '/consulta-legado/compras-sem-licitacao',
-    title: 'Consultar Compras Sem Licitação',
-    description: 'Informações sobre Dispensas e Inexigibilidades.',
-    icon: FileText,
-  },
-  {
-    href: '/consulta-legado/itens-compras-sem-licitacao',
-    title: 'Consultar Itens de Compras Sem Licitação',
-    description: 'Detalhes dos itens de Dispensas e Inexigibilidades.',
-    icon: Users, // Using Users icon as a placeholder for items
-  },
-  {
-    href: '/consulta-legado/rdc',
-    title: 'Consultar RDC',
-    description: 'Dados sobre licitações no Regime Diferenciado de Contratações.',
-    icon: Gavel, // Using Gavel for RDC, similar to licitações
+    href: '/consulta-pncp/resultado-itens',
+    title: 'Consultar Resultado dos Itens (PNCP Lei 14.133/2021)',
+    description: 'Acesse os resultados associados aos itens contratados via PNCP.',
+    icon: FileCheck2,
   },
 ];
 
-export default function ConsultaLegadoPage() {
+export default function ConsultaPncpPage() {
   return (
     <div className="space-y-6">
       <CardHeader className="px-0">
-        <CardTitle className="text-2xl font-semibold">Consulta ao Módulo Legado - Compras.gov.br</CardTitle>
+        <CardTitle className="text-2xl font-semibold">Consulta de Licitações (Lei 14.133/2021)</CardTitle>
         <CardDescription>
-          Acesse dados abertos de licitações, pregões e compras diretas do sistema legado do Compras.gov.br.
+          Acesse dados abertos de contratações (PNCP) do Compras.gov.br regidas pela nova Lei de Licitações.
         </CardDescription>
       </CardHeader>
 
@@ -100,4 +70,3 @@ export default function ConsultaLegadoPage() {
     </div>
   );
 }
-
