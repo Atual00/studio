@@ -32,9 +32,9 @@ const formSchema = z.object({
   valorUnitarioHomologadoFinal: z.preprocess(val => val ? parseFloat(String(val).replace(',', '.')) : undefined, z.number().optional()),
   valorTotalHomologadoInicial: z.preprocess(val => val ? parseFloat(String(val).replace(',', '.')) : undefined, z.number().optional()),
   valorTotalHomologadoFinal: z.preprocess(val => val ? parseFloat(String(val).replace(',', '.')) : undefined, z.number().optional()),
-  aplicacaoMargemPreferencia: z.enum(['', 'true', 'false']).optional().transform(val => val === '' ? undefined : val === 'true'),
-  aplicacaoBeneficioMeepp: z.enum(['', 'true', 'false']).optional().transform(val => val === '' ? undefined : val === 'true'),
-  aplicacaoCriterioDesempate: z.enum(['', 'true', 'false']).optional().transform(val => val === '' ? undefined : val === 'true'),
+  aplicacaoMargemPreferencia: z.enum(['all', 'true', 'false']).optional().transform(val => val === 'all' ? undefined : val === 'true'),
+  aplicacaoBeneficioMeepp: z.enum(['all', 'true', 'false']).optional().transform(val => val === 'all' ? undefined : val === 'true'),
+  aplicacaoCriterioDesempate: z.enum(['all', 'true', 'false']).optional().transform(val => val === 'all' ? undefined : val === 'true'),
 }).refine(data => data.dataResultadoPncpFinal >= data.dataResultadoPncpInicial, {
   message: "Data final deve ser maior ou igual à data inicial.",
   path: ["dataResultadoPncpFinal"],
@@ -72,10 +72,10 @@ export default function ConsultarResultadoItensPncpPage() {
         name="aplicacaoMargemPreferencia"
         render={({ field }) => (
           <FormItem><FormLabel>Aplic. Margem Preferência?</FormLabel>
-            <Select onValueChange={field.onChange} value={field.value === undefined ? "" : String(field.value)}>
+            <Select onValueChange={field.onChange} value={field.value === undefined ? "all" : String(field.value)}>
               <FormControl><SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger></FormControl>
               <SelectContent>
-                <SelectItem value="">Todos</SelectItem>
+                <SelectItem value="all">Todos</SelectItem>
                 <SelectItem value="true">Sim</SelectItem>
                 <SelectItem value="false">Não</SelectItem>
               </SelectContent>
@@ -88,10 +88,10 @@ export default function ConsultarResultadoItensPncpPage() {
         name="aplicacaoBeneficioMeepp"
         render={({ field }) => (
           <FormItem><FormLabel>Aplic. Benefício ME/EPP?</FormLabel>
-            <Select onValueChange={field.onChange} value={field.value === undefined ? "" : String(field.value)}>
+            <Select onValueChange={field.onChange} value={field.value === undefined ? "all" : String(field.value)}>
               <FormControl><SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger></FormControl>
               <SelectContent>
-                <SelectItem value="">Todos</SelectItem>
+                <SelectItem value="all">Todos</SelectItem>
                 <SelectItem value="true">Sim</SelectItem>
                 <SelectItem value="false">Não</SelectItem>
               </SelectContent>
@@ -104,10 +104,10 @@ export default function ConsultarResultadoItensPncpPage() {
         name="aplicacaoCriterioDesempate"
         render={({ field }) => (
           <FormItem><FormLabel>Aplic. Critério Desempate?</FormLabel>
-            <Select onValueChange={field.onChange} value={field.value === undefined ? "" : String(field.value)}>
+            <Select onValueChange={field.onChange} value={field.value === undefined ? "all" : String(field.value)}>
               <FormControl><SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger></FormControl>
               <SelectContent>
-                <SelectItem value="">Todos</SelectItem>
+                <SelectItem value="all">Todos</SelectItem>
                 <SelectItem value="true">Sim</SelectItem>
                 <SelectItem value="false">Não</SelectItem>
               </SelectContent>
@@ -130,3 +130,4 @@ export default function ConsultarResultadoItensPncpPage() {
     />
   );
 }
+

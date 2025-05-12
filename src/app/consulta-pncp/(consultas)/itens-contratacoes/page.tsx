@@ -27,13 +27,13 @@ const formSchema = z.object({
   orgaoEntidadeCnpj: z.string().optional().transform(val => val || undefined),
   situacaoCompraItem: z.string().optional().transform(val => val || undefined),
   codItemCatalogo: z.preprocess(val => val ? Number(val) : undefined, z.number().optional()),
-  temResultado: z.enum(['', 'true', 'false']).optional().transform(val => val === '' ? undefined : val === 'true'),
+  temResultado: z.enum(['all', 'true', 'false']).optional().transform(val => val === 'all' ? undefined : val === 'true'),
   codFornecedor: z.string().optional().transform(val => val || undefined),
   dataInclusaoPncpInicial: z.date().optional(),
   dataInclusaoPncpFinal: z.date().optional(),
   dataAtualizacaoPncp: z.date().optional(),
-  bps: z.enum(['', 'true', 'false']).optional().transform(val => val === '' ? undefined : val === 'true'),
-  margemPreferenciaNormal: z.enum(['', 'true', 'false']).optional().transform(val => val === '' ? undefined : val === 'true'),
+  bps: z.enum(['all', 'true', 'false']).optional().transform(val => val === 'all' ? undefined : val === 'true'),
+  margemPreferenciaNormal: z.enum(['all', 'true', 'false']).optional().transform(val => val === 'all' ? undefined : val === 'true'),
   codigoNCM: z.string().optional().transform(val => val || undefined),
 }).refine(data => {
   if (data.dataInclusaoPncpInicial && data.dataInclusaoPncpFinal) {
@@ -114,10 +114,10 @@ export default function ConsultarItensContratacoesPncpPage() {
         render={({ field }) => (
           <FormItem>
             <FormLabel>Tem Resultado?</FormLabel>
-            <Select onValueChange={field.onChange} value={field.value === undefined ? "" : String(field.value)}>
+            <Select onValueChange={field.onChange} value={field.value === undefined ? "all" : String(field.value)}>
               <FormControl><SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger></FormControl>
               <SelectContent>
-                <SelectItem value="">Todos</SelectItem>
+                <SelectItem value="all">Todos</SelectItem>
                 <SelectItem value="true">Sim</SelectItem>
                 <SelectItem value="false">Não</SelectItem>
               </SelectContent>
@@ -135,10 +135,10 @@ export default function ConsultarItensContratacoesPncpPage() {
         name="bps"
         render={({ field }) => (
           <FormItem><FormLabel>Vinculado ao BPS?</FormLabel>
-            <Select onValueChange={field.onChange} value={field.value === undefined ? "" : String(field.value)}>
+            <Select onValueChange={field.onChange} value={field.value === undefined ? "all" : String(field.value)}>
               <FormControl><SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger></FormControl>
               <SelectContent>
-                <SelectItem value="">Todos</SelectItem>
+                <SelectItem value="all">Todos</SelectItem>
                 <SelectItem value="true">Sim</SelectItem>
                 <SelectItem value="false">Não</SelectItem>
               </SelectContent>
@@ -151,10 +151,10 @@ export default function ConsultarItensContratacoesPncpPage() {
         name="margemPreferenciaNormal"
         render={({ field }) => (
           <FormItem><FormLabel>Margem Preferência Normal?</FormLabel>
-            <Select onValueChange={field.onChange} value={field.value === undefined ? "" : String(field.value)}>
+            <Select onValueChange={field.onChange} value={field.value === undefined ? "all" : String(field.value)}>
               <FormControl><SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger></FormControl>
               <SelectContent>
-                <SelectItem value="">Todos</SelectItem>
+                <SelectItem value="all">Todos</SelectItem>
                 <SelectItem value="true">Sim</SelectItem>
                 <SelectItem value="false">Não</SelectItem>
               </SelectContent>
@@ -178,3 +178,4 @@ export default function ConsultarItensContratacoesPncpPage() {
     />
   );
 }
+
