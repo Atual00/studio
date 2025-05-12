@@ -14,7 +14,7 @@ import {
   Settings,
   Briefcase,
   Flame, // Icon for Sala de Disputa
-  DatabaseZap, // Icon for Consulta Legado
+  DatabaseZap, // Icon for Consulta Licitações (PNCP)
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
@@ -111,3 +111,4 @@ export default function AppSidebar() {
     </>
   );
 }
+

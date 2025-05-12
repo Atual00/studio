@@ -129,98 +129,6 @@ async function fetchFromComprasGov<T>(
   }
 }
 
-// --- LEGACY MODULE ENDPOINTS (Lei 8.666/93) ---
-
-export interface ConsultarLicitacaoParams {
-  pagina?: number;
-  tamanhoPagina?: number;
-  uasg?: number;
-  numeroAviso?: number;
-  modalidade?: number;
-  dataPublicacaoInicial: Date;
-  dataPublicacaoFinal: Date;
-}
-export const consultarLicitacao = async (params: ConsultarLicitacaoParams) => {
-  return fetchFromComprasGov<any>('/modulo-legado/1_consultarLicitacao', params);
-};
-
-export interface ConsultarItensLicitacaoParams {
-  pagina?: number;
-  tamanhoPagina?: number;
-  uasg?: number;
-  numeroAviso?: number;
-  modalidade: number;
-  codigoItemMaterial?: number;
-  codigoItemServico?: number;
-  cnpjFornecedor?: string;
-  cpfVencedor?: string;
-}
-export const consultarItensLicitacao = async (params: ConsultarItensLicitacaoParams) => {
-  return fetchFromComprasGov<any>('/modulo-legado/2_consultarItemLicitacao', params);
-};
-
-export interface ConsultarPregoesParams {
-  pagina?: number;
-  tamanhoPagina?: number;
-  coUasg?: number;
-  numero?: number;
-  dtDataEditalInicial: Date;
-  dtDataEditalFinal: Date;
-}
-export const consultarPregoes = async (params: ConsultarPregoesParams) => {
-  return fetchFromComprasGov<any>('/modulo-legado/3_consultarPregoes', params);
-};
-
-export interface ConsultarItensPregoesParams {
-  pagina?: number;
-  tamanhoPagina?: number;
-  coUasg?: number;
-  dtHomInicial: Date;
-  dtHomFinal: Date;
-}
-export const consultarItensPregoes = async (params: ConsultarItensPregoesParams) => {
-  return fetchFromComprasGov<any>('/modulo-legado/4_consultarItensPregoes', params);
-};
-
-export interface ConsultarComprasSemLicitacaoParams {
-  pagina?: number;
-  tamanhoPagina?: number;
-  dtAnoAviso: number;
-  coUasg?: number;
-  coModalidadeLicitacao?: 6 | 7;
-}
-export const consultarComprasSemLicitacao = async (params: ConsultarComprasSemLicitacaoParams) => {
-  return fetchFromComprasGov<any>('/modulo-legado/5_consultarComprasSemLicitacao', params);
-};
-
-export interface ConsultarItensComprasSemLicitacaoParams {
-  pagina?: number;
-  tamanhoPagina?: number;
-  dtAnoAvisoLicitacao: number;
-  coUasg?: number;
-  coModalidadeLicitacao?: 6 | 7;
-  coConjuntoMateriais?: number;
-  coServico?: number;
-  nuCpfCnpjFornecedor?: string;
-}
-export const consultarItensComprasSemLicitacao = async (params: ConsultarItensComprasSemLicitacaoParams) => {
-  return fetchFromComprasGov<any>('/modulo-legado/6_consultarCompraItensSemLicitacao', params);
-};
-
-export interface ConsultarRdcParams {
-  pagina?: number;
-  tamanhoPagina?: number;
-  dataPublicacaoMin: Date;
-  dataPublicacaoMax: Date;
-  uasg?: number;
-  modalidade?: number; 
-  numeroAviso?: number;
-  objeto?: string;
-}
-export const consultarRdc = async (params: ConsultarRdcParams) => {
-  return fetchFromComprasGov<any>('/modulo-legado/7_consultarRdc', params);
-};
-
 
 // --- PNCP MODULE ENDPOINTS (Lei 14.133/2021) ---
 
@@ -283,3 +191,4 @@ export const consultarResultadoItensPNCP = async (params: ConsultarResultadoIten
 
   return fetchFromComprasGov<any>('/modulo-contratacoes/3_consultarResultadoItensContratacoes_PNCP_14133', apiParams);
 };
+
