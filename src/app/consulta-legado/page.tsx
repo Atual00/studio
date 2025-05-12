@@ -1,7 +1,7 @@
 
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { ListChecks, Search, FileText, Package, FileArchive, Users } from 'lucide-react'; // Added Package, FileArchive, Users icons
+import { ListChecks, Search, FileText, Package, FileArchive, Users, Gavel } from 'lucide-react'; // Added Gavel
 
 interface ConsultaLink {
   href: string;
@@ -100,3 +100,4 @@ export default function ConsultaLegadoPage() {
     </div>
   );
 }
+
