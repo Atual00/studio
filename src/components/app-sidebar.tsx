@@ -39,7 +39,7 @@ const baseMenuItems = [
   { href: '/senhas', label: 'Senhas', icon: KeyRound },
   { href: '/calendario/metas', label: 'Calendário Metas', icon: CalendarDays },
   { href: '/calendario/disputas', label: 'Calendário Disputas', icon: CalendarDays },
-  { href: '/consulta-pncp', label: 'Consulta Licitações', icon: DatabaseZap }, // Updated
+  { href: '/consulta-pncp', label: 'Consultas PNCP', icon: DatabaseZap },
 ];
 
 const adminMenuItems = [
@@ -59,12 +59,13 @@ export default function AppSidebar() {
     if (href === '/calendario/disputas' && pathname.startsWith('/calendario/metas')) return false;
 
     // For consulta-pncp and its sub-routes
-    if (href === '/consulta-pncp' && pathname.startsWith('/consulta-pncp/')) {
-        return pathname === '/consulta-pncp' || pathname.startsWith('/consulta-pncp');
+    if (href === '/consulta-pncp') { // Check if the main consulta-pncp link is active
+        return pathname === '/consulta-pncp' || pathname.startsWith('/consulta-pncp/');
     }
-    if (pathname.startsWith('/consulta-pncp/') && href === '/consulta-pncp') {
-        return true; // Keep main link active for sub-routes
-    }
+    // For /consulta-legado (if it existed and had sub-routes)
+    // if (href === '/consulta-legado') {
+    //     return pathname === '/consulta-legado' || pathname.startsWith('/consulta-legado/');
+    // }
 
 
     return pathname.startsWith(href);

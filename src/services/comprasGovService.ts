@@ -132,6 +132,36 @@ async function fetchFromComprasGov<T>(
 
 // --- PNCP MODULE ENDPOINTS (Lei 14.133/2021) ---
 
+// 1. Consultar Contratações PNCP (Lei 14.133/2021)
+export interface ConsultarContratacoesPNCPParams {
+  pagina?: number;
+  tamanhoPagina?: number;
+  dataPublicacaoPncpInicial: Date; // Obrigatório
+  dataPublicacaoPncpFinal: Date;   // Obrigatório
+  codigoModalidade: number;        // Obrigatório
+  unidadeOrgaoCodigoUnidade?: number;
+  orgaoEntidadeCnpj?: string;
+  itemCategoriaIdPncp?: number;
+  criterioJulgamentoIdPncp?: number;
+  tipoInstrumentoConvocatorioId?: number;
+  amparoLegalId?: number;
+  modoDisputaId?: number;
+  situacaoCompraId?: number;
+  sequencialCompra?: number;
+  anoCompra?: number;
+  dataAtualizacaoPncp?: Date | null;
+  contratacaoDesconsiderada?: boolean; // 0 or 1
+}
+
+export const consultarContratacoesPNCP = async (params: ConsultarContratacoesPNCPParams) => {
+  const apiParams = { ...params };
+  if (params.contratacaoDesconsiderada !== undefined) {
+    apiParams.contratacaoDesconsiderada = params.contratacaoDesconsiderada;
+  }
+  return fetchFromComprasGov<any>('/modulo-contratacoes/1_consultarContratacoes_PNCP_14133', apiParams);
+};
+
+
 // 2. Consultar Itens de Contratações PNCP (Lei 14.133/2021)
 export interface ConsultarItensContratacoesPNCPParams {
   pagina?: number;

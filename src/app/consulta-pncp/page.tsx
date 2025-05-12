@@ -1,7 +1,7 @@
 
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { FileSearch, FileCheck2, ListFilter } from 'lucide-react';
+import { FileSearch, FileCheck2, ListFilter, Building } from 'lucide-react'; // Added Building icon
 
 interface ConsultaLink {
   href: string;
@@ -11,6 +11,12 @@ interface ConsultaLink {
 }
 
 const consultaLinks: ConsultaLink[] = [
+  {
+    href: '/consulta-pncp/contratacoes',
+    title: 'Consultar Contratações (PNCP Lei 14.133/2021)',
+    description: 'Busque informações sobre contratações integrais publicadas no PNCP.',
+    icon: Building,
+  },
   {
     href: '/consulta-pncp/itens-contratacoes',
     title: 'Consultar Itens de Contratações (PNCP Lei 14.133/2021)',
