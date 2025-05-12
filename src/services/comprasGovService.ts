@@ -1,4 +1,3 @@
-
 'use client';
 
 import { format } from 'date-fns';
@@ -62,23 +61,59 @@ async function fetchFromComprasGov<T>(
 
     if (!response.ok) {
       let errorData;
+      let errorBodyText = "Nenhum detalhe adicional do corpo da resposta.";
       try {
         errorData = await response.json();
+        errorBodyText = JSON.stringify(errorData);
       } catch (e) {
-        errorData = { message: response.statusText };
+        // If response is not JSON, try to get text
+        try {
+            errorBodyText = await response.text();
+            if (errorBodyText.length > 200) errorBodyText = errorBodyText.substring(0, 200) + "... (truncated)";
+        } catch (textError) {
+            errorBodyText = "Não foi possível ler o corpo da resposta.";
+        }
+        // For the generic error message, we'll use a simpler form
+        errorData = { message: response.statusText || "Status code indicated error" };
       }
-      console.error(`Error fetching from ComprasGov API (${apiEndpointPath}):`, response.status, errorData);
-      throw new Error(
-        `Falha na consulta à API Compras.gov.br (${response.status}): ${errorData?.message || response.statusText}. Detalhes: ${JSON.stringify(errorData?._embedded?.errors || errorData)}`
-      );
+      console.error(`Error from proxy/API for target endpoint ${apiEndpointPath}: Status ${response.status}`, "Raw body sample:", errorBodyText, "Parsed error data:", errorData);
+
+      let detailedMessage = `Falha na consulta via proxy para o endpoint '${apiEndpointPath}' (Status: ${response.status}).`;
+      if (response.status === 404) {
+        detailedMessage += ` Verifique se a URL do proxy (NEXT_PUBLIC_COMPRAS_GOV_PROXY_URL) está correta e se a função/serviço no proxy (${PROXY_URL}) está implantada e acessível no caminho esperado. URL completa da requisição ao proxy: ${url}.`;
+      }
+      
+      const serviceErrorMessage = errorData?.message || errorData?._embedded?.errors?.[0]?.message || response.statusText || "Erro desconhecido do serviço.";
+      // Avoid duplicating JSON stringify if errorBodyText is already the stringified JSON
+      const bodyDetails = errorBodyText === JSON.stringify(errorData) && Object.keys(errorData).length > 0 ? '(corpo JSON já logado no console)' : errorBodyText;
+      detailedMessage += ` Detalhes do erro: ${serviceErrorMessage}. Corpo da resposta (amostra): ${bodyDetails}`;
+
+      throw new Error(detailedMessage);
     }
     return await response.json() as T;
   } catch (error) {
-    console.error('Network or other error in fetchFromComprasGov:', error);
-    if (error instanceof Error) {
-      throw error;
+    console.error('Network or other error in fetchFromComprasGov for endpoint', apiEndpointPath, 'using proxy URL', PROXY_URL, 'Full URL attempted:', url, 'Error:', error);
+    if (error instanceof TypeError && error.message.toLowerCase().includes('failed to fetch')) {
+      let additionalInfo = "";
+      if (PROXY_URL === 'YOUR_FIREBASE_CLOUD_FUNCTION_URL_HERE_REPLACE_ME') {
+        additionalInfo = "A URL do proxy está configurada com o valor placeholder. Configure NEXT_PUBLIC_COMPRAS_GOV_PROXY_URL no seu arquivo .env.";
+      }
+      throw new Error(
+        `Falha ao buscar dados do proxy em ${PROXY_URL} para o endpoint '${apiEndpointPath}'. ` +
+        `Isso pode ocorrer devido a: \n` +
+        `1. A URL do proxy (NEXT_PUBLIC_COMPRAS_GOV_PROXY_URL) está incorreta, o serviço de proxy está offline ou não foi implantado corretamente. \n` +
+        `2. Problemas de rede local ou CORS (verifique o console do navegador para mais detalhes de CORS). \n` +
+        `${additionalInfo ? `3. ${additionalInfo}\n` : ''}` +
+        `Erro original: ${error.message}`
+      );
+    } else if (error instanceof Error) {
+      // If it's an error already processed by the !response.ok block
+      if (error.message.startsWith('Falha na consulta via proxy')) {
+        throw error;
+      }
+      throw new Error(`Erro ao processar consulta para '${apiEndpointPath}': ${error.message}`);
     }
-    throw new Error('Erro desconhecido ao conectar com o serviço de consulta.');
+    throw new Error(`Erro desconhecido ao conectar com o serviço de consulta para '${apiEndpointPath}'.`);
   }
 }
 
