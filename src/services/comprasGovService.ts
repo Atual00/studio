@@ -1,19 +1,18 @@
-
 'use client';
 
 import { format, parseISO, isValid } from 'date-fns'; // Added parseISO and isValid
 
-const PROXY_URL = process.env.NEXT_PUBLIC_COMPRAS_GOV_PROXY_URL || 
-                  'YOUR_FIREBASE_CLOUD_FUNCTION_URL_HERE_REPLACE_ME'; 
+const PLACEHOLDER_PROXY_URL = '!!CONFIGURE_PROXY_URL_IN_ENV_VARIABLE!!';
+const PROXY_URL = process.env.NEXT_PUBLIC_COMPRAS_GOV_PROXY_URL || PLACEHOLDER_PROXY_URL;
 
-if (PROXY_URL === 'YOUR_FIREBASE_CLOUD_FUNCTION_URL_HERE_REPLACE_ME') {
-  console.warn(
-    "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n" +
-    "WARNING: A URL da Cloud Function para o Compras.gov.br não está configurada!\n" +
-    "Por favor, defina NEXT_PUBLIC_COMPRAS_GOV_PROXY_URL no seu arquivo .env\n" +
-    "e substitua o valor de placeholder em src/services/comprasGovService.ts.\n" +
-    "As consultas à API do Compras.gov.br não funcionarão corretamente.\n" +
-    "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+if (PROXY_URL === PLACEHOLDER_PROXY_URL) {
+  console.error(
+    "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n" +
+    "CRITICAL ERROR: A URL da Cloud Function para o Compras.gov.br NÃO ESTÁ CONFIGURADA!\n" +
+    `Por favor, defina a variável de ambiente NEXT_PUBLIC_COMPRAS_GOV_PROXY_URL no seu arquivo .env (ou similar).\n` +
+    `O valor atual é o placeholder: "${PLACEHOLDER_PROXY_URL}".\n` +
+    "As consultas à API do Compras.gov.br NÃO FUNCIONARÃO até que isso seja corrigido.\n" +
+    "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
   );
 }
 
@@ -45,7 +44,16 @@ interface ComprasGovApiResponse<T> {
 async function fetchFromComprasGov<T>(
   apiEndpointPath: string,
   params: ComprasGovParams
-): Promise<ComprasGovApiResponse<T>> { 
+): Promise<ComprasGovApiResponse<T>> {
+  // Upfront check for placeholder URL
+  if (PROXY_URL === PLACEHOLDER_PROXY_URL) {
+    const configErrorMsg = "CONFIGURAÇÃO NECESSÁRIA: A URL do proxy (NEXT_PUBLIC_COMPRAS_GOV_PROXY_URL) não está configurada. " +
+                           "Por favor, defina esta variável no seu arquivo .env com a URL da sua Cloud Function. " +
+                           "As consultas à API do Compras.gov.br não podem continuar sem esta configuração.";
+    console.error("fetchFromComprasGov aborted due to missing proxy URL configuration.");
+    throw new Error(configErrorMsg);
+  }
+
   const queryParams = new URLSearchParams();
 
   for (const key in params) {
@@ -63,7 +71,7 @@ async function fetchFromComprasGov<T>(
   queryParams.set('endpoint', apiEndpointPath);
 
   const url = `${PROXY_URL}?${queryParams.toString()}`;
-  console.log(`Fetching from ComprasGov proxy: ${url}`);
+  console.log(`Consultando API Compras.gov.br via Proxy: ${url}`);
 
   try {
     const response = await fetch(url, {
@@ -91,10 +99,12 @@ async function fetchFromComprasGov<T>(
       console.error(`Error from proxy/API for target endpoint ${apiEndpointPath}: Status ${response.status}`, "Raw body sample:", errorBodyText, "Parsed error data:", errorData);
 
       let detailedMessage = `Falha na consulta via proxy para o endpoint '${apiEndpointPath}' (Status: ${response.status}).`;
-      if (response.status === 404 && PROXY_URL === 'YOUR_FIREBASE_CLOUD_FUNCTION_URL_HERE_REPLACE_ME') {
+      // This specific check for placeholder is now less likely to be hit here due to the upfront check,
+      // but kept for robustness in case the placeholder value changes or the upfront check is bypassed.
+      if (response.status === 404 && PROXY_URL === PLACEHOLDER_PROXY_URL) {
         detailedMessage += ` A URL do proxy está configurada com o valor placeholder. Verifique a configuração de NEXT_PUBLIC_COMPRAS_GOV_PROXY_URL no seu arquivo .env.`;
       } else if (response.status === 404) {
-         detailedMessage += ` Verifique se a URL do proxy (NEXT_PUBLIC_COMPRAS_GOV_PROXY_URL) está correta e se a função/serviço no proxy (${PROXY_URL}) está implantada e acessível no caminho esperado. URL completa da requisição ao proxy: ${url}.`;
+         detailedMessage += ` Verifique se a URL do proxy (NEXT_PUBLIC_COMPRAS_GOV_PROXY_URL=${PROXY_URL}) está correta e se a função/serviço no proxy está implantada e acessível no caminho esperado. URL completa da requisição ao proxy: ${url}.`;
       }
       
       const serviceErrorMessage = errorData?.message || errorData?.fault?.faultstring || errorData?.errors?.[0]?.message || errorData?._embedded?.errors?.[0]?.message || response.statusText || "Erro desconhecido do serviço.";
@@ -105,11 +115,17 @@ async function fetchFromComprasGov<T>(
     }
     return await response.json() as ComprasGovApiResponse<T>;
   } catch (error) {
+    // If the error is due to the upfront configuration check, rethrow it directly.
+    if (error instanceof Error && error.message.startsWith("CONFIGURAÇÃO NECESSÁRIA")) {
+        throw error;
+    }
+
     console.error('Network or other error in fetchFromComprasGov for endpoint', apiEndpointPath, 'using proxy URL', PROXY_URL, 'Full URL attempted:', url, 'Error:', error);
     if (error instanceof TypeError && error.message.toLowerCase().includes('failed to fetch')) {
       let additionalInfo = "";
-      if (PROXY_URL === 'YOUR_FIREBASE_CLOUD_FUNCTION_URL_HERE_REPLACE_ME') {
-        additionalInfo = "A URL do proxy está configurada com o valor placeholder. Configure NEXT_PUBLIC_COMPRAS_GOV_PROXY_URL no seu arquivo .env.";
+      // This check for placeholder in TypeError is now less likely due to upfront check.
+      if (PROXY_URL === PLACEHOLDER_PROXY_URL) {
+        additionalInfo = "A URL do proxy (NEXT_PUBLIC_COMPRAS_GOV_PROXY_URL) está configurada com o valor placeholder. Configure NEXT_PUBLIC_COMPRAS_GOV_PROXY_URL no seu arquivo .env.";
       }
       throw new Error(
         `Falha ao buscar dados do proxy em ${PROXY_URL} para o endpoint '${apiEndpointPath}'. ` +
@@ -150,7 +166,7 @@ export interface ConsultarContratacoesPNCPParams {
   sequencialCompra?: number;
   anoCompra?: number;
   dataAtualizacaoPncp?: Date | null;
-  contratacaoDesconsiderada?: boolean; // 0 or 1
+  contratacaoDesconsiderada?: boolean;
 }
 
 export const consultarContratacoesPNCP = async (params: ConsultarContratacoesPNCPParams) => {
@@ -183,8 +199,6 @@ export interface ConsultarItensContratacoesPNCPParams {
   codigoNCM?: string;
 }
 export const consultarItensContratacoesPNCP = async (params: ConsultarItensContratacoesPNCPParams) => {
-  // Ensure boolean params are sent as 'true' or 'false' strings if API expects that, or actual booleans
-  // The fetchFromComprasGov handles Date objects.
   const apiParams = { ...params };
   if (params.temResultado !== undefined) apiParams.temResultado = params.temResultado;
   if (params.bps !== undefined) apiParams.bps = params.bps;
@@ -209,9 +223,9 @@ export interface ConsultarResultadoItensPNCPParams {
   valorUnitarioHomologadoFinal?: number;
   valorTotalHomologadoInicial?: number;
   valorTotalHomologadoFinal?: number;
-  aplicacaoMargemPreferencia?: boolean; // true, false
-  aplicacaoBeneficioMeepp?: boolean; // true, false
-  aplicacaoCriterioDesempate?: boolean; // true, false
+  aplicacaoMargemPreferencia?: boolean; 
+  aplicacaoBeneficioMeepp?: boolean; 
+  aplicacaoCriterioDesempate?: boolean; 
 }
 export const consultarResultadoItensPNCP = async (params: ConsultarResultadoItensPNCPParams) => {
   const apiParams = { ...params };
@@ -224,19 +238,16 @@ export const consultarResultadoItensPNCP = async (params: ConsultarResultadoIten
 
 
 // --- MÓDULO LEGADO ENDPOINTS ---
-// The user seems to have pasted the PNCP docs again, but the intent was to create legacy module functions.
-// The existing stubs for legacy are good, just need to ensure they use the correct path structure.
-// The legacy path typically is /modulo-legado/ENDPOINT_NAME
 
 // 1. Consultar Licitação (Lei 8.666/93)
 export interface ConsultarLicitacaoLegadoParams {
   pagina?: number;
   tamanhoPagina?: number;
   uasg?: number;
-  numero_aviso?: number; // Snake case as per typical API patterns
+  numero_aviso?: number; 
   modalidade?: number;
-  data_publicacao_inicial: string; // YYYY-MM-DD
-  data_publicacao_final: string;   // YYYY-MM-DD
+  data_publicacao_inicial: Date; 
+  data_publicacao_final: Date;   
 }
 export const consultarLicitacaoLegado = (params: ConsultarLicitacaoLegadoParams) =>
   fetchFromComprasGov<any>('/modulo-legado/1_consultarLicitacao', params);
@@ -251,7 +262,7 @@ export interface ConsultarItemLicitacaoLegadoParams {
   codigo_item_material?: number;
   codigo_item_servico?: number;
   cnpj_fornecedor?: string;
-  cpfVencedor?: string; // Assuming this is correct from user's initial prompt
+  cpfVencedor?: string; 
 }
 export const consultarItemLicitacaoLegado = (params: ConsultarItemLicitacaoLegadoParams) =>
   fetchFromComprasGov<any>('/modulo-legado/2_consultarItemLicitacao', params);
@@ -262,8 +273,8 @@ export interface ConsultarPregoesLegadoParams {
   tamanhoPagina?: number;
   co_uasg?: number;
   numero?: number;
-  dt_data_edital_inicial: string; // YYYY-MM-DD
-  dt_data_edital_final: string;   // YYYY-MM-DD
+  dt_data_edital_inicial: Date; 
+  dt_data_edital_final: Date;   
 }
 export const consultarPregoesLegado = (params: ConsultarPregoesLegadoParams) =>
   fetchFromComprasGov<any>('/modulo-legado/3_consultarPregoes', params);
@@ -273,8 +284,8 @@ export interface ConsultarItensPregoesLegadoParams {
   pagina?: number;
   tamanhoPagina?: number;
   co_uasg?: number;
-  dt_hom_inicial: string; // YYYY-MM-DD
-  dt_hom_final: string;   // YYYY-MM-DD
+  dt_hom_inicial: Date; 
+  dt_hom_final: Date;   
 }
 export const consultarItensPregoesLegado = (params: ConsultarItensPregoesLegadoParams) =>
   fetchFromComprasGov<any>('/modulo-legado/4_consultarItensPregoes', params);
@@ -285,8 +296,7 @@ export interface ConsultarComprasSemLicitacaoLegadoParams {
   tamanhoPagina?: number;
   dt_ano_aviso: number; // Obrigatório
   co_uasg?: number;
-  co_modalidade_licitacao?: 6 | 7; // 6: Dispensa, 7: Inexigibilidade
-  // Add other optional date params if needed: dt_declaracao_dispensa, dt_ratificacao, dt_publicacao
+  co_modalidade_licitacao?: 6 | 7; 
 }
 export const consultarComprasSemLicitacaoLegado = (params: ConsultarComprasSemLicitacaoLegadoParams) =>
   fetchFromComprasGov<any>('/modulo-legado/5_consultarComprasSemLicitacao', params);
@@ -309,9 +319,9 @@ export const consultarCompraItensSemLicitacaoLegado = (params: ConsultarCompraIt
 export interface ConsultarRdcLegadoParams {
   pagina?: number;
   tamanhoPagina?: number;
-  data_publicacao_min: string; // YYYY-MM-DD Obrigatório
-  data_publicacao_max: string;   // YYYY-MM-DD Obrigatório
-  // Add other optional params as needed: uasg, modalidade, numero_aviso, objeto, etc.
+  data_publicacao_min: Date; 
+  data_publicacao_max: Date;   
 }
 export const consultarRdcLegado = (params: ConsultarRdcLegadoParams) =>
   fetchFromComprasGov<any>('/modulo-legado/7_consultarRdc', params);
+
