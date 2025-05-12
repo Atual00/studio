@@ -1,25 +1,26 @@
 
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge'; // Import Badge component
+import { Badge } from '@/components/ui/badge'; 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger, DialogClose } from '@/components/ui/dialog';
-import { Loader2, Play, StopCircle, AlertCircle, Check, X, Percent, FileText, Info, ExternalLink } from 'lucide-react';
+import { Loader2, Play, StopCircle, AlertCircle, Check, X, Percent, FileText, Info, MessageSquare, Send } from 'lucide-react'; // Added MessageSquare, Send
 import { useToast } from '@/hooks/use-toast';
-import { fetchLicitacaoDetails, updateLicitacao, type LicitacaoDetails, type DisputaConfig, type DisputaLog, formatElapsedTime, statusMap } from '@/services/licitacaoService';
+import { fetchLicitacaoDetails, updateLicitacao, type LicitacaoDetails, type DisputaConfig, type DisputaLog, formatElapsedTime, statusMap, generateAtaSessaoPDF, type DisputaMensagem } from '@/services/licitacaoService'; // Added DisputaMensagem, generateAtaSessaoPDF
 import { fetchConfiguracoes, type ConfiguracoesFormValues } from '@/services/configuracoesService';
 import { useAuth } from '@/context/AuthContext';
 import { format, parseISO, isValid, differenceInSeconds } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import { Textarea } from '@/components/ui/textarea'; // Import Textarea
+import { ScrollArea } from '@/components/ui/scroll-area'; // Import ScrollArea
+
 
 // Helper to format currency for display
 const formatCurrency = (value: number | undefined | null): string => {
@@ -50,12 +51,12 @@ export default function DisputaIndividualPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [limiteTipo, setLimiteTipo] = useState<'valor' | 'percentual'>('valor');
-  const [limiteInput, setLimiteInput] = useState<string>(''); // Stores raw input (e.g., "10000" or "10%")
+  const [limiteInput, setLimiteInput] = useState<string>(''); 
   const [valorCalculadoLimite, setValorCalculadoLimite] = useState<number | undefined>(undefined);
   const [valorTotalLicitacaoInput, setValorTotalLicitacaoInput] = useState<string>('');
 
 
-  const [elapsedTime, setElapsedTime] = useState<number>(0); // In seconds
+  const [elapsedTime, setElapsedTime] = useState<number>(0); 
   const [timerIntervalId, setTimerIntervalId] = useState<NodeJS.Timeout | null>(null);
 
   const [isOutcomeDialogOpen, setIsOutcomeDialogOpen] = useState(false);
@@ -63,6 +64,17 @@ export default function DisputaIndividualPage() {
   const [posicaoCliente, setPosicaoCliente] = useState<string>('');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmittingMessage, setIsSubmittingMessage] = useState(false);
+  const [currentMessage, setCurrentMessage] = useState('');
+  const messagesEndRef = useRef<HTMLDivElement>(null); // For auto-scrolling messages
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [licitacao?.disputaLog?.mensagens]);
 
 
   const calculateLimiteCliente = useCallback(() => {
@@ -108,7 +120,7 @@ export default function DisputaIndividualPage() {
         setLicitacao(licDetails);
         setConfiguracoes(configData);
 
-        // Initialize form fields from licitacao data
+        
         setValorTotalLicitacaoInput(formatCurrency(licDetails.valorTotalLicitacao));
         if (licDetails.disputaConfig?.limiteTipo) {
             setLimiteTipo(licDetails.disputaConfig.limiteTipo);
@@ -121,7 +133,7 @@ export default function DisputaIndividualPage() {
         }
 
 
-        // Timer logic
+        
         if (licDetails.status === 'EM_DISPUTA' && licDetails.disputaLog?.iniciadaEm) {
           const startTime = licDetails.disputaLog.iniciadaEm instanceof Date
             ? licDetails.disputaLog.iniciadaEm
@@ -149,7 +161,7 @@ export default function DisputaIndividualPage() {
     };
     loadData();
 
-    // Cleanup timer on unmount
+    
     return () => {
       if (timerIntervalId) clearInterval(timerIntervalId);
     };
@@ -176,21 +188,23 @@ export default function DisputaIndividualPage() {
         valorCalculadoAteOndePodeChegar: valorCalculadoLimite
     };
     const disputaLog: DisputaLog = {
-        iniciadaEm: new Date()
+        ...licitacao.disputaLog, // Preserve existing messages if any
+        iniciadaEm: new Date(),
+        mensagens: licitacao.disputaLog?.mensagens || [], // Ensure messages array exists
     };
 
     try {
       const success = await updateLicitacao(idLicitacao, {
         status: 'EM_DISPUTA',
-        valorTotalLicitacao: valorTotalNum, // Save potentially updated valorTotal
+        valorTotalLicitacao: valorTotalNum, 
         disputaConfig,
         disputaLog
       });
       if (success) {
         setLicitacao(prev => prev ? { ...prev, status: 'EM_DISPUTA', valorTotalLicitacao: valorTotalNum, disputaConfig, disputaLog } : null);
         toast({ title: "Sucesso", description: "Disputa iniciada." });
-        // Start timer
-        setElapsedTime(0); // Reset elapsed time
+        
+        setElapsedTime(0); 
         const interval = setInterval(() => setElapsedTime(prev => prev + 1), 1000);
         setTimerIntervalId(interval);
       } else {
@@ -224,6 +238,7 @@ export default function DisputaIndividualPage() {
         duracao,
         clienteVenceu,
         posicaoCliente: !clienteVenceu ? parseInt(posicaoCliente, 10) : undefined,
+        mensagens: licitacao.disputaLog?.mensagens || [], // Preserve messages
     };
 
     try {
@@ -232,22 +247,22 @@ export default function DisputaIndividualPage() {
         disputaLog: disputaLogUpdate
       });
       if (success) {
-        setLicitacao(prev => prev ? { ...prev, status: 'DISPUTA_CONCLUIDA', disputaLog: disputaLogUpdate } : null);
+        const updatedLic = {...licitacao, status: 'DISPUTA_CONCLUIDA', disputaLog: disputaLogUpdate };
+        setLicitacao(updatedLic);
         toast({ title: "Sucesso", description: "Disputa finalizada. Gerando ata..." });
         generateAtaSessaoPDF(
-            {...licitacao, status: 'DISPUTA_CONCLUIDA', disputaLog: disputaLogUpdate }, // Pass updated licitacao for PDF
+            updatedLic, 
             configuracoes,
             currentUser
         );
         setIsOutcomeDialogOpen(false);
-        // Optionally redirect or show success message
-        // router.push('/sala-disputa');
+        
       } else {
         throw new Error("Falha ao finalizar disputa no backend.");
       }
     } catch (err) {
       toast({ title: "Erro", description: `Não foi possível finalizar a disputa. ${err instanceof Error ? err.message : ''}`, variant: "destructive" });
-       // Restart timer if save failed? Or leave it stopped?
+       
        if (licitacao?.status === 'EM_DISPUTA' && !timerIntervalId) {
            const interval = setInterval(() => setElapsedTime(prev => prev + 1), 1000);
            setTimerIntervalId(interval);
@@ -257,113 +272,32 @@ export default function DisputaIndividualPage() {
     }
   };
 
-  const generateAtaSessaoPDF = (
-    lic: LicitacaoDetails,
-    config: ConfiguracoesFormValues | null,
-    user: { username: string; fullName?: string; cpf?: string } | null
-  ) => {
-      const doc = new jsPDF();
-      const hoje = format(new Date(), "dd/MM/yyyy HH:mm", { locale: ptBR });
-      const logoUrl = config?.logoUrl;
-      const logoDim = 25;
-      const margin = 14;
-      let yPos = 20;
+  const handleAddMessage = async () => {
+    if (!licitacao || !currentMessage.trim() || !isDisputaAtiva) return;
+    setIsSubmittingMessage(true);
+    const newMessage: DisputaMensagem = {
+        id: `msg-${Date.now()}`,
+        timestamp: new Date(),
+        texto: currentMessage.trim(),
+        autor: currentUser?.fullName || currentUser?.username || 'Sistema',
+    };
+    const updatedMensagens = [...(licitacao.disputaLog?.mensagens || []), newMessage];
+    const updatedDisputaLog = { ...licitacao.disputaLog, mensagens: updatedMensagens };
 
-      // Header
-      if (logoUrl) {
-        try {
-          const img = new Image();
-          img.src = logoUrl;
-          const imageType = logoUrl.startsWith("data:image/jpeg") ? "JPEG" : "PNG";
-          if (imageType === "PNG" || imageType === "JPEG") {
-            doc.addImage(img, imageType, margin, yPos - 5, logoDim, logoDim);
-            yPos += logoDim - 5; // Adjust yPos based on logo
-          } else {
-            console.warn("Formato do logo não suportado para PDF, pulando logo.");
-            yPos +=5;
-          }
-        } catch (e) { console.error("Error adding logo:", e); yPos += 5; }
-      } else {
-        yPos += 5;
-      }
-
-      doc.setFontSize(16);
-      doc.text("ATA DA SESSÃO DE DISPUTA", 105, yPos, { align: 'center' });
-      yPos += 10;
-
-      // Assessoria Info
-      if (config) {
-        doc.setFontSize(11);
-        doc.text(`Assessoria: ${config.nomeFantasia || config.razaoSocial} (CNPJ: ${config.cnpj})`, margin, yPos);
-        yPos += 6;
-      }
-      doc.setFontSize(10);
-      doc.text(`Data da Geração: ${hoje}`, margin, yPos);
-      yPos += 8;
-      doc.setLineWidth(0.1); doc.line(margin, yPos, 196, yPos); yPos += 8;
-
-      // Licitação Details
-      doc.setFontSize(12); doc.setFont(undefined, 'bold');
-      doc.text("Dados da Licitação:", margin, yPos); yPos += 7;
-      doc.setFont(undefined, 'normal'); doc.setFontSize(11);
-      const addDetail = (label: string, value: string | undefined | null) => {
-        if (value !== undefined && value !== null) {
-          doc.text(`${label}: ${value}`, margin, yPos); yPos += 6;
+    try {
+        const success = await updateLicitacao(idLicitacao, { disputaLog: updatedDisputaLog });
+        if (success) {
+            setLicitacao(prev => prev ? { ...prev, disputaLog: updatedDisputaLog } : null);
+            setCurrentMessage('');
+            toast({ title: "Mensagem Adicionada", description: "Sua mensagem foi registrada."});
+        } else {
+            throw new Error("Falha ao salvar mensagem no backend.");
         }
-      };
-      addDetail("Protocolo", lic.id);
-      addDetail("Cliente", lic.clienteNome);
-      addDetail("Número Lic.", lic.numeroLicitacao);
-      addDetail("Órgão", lic.orgaoComprador);
-      addDetail("Modalidade", lic.modalidade);
-      addDetail("Plataforma", lic.plataforma);
-      addDetail("Valor Total Estimado", formatCurrency(lic.valorTotalLicitacao));
-      yPos += 4;
-
-      // Disputa Config
-      doc.setFontSize(12); doc.setFont(undefined, 'bold');
-      doc.text("Configuração da Disputa (Limite Cliente):", margin, yPos); yPos += 7;
-      doc.setFont(undefined, 'normal'); doc.setFontSize(11);
-      if (lic.disputaConfig?.limiteTipo === 'valor') {
-          addDetail("Tipo de Limite", "Valor Absoluto");
-          addDetail("Valor Limite Definido", formatCurrency(lic.disputaConfig.limiteValor));
-      } else if (lic.disputaConfig?.limiteTipo === 'percentual') {
-          addDetail("Tipo de Limite", "Percentual");
-          addDetail("Percentual Definido", `${lic.disputaConfig.limiteValor || 0}%`);
-          addDetail("Valor Calculado (Pode Chegar Até)", formatCurrency(lic.disputaConfig.valorCalculadoAteOndePodeChegar));
-      } else {
-          addDetail("Limite Cliente", "Não definido ou não aplicável.");
-      }
-      yPos += 4;
-
-      // Disputa Log
-      doc.setFontSize(12); doc.setFont(undefined, 'bold');
-      doc.text("Registro da Disputa:", margin, yPos); yPos += 7;
-      doc.setFont(undefined, 'normal'); doc.setFontSize(11);
-      const formatDateLogAta = (date: Date | string | undefined) => date ? format(date instanceof Date ? date : parseISO(date as string), "dd/MM/yyyy HH:mm:ss", {locale: ptBR}) : 'N/A';
-      addDetail("Início da Disputa", formatDateLogAta(lic.disputaLog?.iniciadaEm));
-      addDetail("Fim da Disputa", formatDateLogAta(lic.disputaLog?.finalizadaEm));
-      addDetail("Duração Total", lic.disputaLog?.duracao || 'N/A');
-      yPos += 4;
-
-      // Resultado
-      doc.setFontSize(12); doc.setFont(undefined, 'bold');
-      doc.text("Resultado da Disputa:", margin, yPos); yPos += 7;
-      doc.setFont(undefined, 'normal'); doc.setFontSize(11);
-      if (lic.disputaLog?.clienteVenceu) {
-          addDetail("Resultado", "Cliente Venceu a Licitação");
-      } else {
-          addDetail("Resultado", "Cliente Não Venceu");
-          addDetail("Posição Final do Cliente", lic.disputaLog?.posicaoCliente?.toString() || "Não informada");
-      }
-      yPos += 10;
-
-      // Operador
-      doc.text(`Sessão conduzida por: ${user?.fullName || user?.username || 'Usuário do Sistema'}`, margin, yPos); yPos +=6;
-      if (user?.cpf) { doc.text(`CPF do Operador: ${user.cpf}`, margin, yPos); yPos +=6; }
-
-
-      doc.save(`Ata_Disputa_${lic.numeroLicitacao.replace(/[^\w]/g, '_')}.pdf`);
+    } catch (err) {
+        toast({ title: "Erro", description: `Não foi possível adicionar a mensagem. ${err instanceof Error ? err.message : ''}`, variant: "destructive"});
+    } finally {
+        setIsSubmittingMessage(false);
+    }
   };
 
 
@@ -377,10 +311,10 @@ export default function DisputaIndividualPage() {
 
   let displayDataInicio = 'Data Inválida';
   if (licitacao.dataInicio) {
-    // Ensure dataInicio is a Date object before formatting
+    
     const dateToFormat = licitacao.dataInicio instanceof Date 
       ? licitacao.dataInicio 
-      : parseISO(licitacao.dataInicio as string); // Fallback if it's a string
+      : parseISO(licitacao.dataInicio as string); 
     if (isValid(dateToFormat)) {
       displayDataInicio = format(dateToFormat, "dd/MM/yyyy HH:mm", { locale: ptBR });
     }
@@ -438,7 +372,7 @@ export default function DisputaIndividualPage() {
                             onChange={(e) => setLimiteInput(e.target.value)}
                             onBlur={(e) => {
                                 if (limiteTipo === 'valor') setLimiteInput(formatCurrency(parseCurrency(e.target.value)));
-                                // No specific blur format for percentage string
+                                
                             }}
                             disabled={isSubmitting}
                         />
@@ -458,24 +392,55 @@ export default function DisputaIndividualPage() {
         )}
 
         {isDisputaAtiva && licitacao.disputaConfig && (
-             <CardContent className="space-y-4">
-                <Alert variant="info">
-                    <Info className="h-4 w-4"/>
-                    <AlertTitle>Configuração da Disputa</AlertTitle>
-                    <AlertDescription>
-                        Valor Total da Licitação: {formatCurrency(licitacao.valorTotalLicitacao)} <br />
-                        Limite Cliente: {
-                            licitacao.disputaConfig.limiteTipo === 'valor'
-                            ? `${formatCurrency(licitacao.disputaConfig.limiteValor)} (Valor Absoluto)`
-                            : `${licitacao.disputaConfig.limiteValor}% (Percentual)`
-                        } <br />
-                        Pode Chegar Até: <strong>{formatCurrency(licitacao.disputaConfig.valorCalculadoAteOndePodeChegar)}</strong>
-                    </AlertDescription>
-                </Alert>
-                 <div className="text-center my-6">
-                    <p className="text-sm text-muted-foreground">Tempo Decorrido</p>
-                    <p className="text-5xl font-bold tracking-tighter">{formatElapsedTime(elapsedTime)}</p>
-                 </div>
+             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                    <Alert variant="info">
+                        <Info className="h-4 w-4"/>
+                        <AlertTitle>Configuração da Disputa</AlertTitle>
+                        <AlertDescription>
+                            Valor Total da Licitação: {formatCurrency(licitacao.valorTotalLicitacao)} <br />
+                            Limite Cliente: {
+                                licitacao.disputaConfig.limiteTipo === 'valor'
+                                ? `${formatCurrency(licitacao.disputaConfig.limiteValor)} (Valor Absoluto)`
+                                : `${licitacao.disputaConfig.limiteValor}% (Percentual)`
+                            } <br />
+                            Pode Chegar Até: <strong>{formatCurrency(licitacao.disputaConfig.valorCalculadoAteOndePodeChegar)}</strong>
+                        </AlertDescription>
+                    </Alert>
+                    <div className="text-center my-6">
+                        <p className="text-sm text-muted-foreground">Tempo Decorrido</p>
+                        <p className="text-5xl font-bold tracking-tighter">{formatElapsedTime(elapsedTime)}</p>
+                    </div>
+                </div>
+                <div className="space-y-4">
+                     <Label htmlFor="disputa-messages" className="flex items-center gap-2"><MessageSquare className="h-5 w-5"/> Registrar Ocorrências/Mensagens</Label>
+                    <ScrollArea className="h-48 w-full rounded-md border p-3 text-sm">
+                        {(licitacao.disputaLog?.mensagens || []).length === 0 && <p className="text-muted-foreground">Nenhuma mensagem registrada.</p>}
+                        {(licitacao.disputaLog?.mensagens || []).map(msg => (
+                            <div key={msg.id} className="mb-2 last:mb-0 border-b pb-1">
+                                <p className="text-xs text-muted-foreground">
+                                    {formatDateLog(msg.timestamp)} por {msg.autor}
+                                </p>
+                                <p>{msg.texto}</p>
+                            </div>
+                        ))}
+                        <div ref={messagesEndRef} />
+                    </ScrollArea>
+                    <div className="flex gap-2">
+                        <Textarea
+                            id="disputa-message-input"
+                            placeholder="Digite uma ocorrência ou mensagem..."
+                            value={currentMessage}
+                            onChange={(e) => setCurrentMessage(e.target.value)}
+                            disabled={isSubmittingMessage}
+                            className="flex-1 min-h-[60px]"
+                        />
+                        <Button onClick={handleAddMessage} disabled={isSubmittingMessage || !currentMessage.trim()} className="self-end">
+                            {isSubmittingMessage ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+                            Enviar
+                        </Button>
+                    </div>
+                </div>
              </CardContent>
         )}
 
@@ -518,7 +483,7 @@ export default function DisputaIndividualPage() {
         </CardFooter>
       </Card>
 
-      {/* Outcome Dialog */}
+      
       <Dialog open={isOutcomeDialogOpen} onOpenChange={setIsOutcomeDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -563,7 +528,7 @@ export default function DisputaIndividualPage() {
   );
 }
 
-// Helper to format date logs, placed outside component for reuse if needed
+
 const formatDateLog = (date: Date | string | undefined) => {
     if (!date) return 'N/A';
     try {
