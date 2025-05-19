@@ -45,7 +45,7 @@ const FormField = <
 const useFormField = () => {
   const fieldContext = React.useContext(FormFieldContext)
   const itemContext = React.useContext(FormItemContext)
-  const formMethods = useFormContext() // Now correctly referencing the imported hook
+  const formMethods = useFormContext() 
 
   const { getFieldState, formState } = formMethods;
 
@@ -117,7 +117,7 @@ FormLabel.displayName = "FormLabel"
 const FormControl = React.forwardRef<
   React.ElementRef<typeof Slot>,
   React.ComponentPropsWithoutRef<typeof Slot>
->(({ children, ...restProps }, ref) => { // Destructure children and use restProps
+>(({ ...props }, ref) => { // Reverted to spread all props
   const { error, formItemId, formDescriptionId, formMessageId } = useFormField();
 
   return (
@@ -130,10 +130,8 @@ const FormControl = React.forwardRef<
           : `${formDescriptionId} ${formMessageId}`
       }
       aria-invalid={!!error}
-      {...restProps} // Spread the remaining props
-    >
-      {children} {/* Pass children explicitly */}
-    </Slot>
+      {...props} // Slot will find its children from these props
+    />
   );
 });
 FormControl.displayName = "FormControl"
