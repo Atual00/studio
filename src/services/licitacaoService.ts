@@ -38,12 +38,12 @@ const getLicitacoesFromStorage = (): LicitacaoDetails[] => {
          comentarios: (item.comentarios || []).map((c:any) => ({...c, data: parseDate(c.data) })),
          checklist: typeof item.checklist === 'object' && item.checklist !== null ? item.checklist : {},
          valorCobrado: typeof item.valorCobrado === 'number' ? item.valorCobrado : 0,
-         // valorTotalLicitacao is removed
          valorPrimeiroColocado: typeof item.valorPrimeiroColocado === 'number' ? item.valorPrimeiroColocado : undefined,
          propostaItensPdfNome: item.propostaItensPdfNome || undefined,
          itensProposta: item.itensProposta || [],
          valorReferenciaEdital: typeof item.valorReferenciaEdital === 'number' ? item.valorReferenciaEdital : undefined,
          observacoesPropostaFinal: item.observacoesPropostaFinal || undefined,
+         createdBy: item.createdBy,
          disputaConfig: item.disputaConfig || {},
          disputaLog: item.disputaLog ? {
             ...item.disputaLog,
@@ -71,11 +71,12 @@ const saveLicitacoesToStorage = (licitacoes: LicitacaoDetails[]): void => {
         dataMetaAnalise: item.dataMetaAnalise instanceof Date && isValid(item.dataMetaAnalise) ? item.dataMetaAnalise.toISOString() : null,
         dataHomologacao: item.dataHomologacao instanceof Date && isValid(item.dataHomologacao) ? item.dataHomologacao.toISOString() : null,
         comentarios: (item.comentarios || []).map(c => ({...c, data: c.data instanceof Date && isValid(c.data) ? c.data.toISOString() : null })),
-        // valorTotalLicitacao removed
         propostaItensPdfNome: item.propostaItensPdfNome,
         itensProposta: item.itensProposta,
         valorReferenciaEdital: item.valorReferenciaEdital,
         observacoesPropostaFinal: item.observacoesPropostaFinal,
+        createdBy: item.createdBy,
+        disputaConfig: item.disputaConfig,
         disputaLog: item.disputaLog ? {
             ...item.disputaLog,
             iniciadaEm: item.disputaLog.iniciadaEm instanceof Date && isValid(item.disputaLog.iniciadaEm) ? item.disputaLog.iniciadaEm.toISOString() : null,
@@ -135,11 +136,12 @@ export const saveDebitosToStorage = (debitos: Debito[]): void => {
 
 // --- Types and Constants ---
 export interface PropostaItem {
-  id: string;
+  id: string; // Unique ID for the item within the proposal
   lote?: string;
   descricao: string;
   unidade: string;
   quantidade: number;
+  valorUnitarioEstimado?: number; // Optional: For reference if known before dispute
   valorUnitarioFinalCliente?: number; // Client's final bid unit price
   valorTotalFinalCliente?: number;   // Calculated: quantidade * valorUnitarioFinalCliente
 }
@@ -175,15 +177,14 @@ export interface LicitacaoDetails extends LicitacaoFormValues {
   checklist: { [key: string]: boolean };
   comentarios: { id: string, texto: string, data: Date | string, autor: string }[];
   valorPrimeiroColocado?: number;
-  dataInicio: Date | string; // Keep as Date | string for flexibility but ensure it's Date in logic
-  dataMetaAnalise: Date | string; // Keep as Date | string for flexibility
+  dataInicio: Date | string;
+  dataMetaAnalise: Date | string;
   dataHomologacao?: Date | string;
   orgaoComprador: string;
-  // valorTotalLicitacao?: number; // REMOVED
-  propostaItensPdfNome?: string; // ADDED - To store the name of the uploaded PDF
-  itensProposta: PropostaItem[]; // ADDED - To store manually entered/transcribed proposal items
-  valorReferenciaEdital?: number; // ADDED - Reference value from tender, set in dispute room
-  observacoesPropostaFinal?: string; // ADDED - Observations for the final proposal
+  propostaItensPdfNome?: string;
+  itensProposta: PropostaItem[];
+  valorReferenciaEdital?: number;
+  observacoesPropostaFinal?: string;
 
   createdBy?: {
       userId?: string;
@@ -193,11 +194,12 @@ export interface LicitacaoDetails extends LicitacaoFormValues {
   };
   disputaConfig?: DisputaConfig;
   disputaLog?: DisputaLog;
+  valorTotalLicitacao?: number; // Added for backward compatibility if old data exists, but not used for new.
 }
 
 export type LicitacaoListItem = Pick<
     LicitacaoDetails,
-    'id' | 'clienteNome' | 'modalidade' | 'numeroLicitacao' | 'plataforma' | 'dataInicio' | 'dataMetaAnalise' | 'status' | 'orgaoComprador' // valorTotalLicitacao removed
+    'id' | 'clienteNome' | 'modalidade' | 'numeroLicitacao' | 'plataforma' | 'dataInicio' | 'dataMetaAnalise' | 'status' | 'orgaoComprador'
 >;
 
 export const statusMap: {[key: string]: {label: string; color: string; icon: React.ElementType}} = {
@@ -237,13 +239,12 @@ export interface Debito {
   clienteCnpj?: string;
   descricao: string;
   valor: number;
-  dataVencimento: Date; // Expect Date object in runtime
-  dataReferencia: Date; // Expect Date object in runtime
+  dataVencimento: Date; 
+  dataReferencia: Date; 
   status: 'PENDENTE' | 'PAGO' | 'ENVIADO_FINANCEIRO' | 'PAGO_VIA_ACORDO';
   licitacaoNumero?: string;
   acordoId?: string;
   originalDebitoIds?: string[];
-
   jurosCalculado?: number;
 }
 
@@ -254,7 +255,7 @@ export const fetchLicitacoes = async (): Promise<LicitacaoListItem[]> => {
   console.log('Fetching all licitações...');
   await new Promise(resolve => setTimeout(resolve, 350));
   const licitacoes = getLicitacoesFromStorage();
-  return licitacoes.map(({ id, clienteNome, modalidade, numeroLicitacao, plataforma, dataInicio, dataMetaAnalise, status, orgaoComprador }) => ({ // valorTotalLicitacao removed
+  return licitacoes.map(({ id, clienteNome, modalidade, numeroLicitacao, plataforma, dataInicio, dataMetaAnalise, status, orgaoComprador }) => ({ 
     id,
     clienteNome,
     modalidade,
@@ -264,7 +265,6 @@ export const fetchLicitacoes = async (): Promise<LicitacaoListItem[]> => {
     dataInicio,
     dataMetaAnalise,
     status,
-    // valorTotalLicitacao, // REMOVED
   }));
 };
 
@@ -283,18 +283,17 @@ export const fetchLicitacaoDetails = async (id: string): Promise<LicitacaoDetail
    }
 
   if (licitacao) {
-      // Ensure dates are Date objects when returning
       return {
           ...licitacao,
-          dataInicio: parseDate(licitacao.dataInicio) as Date, // Cast as Date, assuming it's valid after filter
-          dataMetaAnalise: parseDate(licitacao.dataMetaAnalise) as Date, // Cast as Date
+          dataInicio: parseDate(licitacao.dataInicio) as Date, 
+          dataMetaAnalise: parseDate(licitacao.dataMetaAnalise) as Date, 
           dataHomologacao: parseDate(licitacao.dataHomologacao),
           comentarios: (licitacao.comentarios || []).map(c => ({...c, data: parseDate(c.data) as Date })),
-          // valorTotalLicitacao removed
           propostaItensPdfNome: licitacao.propostaItensPdfNome,
           itensProposta: licitacao.itensProposta || [],
           valorReferenciaEdital: licitacao.valorReferenciaEdital,
           observacoesPropostaFinal: licitacao.observacoesPropostaFinal,
+          createdBy: licitacao.createdBy,
           disputaConfig: licitacao.disputaConfig || {},
           disputaLog: licitacao.disputaLog ? {
             ...licitacao.disputaLog,
@@ -329,15 +328,14 @@ export const addLicitacao = async (
     status: 'AGUARDANDO_ANALISE',
     checklist: {},
     comentarios: [],
-    dataInicio: data.dataInicio, // Already a Date object from the form
-    dataMetaAnalise: data.dataMetaAnalise, // Already a Date object from the form
+    dataInicio: data.dataInicio, 
+    dataMetaAnalise: data.dataMetaAnalise, 
     dataHomologacao: undefined,
     valorPrimeiroColocado: undefined,
     orgaoComprador: data.orgaoComprador,
-    // valorTotalLicitacao: data.valorTotalLicitacao, // REMOVED
-    propostaItensPdfNome: data.propostaItensPdf instanceof File ? data.propostaItensPdf.name : undefined, // Store filename
-    itensProposta: [], // Initialize empty
-    valorReferenciaEdital: undefined, // To be set in dispute room
+    propostaItensPdfNome: data.propostaItensPdf instanceof File ? data.propostaItensPdf.name : undefined,
+    itensProposta: [], 
+    valorReferenciaEdital: undefined, 
     observacoesPropostaFinal: undefined,
     createdBy: currentUser ? {
         username: currentUser.username,
@@ -383,11 +381,10 @@ export const updateLicitacao = async (id: string, data: Partial<LicitacaoDetails
       } catch { return undefined; }
   };
 
-  // Handle propostaItensPdf if it's a File object (from form)
   let propostaItensPdfNomeToSet = existingLicitacao.propostaItensPdfNome;
   if (data.propostaItensPdf instanceof File) {
     propostaItensPdfNomeToSet = data.propostaItensPdf.name;
-  } else if (data.hasOwnProperty('propostaItensPdfNome')) { // Allow explicitly setting/clearing the name
+  } else if (data.hasOwnProperty('propostaItensPdfNome')) { 
     propostaItensPdfNomeToSet = data.propostaItensPdfNome;
   }
 
@@ -395,20 +392,18 @@ export const updateLicitacao = async (id: string, data: Partial<LicitacaoDetails
   const updatedLicitacao: LicitacaoDetails = {
       ...existingLicitacao,
       ...data,
-      propostaItensPdfNome: propostaItensPdfNomeToSet, // Use the determined name
-      // Ensure File object for 'propostaItensPdf' is not spread into LicitacaoDetails
-      propostaItensPdf: undefined, // Clear the File object from the data being merged
-
+      propostaItensPdfNome: propostaItensPdfNomeToSet, 
+      propostaItensPdf: undefined, 
       dataHomologacao: homologationDateToSet instanceof Date ? homologationDateToSet : parseUpdateDate(homologationDateToSet),
       dataInicio: data.dataInicio ? parseUpdateDate(data.dataInicio) as Date : existingLicitacao.dataInicio as Date,
       dataMetaAnalise: data.dataMetaAnalise ? parseUpdateDate(data.dataMetaAnalise) as Date : existingLicitacao.dataMetaAnalise as Date,
       comentarios: data.comentarios ? data.comentarios.map(c => ({...c, data: parseUpdateDate(c.data) as Date })) : existingLicitacao.comentarios,
       valorCobrado: data.valorCobrado !== undefined ? Number(data.valorCobrado) : existingLicitacao.valorCobrado,
-      // valorTotalLicitacao removed
       valorPrimeiroColocado: data.valorPrimeiroColocado !== undefined ? Number(data.valorPrimeiroColocado) : existingLicitacao.valorPrimeiroColocado,
       itensProposta: data.itensProposta || existingLicitacao.itensProposta,
       valorReferenciaEdital: data.valorReferenciaEdital !== undefined ? Number(data.valorReferenciaEdital) : existingLicitacao.valorReferenciaEdital,
       observacoesPropostaFinal: data.observacoesPropostaFinal || existingLicitacao.observacoesPropostaFinal,
+      createdBy: data.createdBy || existingLicitacao.createdBy,
       disputaConfig: data.disputaConfig ? { ...existingLicitacao.disputaConfig, ...data.disputaConfig } : existingLicitacao.disputaConfig,
       disputaLog: data.disputaLog ? {
           ...existingLicitacao.disputaLog,
@@ -452,17 +447,16 @@ export const updateLicitacao = async (id: string, data: Partial<LicitacaoDetails
         debitos[existingDebitIndex] = {
              ...debitos[existingDebitIndex],
              ...debitData,
-             status: currentStatus === 'PENDENTE' ? 'PENDENTE' : currentStatus // Preserve paid status if it was manually changed
+             status: currentStatus === 'PENDENTE' ? 'PENDENTE' : currentStatus 
         };
     } else {
         debitos.push(debitData);
     }
     saveDebitosToStorage(debitos);
   } else if (existingLicitacao.status === 'PROCESSO_HOMOLOGADO' && data.status && data.status !== 'PROCESSO_HOMOLOGADO') {
-    // If licitacao status is changed FROM homologado TO something else, delete PENDING debit.
     const debitos = getDebitosFromStorage();
     const debitIndex = debitos.findIndex(d => d.id === id && d.tipoDebito === 'LICITACAO');
-    if (debitIndex !== -1 && debitos[debitIndex].status === 'PENDENTE') { // Only remove if it's still pending
+    if (debitIndex !== -1 && debitos[debitIndex].status === 'PENDENTE') { 
         debitos.splice(debitIndex, 1);
         saveDebitosToStorage(debitos);
     }
@@ -484,7 +478,6 @@ export const deleteLicitacao = async (id: string): Promise<boolean> => {
   }
   saveLicitacoesToStorage(updatedLicitacoes);
 
-  // Also remove associated debit if it exists and is PENDING
   const debitos = getDebitosFromStorage();
   const updatedDebitos = debitos.filter(d => !(d.id === id && d.tipoDebito === 'LICITACAO' && d.status === 'PENDENTE'));
   if (debitos.length !== updatedDebitos.length) {
@@ -504,7 +497,6 @@ export const fetchDebitos = async (): Promise<Debito[]> => {
 
   let debitsModified = false;
 
-  // Synchronize debitos with licitacoes
   for (const lic of licitacoes) {
     const existingDebitIndex = debitos.findIndex(d => d.id === lic.id && d.tipoDebito === 'LICITACAO');
 
@@ -525,24 +517,22 @@ export const fetchDebitos = async (): Promise<Debito[]> => {
       };
 
       if (existingDebitIndex !== -1) {
-        // Update existing debit if details changed, but preserve status if not PENDING
         const currentStatus = debitos[existingDebitIndex].status;
         debitos[existingDebitIndex] = {
           ...debitos[existingDebitIndex],
           ...debitData,
           status: currentStatus === 'PENDENTE' ? 'PENDENTE' : currentStatus,
         } as Debito;
-        debitsModified = true; // Potentially modified
+        debitsModified = true; 
       } else {
         debitos.push({
           id: lic.id,
           ...debitData,
-          status: 'PENDENTE', // New debitos are PENDING
+          status: 'PENDENTE', 
         } as Debito);
         debitsModified = true;
       }
     } else if (existingDebitIndex !== -1 && debitos[existingDebitIndex].status === 'PENDENTE') {
-      // If licitacao is no longer homologated, remove its PENDING debit
       debitos.splice(existingDebitIndex, 1);
       debitsModified = true;
     }
@@ -552,11 +542,10 @@ export const fetchDebitos = async (): Promise<Debito[]> => {
     saveDebitosToStorage(debitos);
   }
 
-  // Sort debitos by reference date descending
   debitos.sort((a, b) => {
       const dateA = a.dataReferencia instanceof Date ? a.dataReferencia.getTime() : 0;
       const dateB = b.dataReferencia instanceof Date ? b.dataReferencia.getTime() : 0;
-      return dateB - dateA; // Newest first
+      return dateB - dateA; 
   });
 
   return debitos;
@@ -602,8 +591,8 @@ export const addDebitoAvulso = async (data: DebitoAvulsoFormData): Promise<Debit
         clienteCnpj: data.clienteCnpj,
         descricao: data.descricao,
         valor: data.valor,
-        dataVencimento: data.dataVencimento, // Already a Date object
-        dataReferencia: new Date(), // Current date as reference
+        dataVencimento: data.dataVencimento, 
+        dataReferencia: new Date(), 
         status: 'PENDENTE',
     };
 
@@ -631,7 +620,6 @@ export const generateAtaSessaoPDF = (
       const margin = 14;
       let yPos = 20;
 
-      // Header with Logo
       if (logoUrl) {
         try {
           const img = new Image();
@@ -639,14 +627,14 @@ export const generateAtaSessaoPDF = (
           const imageType = logoUrl.startsWith("data:image/jpeg") ? "JPEG" : "PNG";
           if (imageType === "PNG" || imageType === "JPEG") {
             doc.addImage(img, imageType, margin, yPos - 5, logoDim, logoDim);
-            yPos += logoDim - 5; // Adjust yPos based on logo height
+            yPos += logoDim - 5; 
           } else {
             console.warn("Formato do logo não suportado para PDF, pulando logo.");
-            yPos +=5; // Minimal adjustment if no logo
+            yPos +=5; 
           }
         } catch (e) { console.error("Error adding logo:", e); yPos += 5; }
       } else {
-        yPos += 5; // Minimal adjustment if no logo
+        yPos += 5; 
       }
 
       doc.setFontSize(16);
@@ -741,7 +729,6 @@ export const generateAtaSessaoPDF = (
       doc.save(`Ata_Disputa_${lic.numeroLicitacao.replace(/[^\w]/g, '_')}.pdf`);
   };
 
-// New function to generate final proposal PDF
 export const generatePropostaFinalPDF = (
     lic: LicitacaoDetails,
     config: ConfiguracoesFormValues | null,
@@ -749,7 +736,6 @@ export const generatePropostaFinalPDF = (
   ) => {
     if (!lic.disputaLog?.itensPropostaFinalCliente || lic.disputaLog.itensPropostaFinalCliente.length === 0) {
         console.warn("Não há itens finais da proposta para gerar o PDF.");
-        // Optionally, show a toast to the user here
         return;
     }
 
@@ -760,7 +746,6 @@ export const generatePropostaFinalPDF = (
     const margin = 14;
     let yPos = 20;
 
-    // Header with Logo
     if (logoUrl) {
         try {
             const img = new Image();
@@ -773,7 +758,7 @@ export const generatePropostaFinalPDF = (
     }
     
     let textX = logoUrl ? margin + logoDim + 5 : margin;
-    let headerTextY = logoUrl ? yPos + 5 : yPos + 5; // Align text better if logo is present
+    let headerTextY = logoUrl ? yPos + 5 : yPos + 5; 
 
     if (config) {
         doc.setFontSize(12);
@@ -786,7 +771,7 @@ export const generatePropostaFinalPDF = (
         doc.text(`${config.enderecoRua}, ${config.enderecoNumero} - ${config.enderecoBairro}`, textX, headerTextY); headerTextY +=4;
         doc.text(`${config.enderecoCidade} - CEP: ${config.enderecoCep}`, textX, headerTextY);
     }
-    yPos = Math.max(yPos + logoDim + 2, headerTextY + 8); // Ensure yPos is below logo and header text
+    yPos = Math.max(yPos + logoDim + 2, headerTextY + 8); 
 
 
     doc.setFontSize(16);
@@ -805,12 +790,12 @@ export const generatePropostaFinalPDF = (
 
 
     const tableColumnStyles = {
-      0: { cellWidth: 15 }, // Lote
-      1: { cellWidth: 75 }, // Descrição
-      2: { cellWidth: 15 }, // Unidade
-      3: { cellWidth: 18 }, // Quantidade
-      4: { cellWidth: 28, halign: 'right' }, // Vlr. Unit.
-      5: { cellWidth: 28, halign: 'right' }, // Vlr. Total
+      0: { cellWidth: 15 }, 
+      1: { cellWidth: 75 }, 
+      2: { cellWidth: 15 }, 
+      3: { cellWidth: 18 }, 
+      4: { cellWidth: 28, halign: 'right' }, 
+      5: { cellWidth: 28, halign: 'right' }, 
     };
 
     autoTable(doc, {
@@ -828,8 +813,8 @@ export const generatePropostaFinalPDF = (
         headStyles: { fillColor: [220, 220, 220], textColor: [0,0,0], fontStyle: 'bold' },
         columnStyles: tableColumnStyles,
         margin: { left: margin, right: margin },
-        didDrawPage: (data) => { // Redraw header on new pages
-             yPos = data.cursor?.y || 20; // Reset yPos for new page
+        didDrawPage: (data) => { 
+             yPos = data.cursor?.y || 20; 
         }
     });
 
@@ -852,44 +837,28 @@ export const generatePropostaFinalPDF = (
         yPos += obsLines.length * 5 + 5;
     }
 
-    yPos = Math.max(yPos, 240); // Ensure space for signature
-    if (yPos > 270) { doc.addPage(); yPos = 30; } // Add new page if content is too long
+    yPos = Math.max(yPos, 240); 
+    if (yPos > 270) { doc.addPage(); yPos = 30; } 
 
 
     doc.setFontSize(10);
     doc.text("________________________________________", margin, yPos); yPos += 5;
     doc.text(lic.clienteNome, margin, yPos); yPos += 5;
-    const client = licitacoes.find(l => l.id === lic.id); // Assuming licitacoes is available or fetch client details
-    if (client) {
-        // Try to get CNPJ from the licitacoes array which should have client details
-        const clientDetails = getLicitacoesFromStorage().find(c => c.id === lic.id); // This seems to fetch the licitacao itself
-        // A better way would be to fetch client details separately if needed or ensure clientNome includes enough info
-        // For now, let's assume clientService might have a way to get CNPJ if needed.
-        // This example uses a placeholder if CNPJ is not directly available.
-        const licitacaoData = getLicitacoesFromStorage().find(l_item => l_item.id === lic.id);
-        if(licitacaoData){
-            const clientRecord = getClientsFromStorage().find(c => c.id === licitacaoData.clienteId);
-            if (clientRecord?.cnpj) {
-                 doc.text(`CNPJ: ${clientRecord.cnpj}`, margin, yPos);
-            }
+    
+    const licitacaoData = getLicitacoesFromStorage().find(l_item => l_item.id === lic.id);
+    if(licitacaoData){
+        const clientRecord = _getClientsFromStorage().find(c => c.id === licitacaoData.clienteId);
+        if (clientRecord?.cnpj) {
+             doc.text(`CNPJ: ${clientRecord.cnpj}`, margin, yPos);
         }
     }
-
 
     doc.save(`Proposta_Final_${lic.numeroLicitacao.replace(/[^\w]/g, '_')}.pdf`);
   };
 
-
-// Helper function to get client CNPJ - assuming you might want it elsewhere too
-// You already have fetchServiceClientDetails which can be used.
-// For simplicity in PDF, I'll try to use existing data or skip CNPJ if not readily available.
-const getClientsFromStorage = (): {id: string, cnpj?: string, razaoSocial?: string}[] => { // Simplified for example
-  const storedData = localStorage.getItem('licitaxClients'); // Assuming this key stores ClientDetails[]
+const _getClientsFromStorage = (): {id: string, cnpj?: string, razaoSocial?: string}[] => {
+  const storedData = localStorage.getItem('licitaxClients'); 
   try {
-    const clients: LicitacaoDetails[] = storedData ? JSON.parse(storedData) : []; // This type is wrong here, should be ClientDetails
-    // This is a placeholder, you need to fetch actual client details or adjust
-    // This function is incorrectly trying to get client details from licitacao storage.
-    // It should parse 'licitaxClients' which stores ClientDetails[]
     const clientList = localStorage.getItem('licitaxClients');
     if (clientList) {
         const parsedClients: {id: string, cnpj: string, razaoSocial: string}[] = JSON.parse(clientList);
@@ -901,9 +870,5 @@ const getClientsFromStorage = (): {id: string, cnpj?: string, razaoSocial?: stri
     return [];
   }
 }
-
-// This is a placeholder for the global 'licitacoes' array which is not ideal.
-// It's better to fetch client details by ID when needed, like already done in addLicitacao.
-const licitacoes: LicitacaoDetails[] = getLicitacoesFromStorage();
 
     

@@ -11,24 +11,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge'; 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger, DialogClose } from '@/components/ui/dialog';
-import { Loader2, Play, StopCircle, AlertCircle, Check, X, Percent, FileText, Info, MessageSquare, Send } from 'lucide-react'; // Added MessageSquare, Send
+import { Loader2, Play, StopCircle, AlertCircle, Check, X, Percent, FileText, Info, MessageSquare, Send, PlusCircle, Trash2, Edit as EditIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { fetchLicitacaoDetails, updateLicitacao, type LicitacaoDetails, type DisputaConfig, type DisputaLog, formatElapsedTime, statusMap, generateAtaSessaoPDF, type DisputaMensagem } from '@/services/licitacaoService'; // Added DisputaMensagem, generateAtaSessaoPDF
+import { fetchLicitacaoDetails, updateLicitacao, type LicitacaoDetails, type DisputaConfig, type DisputaLog, formatElapsedTime, statusMap, generateAtaSessaoPDF, type DisputaMensagem, type PropostaItem, generatePropostaFinalPDF } from '@/services/licitacaoService';
 import { fetchConfiguracoes, type ConfiguracoesFormValues } from '@/services/configuracoesService';
 import { useAuth } from '@/context/AuthContext';
 import { format, parseISO, isValid, differenceInSeconds } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Textarea } from '@/components/ui/textarea'; // Import Textarea
-import { ScrollArea } from '@/components/ui/scroll-area'; // Import ScrollArea
+import { Textarea } from '@/components/ui/textarea';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 
-// Helper to format currency for display
 const formatCurrency = (value: number | undefined | null): string => {
     if (value === undefined || value === null) return '';
     return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 };
 
-// Helper to parse currency string to number
 const parseCurrency = (value: string): number | undefined => {
     if (!value) return undefined;
     if (value.trim() === '0' || value.trim() === 'R$ 0,00' || value.replace(/[^0-9,]/g, '') === '0') return 0;
@@ -53,8 +52,7 @@ export default function DisputaIndividualPage() {
   const [limiteTipo, setLimiteTipo] = useState<'valor' | 'percentual'>('valor');
   const [limiteInput, setLimiteInput] = useState<string>(''); 
   const [valorCalculadoLimite, setValorCalculadoLimite] = useState<number | undefined>(undefined);
-  const [valorTotalLicitacaoInput, setValorTotalLicitacaoInput] = useState<string>('');
-
+  const [valorReferenciaEditalInput, setValorReferenciaEditalInput] = useState<string>('');
 
   const [elapsedTime, setElapsedTime] = useState<number>(0); 
   const [timerIntervalId, setTimerIntervalId] = useState<NodeJS.Timeout | null>(null);
@@ -62,11 +60,20 @@ export default function DisputaIndividualPage() {
   const [isOutcomeDialogOpen, setIsOutcomeDialogOpen] = useState(false);
   const [clienteVenceu, setClienteVenceu] = useState<boolean | undefined>(undefined);
   const [posicaoCliente, setPosicaoCliente] = useState<string>('');
+  
+  const [finalProposalItems, setFinalProposalItems] = useState<PropostaItem[]>([]);
+  const [finalProposalObservations, setFinalProposalObservations] = useState<string>('');
+  const [grandTotalFinalProposal, setGrandTotalFinalProposal] = useState<number>(0);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmittingMessage, setIsSubmittingMessage] = useState(false);
   const [currentMessage, setCurrentMessage] = useState('');
-  const messagesEndRef = useRef<HTMLDivElement>(null); // For auto-scrolling messages
+  const messagesEndRef = useRef<HTMLDivElement>(null); 
+
+  const [isItemModalOpen, setIsItemModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<PropostaItem | null>(null);
+  const [currentItemData, setCurrentItemData] = useState<Partial<PropostaItem>>({ lote: '', descricao: '', unidade: '', quantidade: 0 });
+  const [isSavingItems, setIsSavingItems] = useState(false);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -78,8 +85,8 @@ export default function DisputaIndividualPage() {
 
 
   const calculateLimiteCliente = useCallback(() => {
-    const valorTotalNum = parseCurrency(valorTotalLicitacaoInput);
-    if (valorTotalNum === undefined || valorTotalNum < 0) {
+    const valorRefEditalNum = parseCurrency(valorReferenciaEditalInput);
+    if (valorRefEditalNum === undefined || valorRefEditalNum < 0) {
       setValorCalculadoLimite(undefined);
       return;
     }
@@ -90,16 +97,16 @@ export default function DisputaIndividualPage() {
     } else if (limiteTipo === 'percentual') {
       const percentual = parseFloat(limiteInput.replace('%', ''));
       if (!isNaN(percentual) && percentual >= 0 && percentual <= 100) {
-        setValorCalculadoLimite(valorTotalNum - (valorTotalNum * (percentual / 100)));
+        setValorCalculadoLimite(valorRefEditalNum - (valorRefEditalNum * (percentual / 100)));
       } else {
         setValorCalculadoLimite(undefined);
       }
     }
-  }, [valorTotalLicitacaoInput, limiteTipo, limiteInput]);
+  }, [valorReferenciaEditalInput, limiteTipo, limiteInput]);
 
   useEffect(() => {
     calculateLimiteCliente();
-  }, [valorTotalLicitacaoInput, limiteTipo, limiteInput, calculateLimiteCliente]);
+  }, [valorReferenciaEditalInput, limiteTipo, limiteInput, calculateLimiteCliente]);
 
 
   useEffect(() => {
@@ -119,9 +126,8 @@ export default function DisputaIndividualPage() {
         }
         setLicitacao(licDetails);
         setConfiguracoes(configData);
-
         
-        setValorTotalLicitacaoInput(formatCurrency(licDetails.valorTotalLicitacao));
+        setValorReferenciaEditalInput(formatCurrency(licDetails.valorReferenciaEdital));
         if (licDetails.disputaConfig?.limiteTipo) {
             setLimiteTipo(licDetails.disputaConfig.limiteTipo);
             if (licDetails.disputaConfig.limiteTipo === 'valor' && licDetails.disputaConfig.limiteValor !== undefined) {
@@ -131,8 +137,6 @@ export default function DisputaIndividualPage() {
             }
             setValorCalculadoLimite(licDetails.disputaConfig.valorCalculadoAteOndePodeChegar);
         }
-
-
         
         if (licDetails.status === 'EM_DISPUTA' && licDetails.disputaLog?.iniciadaEm) {
           const startTime = licDetails.disputaLog.iniciadaEm instanceof Date
@@ -150,8 +154,6 @@ export default function DisputaIndividualPage() {
             setTimerIntervalId(interval);
           }
         }
-
-
       } catch (err) {
         console.error('Erro ao carregar dados da disputa:', err);
         setError(`Falha ao carregar dados. ${err instanceof Error ? err.message : ''}`);
@@ -160,26 +162,83 @@ export default function DisputaIndividualPage() {
       }
     };
     loadData();
-
     
     return () => {
       if (timerIntervalId) clearInterval(timerIntervalId);
     };
   }, [idLicitacao]);
 
+
+  const handleOpenItemModal = (item: PropostaItem | null = null) => {
+    setEditingItem(item);
+    setCurrentItemData(item ? { ...item } : { id: `item-${Date.now()}`, lote: '', descricao: '', unidade: '', quantidade: 0 });
+    setIsItemModalOpen(true);
+  };
+
+  const handleSaveItem = async () => {
+    if (!licitacao || !currentItemData.descricao || !currentItemData.unidade || currentItemData.quantidade === undefined || currentItemData.quantidade <= 0) {
+      toast({ title: "Erro", description: "Descrição, unidade e quantidade (maior que zero) são obrigatórios para o item.", variant: "destructive" });
+      return;
+    }
+    setIsSavingItems(true);
+    let updatedItemsProposta;
+    if (editingItem) {
+      updatedItemsProposta = (licitacao.itensProposta || []).map(item => item.id === editingItem.id ? { ...item, ...currentItemData } as PropostaItem : item);
+    } else {
+      updatedItemsProposta = [...(licitacao.itensProposta || []), { ...currentItemData, id: currentItemData.id || `item-${Date.now()}` } as PropostaItem];
+    }
+
+    try {
+      const success = await updateLicitacao(idLicitacao, { itensProposta: updatedItemsProposta });
+      if (success) {
+        setLicitacao(prev => prev ? { ...prev, itensProposta: updatedItemsProposta } : null);
+        toast({ title: "Sucesso", description: `Item ${editingItem ? 'atualizado' : 'adicionado'}.` });
+        setIsItemModalOpen(false);
+      } else {
+        throw new Error("Falha ao salvar item da proposta.");
+      }
+    } catch (err) {
+      toast({ title: "Erro", description: `Não foi possível salvar o item. ${err instanceof Error ? err.message : ''}`, variant: "destructive" });
+    } finally {
+      setIsSavingItems(false);
+    }
+  };
+  
+  const handleDeleteItem = async (itemId: string) => {
+      if (!licitacao) return;
+      const confirmed = confirm("Tem certeza que deseja excluir este item da proposta?");
+      if (!confirmed) return;
+      
+      setIsSavingItems(true);
+      const updatedItemsProposta = (licitacao.itensProposta || []).filter(item => item.id !== itemId);
+       try {
+          const success = await updateLicitacao(idLicitacao, { itensProposta: updatedItemsProposta });
+          if (success) {
+            setLicitacao(prev => prev ? { ...prev, itensProposta: updatedItemsProposta } : null);
+            toast({ title: "Sucesso", description: "Item excluído da proposta." });
+          } else {
+            throw new Error("Falha ao excluir item da proposta.");
+          }
+        } catch (err) {
+          toast({ title: "Erro", description: `Não foi possível excluir o item. ${err instanceof Error ? err.message : ''}`, variant: "destructive" });
+        } finally {
+          setIsSavingItems(false);
+        }
+  };
+
+
   const handleIniciarDisputa = async () => {
     if (!licitacao || licitacao.status === 'EM_DISPUTA') return;
 
-    const valorTotalNum = parseCurrency(valorTotalLicitacaoInput);
-    if (valorTotalNum === undefined || valorTotalNum < 0) {
-        toast({ title: "Erro", description: "Valor Total da Licitação é inválido.", variant: "destructive" });
+    const valorRefEditalNum = parseCurrency(valorReferenciaEditalInput);
+    if (valorRefEditalNum === undefined || valorRefEditalNum < 0) {
+        toast({ title: "Erro", description: "Valor de Referência do Edital é inválido.", variant: "destructive" });
         return;
     }
     if (valorCalculadoLimite === undefined) {
         toast({ title: "Erro", description: "Limite do cliente (valor ou percentual) é inválido ou não definido.", variant: "destructive" });
         return;
     }
-
 
     setIsSubmitting(true);
     const disputaConfig: DisputaConfig = {
@@ -188,20 +247,20 @@ export default function DisputaIndividualPage() {
         valorCalculadoAteOndePodeChegar: valorCalculadoLimite
     };
     const disputaLog: DisputaLog = {
-        ...licitacao.disputaLog, // Preserve existing messages if any
+        ...licitacao.disputaLog, 
         iniciadaEm: new Date(),
-        mensagens: licitacao.disputaLog?.mensagens || [], // Ensure messages array exists
+        mensagens: licitacao.disputaLog?.mensagens || [], 
     };
 
     try {
       const success = await updateLicitacao(idLicitacao, {
         status: 'EM_DISPUTA',
-        valorTotalLicitacao: valorTotalNum, 
+        valorReferenciaEdital: valorRefEditalNum, 
         disputaConfig,
         disputaLog
       });
       if (success) {
-        setLicitacao(prev => prev ? { ...prev, status: 'EM_DISPUTA', valorTotalLicitacao: valorTotalNum, disputaConfig, disputaLog } : null);
+        setLicitacao(prev => prev ? { ...prev, status: 'EM_DISPUTA', valorReferenciaEdital: valorRefEditalNum, disputaConfig, disputaLog } : null);
         toast({ title: "Sucesso", description: "Disputa iniciada." });
         
         setElapsedTime(0); 
@@ -220,14 +279,49 @@ export default function DisputaIndividualPage() {
   const handleFinalizarDisputa = () => {
     if (timerIntervalId) clearInterval(timerIntervalId);
     setTimerIntervalId(null);
+    // Initialize finalProposalItems from licitacao.itensProposta
+    const initialFinalItems = (licitacao?.itensProposta || []).map(item => ({
+        ...item, // copy existing item properties
+        valorUnitarioFinalCliente: item.valorUnitarioEstimado, // Default to estimado if available, or undefined
+        valorTotalFinalCliente: item.valorUnitarioEstimado ? item.valorUnitarioEstimado * item.quantidade : undefined,
+    }));
+    setFinalProposalItems(initialFinalItems);
+    setFinalProposalObservations(licitacao?.observacoesPropostaFinal || '');
+    calculateGrandTotal(initialFinalItems);
     setIsOutcomeDialogOpen(true);
   };
 
+  const handleFinalItemPriceChange = (itemId: string, newUnitPriceStr: string) => {
+    const newUnitPrice = parseCurrency(newUnitPriceStr);
+    setFinalProposalItems(prevItems => {
+        const updatedItems = prevItems.map(item => {
+            if (item.id === itemId) {
+                const valorTotal = newUnitPrice !== undefined ? newUnitPrice * item.quantidade : undefined;
+                return { ...item, valorUnitarioFinalCliente: newUnitPrice, valorTotalFinalCliente: valorTotal };
+            }
+            return item;
+        });
+        calculateGrandTotal(updatedItems);
+        return updatedItems;
+    });
+  };
+
+  const calculateGrandTotal = (items: PropostaItem[]) => {
+    const total = items.reduce((sum, item) => sum + (item.valorTotalFinalCliente || 0), 0);
+    setGrandTotalFinalProposal(total);
+  };
+
+
   const handleOutcomeSubmit = async () => {
     if (!licitacao || clienteVenceu === undefined || (clienteVenceu === false && !posicaoCliente.trim())) {
-        toast({ title: "Atenção", description: "Preencha o resultado da disputa.", variant: "warning" });
+        toast({ title: "Atenção", description: "Preencha o resultado da disputa (venceu/posição).", variant: "warning" });
         return;
     }
+     if (finalProposalItems.some(item => item.valorUnitarioFinalCliente === undefined || item.valorUnitarioFinalCliente < 0)) {
+        toast({ title: "Atenção", description: "Todos os itens devem ter um valor unitário final preenchido e válido (>= 0).", variant: "warning" });
+        return;
+    }
+
     setIsSubmitting(true);
     const finalizadaEm = new Date();
     const duracao = formatElapsedTime(elapsedTime);
@@ -238,23 +332,23 @@ export default function DisputaIndividualPage() {
         duracao,
         clienteVenceu,
         posicaoCliente: !clienteVenceu ? parseInt(posicaoCliente, 10) : undefined,
-        mensagens: licitacao.disputaLog?.mensagens || [], // Preserve messages
+        mensagens: licitacao.disputaLog?.mensagens || [],
+        itensPropostaFinalCliente: finalProposalItems,
+        valorFinalPropostaCliente: grandTotalFinalProposal,
     };
 
     try {
       const success = await updateLicitacao(idLicitacao, {
         status: 'DISPUTA_CONCLUIDA',
-        disputaLog: disputaLogUpdate
+        disputaLog: disputaLogUpdate,
+        observacoesPropostaFinal: finalProposalObservations,
       });
       if (success) {
-        const updatedLic = {...licitacao, status: 'DISPUTA_CONCLUIDA', disputaLog: disputaLogUpdate };
+        const updatedLic = {...licitacao, status: 'DISPUTA_CONCLUIDA', disputaLog: disputaLogUpdate, observacoesPropostaFinal: finalProposalObservations };
         setLicitacao(updatedLic);
-        toast({ title: "Sucesso", description: "Disputa finalizada. Gerando ata..." });
-        generateAtaSessaoPDF(
-            updatedLic, 
-            configuracoes,
-            currentUser
-        );
+        toast({ title: "Sucesso", description: "Disputa finalizada. Gerando documentos..." });
+        generateAtaSessaoPDF(updatedLic, configuracoes, currentUser);
+        generatePropostaFinalPDF(updatedLic, configuracoes, currentUser); // New PDF
         setIsOutcomeDialogOpen(false);
         
       } else {
@@ -311,7 +405,6 @@ export default function DisputaIndividualPage() {
 
   let displayDataInicio = 'Data Inválida';
   if (licitacao.dataInicio) {
-    
     const dateToFormat = licitacao.dataInicio instanceof Date 
       ? licitacao.dataInicio 
       : parseISO(licitacao.dataInicio as string); 
@@ -319,7 +412,6 @@ export default function DisputaIndividualPage() {
       displayDataInicio = format(dateToFormat, "dd/MM/yyyy HH:mm", { locale: ptBR });
     }
   }
-
 
   return (
     <div className="space-y-6">
@@ -336,18 +428,19 @@ export default function DisputaIndividualPage() {
         </CardHeader>
 
         {isDisputaConfiguravel && (
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6">
                 <div>
-                    <Label htmlFor="valorTotalLicitacao">Valor Total da Licitação (Estimado/Global)</Label>
+                    <Label htmlFor="valorReferenciaEdital">Valor de Referência do Edital (Estimado/Global)</Label>
                     <Input
-                        id="valorTotalLicitacao"
+                        id="valorReferenciaEdital"
                         type="text"
                         placeholder="R$ 0,00"
-                        value={valorTotalLicitacaoInput}
-                        onChange={(e) => setValorTotalLicitacaoInput(e.target.value)}
-                        onBlur={(e) => setValorTotalLicitacaoInput(formatCurrency(parseCurrency(e.target.value)))}
+                        value={valorReferenciaEditalInput}
+                        onChange={(e) => setValorReferenciaEditalInput(e.target.value)}
+                        onBlur={(e) => setValorReferenciaEditalInput(formatCurrency(parseCurrency(e.target.value)))}
                         disabled={isSubmitting}
                     />
+                     <p className="text-xs text-muted-foreground mt-1">Este valor será usado para calcular o limite percentual do cliente.</p>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
                     <div>
@@ -356,7 +449,7 @@ export default function DisputaIndividualPage() {
                             <SelectTrigger id="limiteTipo"><SelectValue /></SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="valor">Valor Absoluto (R$)</SelectItem>
-                                <SelectItem value="percentual">Percentual (%)</SelectItem>
+                                <SelectItem value="percentual">Percentual (%) sobre Ref. Edital</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
@@ -372,7 +465,6 @@ export default function DisputaIndividualPage() {
                             onChange={(e) => setLimiteInput(e.target.value)}
                             onBlur={(e) => {
                                 if (limiteTipo === 'valor') setLimiteInput(formatCurrency(parseCurrency(e.target.value)));
-                                
                             }}
                             disabled={isSubmitting}
                         />
@@ -381,12 +473,46 @@ export default function DisputaIndividualPage() {
                  {valorCalculadoLimite !== undefined && (
                     <Alert variant="info" className="mt-2">
                         <Info className="h-4 w-4"/>
-                        <AlertTitle>Limite Calculado</AlertTitle>
+                        <AlertTitle>Limite Calculado para o Cliente</AlertTitle>
                         <AlertDescription>
                             Cliente pode chegar até: <strong>{formatCurrency(valorCalculadoLimite)}</strong>
                         </AlertDescription>
                     </Alert>
                 )}
+                
+                {/* Itens da Proposta Section */}
+                <div className="space-y-2 pt-4 border-t">
+                    <div className="flex justify-between items-center">
+                        <h4 className="text-md font-medium">Itens da Proposta (Conforme PDF)</h4>
+                        <Button variant="outline" size="sm" onClick={() => handleOpenItemModal()} disabled={isSavingItems}>
+                            <PlusCircle className="mr-2 h-4 w-4"/> Adicionar Item
+                        </Button>
+                    </div>
+                    {licitacao.propostaItensPdfNome && (
+                        <p className="text-xs text-muted-foreground">
+                            Referência: {licitacao.propostaItensPdfNome} (Faça a transcrição manual dos itens abaixo)
+                        </p>
+                    )}
+                    {(licitacao.itensProposta || []).length === 0 ? (
+                        <p className="text-sm text-muted-foreground">Nenhum item adicionado. Adicione os itens da proposta para referência.</p>
+                    ) : (
+                        <Table>
+                            <TableHeader><TableRow><TableHead>Lote</TableHead><TableHead>Descrição</TableHead><TableHead>Unid.</TableHead><TableHead>Qtd.</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
+                            <TableBody>
+                                {(licitacao.itensProposta || []).map(item => (
+                                    <TableRow key={item.id}>
+                                        <TableCell>{item.lote || '-'}</TableCell><TableCell>{item.descricao}</TableCell><TableCell>{item.unidade}</TableCell><TableCell>{item.quantidade}</TableCell>
+                                        <TableCell className="text-right">
+                                            <Button variant="ghost" size="icon" onClick={() => handleOpenItemModal(item)} disabled={isSavingItems}><EditIcon className="h-4 w-4"/></Button>
+                                            <Button variant="ghost" size="icon" onClick={() => handleDeleteItem(item.id)} disabled={isSavingItems}><Trash2 className="h-4 w-4 text-destructive"/></Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    )}
+                </div>
+
 
             </CardContent>
         )}
@@ -398,7 +524,7 @@ export default function DisputaIndividualPage() {
                         <Info className="h-4 w-4"/>
                         <AlertTitle>Configuração da Disputa</AlertTitle>
                         <AlertDescription>
-                            Valor Total da Licitação: {formatCurrency(licitacao.valorTotalLicitacao)} <br />
+                            Valor Referência Edital: {formatCurrency(licitacao.valorReferenciaEdital)} <br />
                             Limite Cliente: {
                                 licitacao.disputaConfig.limiteTipo === 'valor'
                                 ? `${formatCurrency(licitacao.disputaConfig.limiteValor)} (Valor Absoluto)`
@@ -411,6 +537,18 @@ export default function DisputaIndividualPage() {
                         <p className="text-sm text-muted-foreground">Tempo Decorrido</p>
                         <p className="text-5xl font-bold tracking-tighter">{formatElapsedTime(elapsedTime)}</p>
                     </div>
+                     {(licitacao.itensProposta || []).length > 0 && (
+                        <div className="space-y-2 pt-4 border-t">
+                             <h4 className="text-md font-medium">Itens da Proposta (Referência):</h4>
+                             <ScrollArea className="h-40 border rounded-md p-2 text-xs">
+                                 <ul className="space-y-1">
+                                 {(licitacao.itensProposta || []).map(item => (
+                                     <li key={item.id}><strong>{item.lote ? `Lote ${item.lote} - ` : ''}{item.descricao}</strong> (Qtd: {item.quantidade} {item.unidade})</li>
+                                 ))}
+                                 </ul>
+                             </ScrollArea>
+                        </div>
+                    )}
                 </div>
                 <div className="space-y-4">
                      <Label htmlFor="disputa-messages" className="flex items-center gap-2"><MessageSquare className="h-5 w-5"/> Registrar Ocorrências/Mensagens</Label>
@@ -452,24 +590,27 @@ export default function DisputaIndividualPage() {
                     <AlertDescription>
                         Status: {licitacao.disputaLog.clienteVenceu ? "Cliente Venceu!" : `Cliente ficou em ${licitacao.disputaLog.posicaoCliente || 'N/A'}º lugar.`} <br/>
                         Início: {formatDateLog(licitacao.disputaLog.iniciadaEm)} | Fim: {formatDateLog(licitacao.disputaLog.finalizadaEm)} <br/>
-                        Duração: {licitacao.disputaLog.duracao || 'N/A'}
+                        Duração: {licitacao.disputaLog.duracao || 'N/A'} <br/>
+                        Valor Final da Proposta Cliente: {formatCurrency(licitacao.disputaLog.valorFinalPropostaCliente)}
                     </AlertDescription>
                 </Alert>
-                 <div className="flex justify-end">
+                 <div className="flex justify-end gap-2">
+                     <Button variant="outline" onClick={() => generatePropostaFinalPDF(licitacao, configuracoes, currentUser)}>
+                        <FileText className="mr-2 h-4 w-4" /> Gerar Proposta Final (PDF)
+                    </Button>
                      <Button variant="outline" onClick={() => generateAtaSessaoPDF(licitacao, configuracoes, currentUser)}>
-                        <FileText className="mr-2 h-4 w-4" /> Gerar Ata Novamente
+                        <FileText className="mr-2 h-4 w-4" /> Gerar Ata da Sessão (PDF)
                     </Button>
                  </div>
             </CardContent>
         )}
-
 
         <CardFooter className="flex justify-between">
           <Button variant="outline" onClick={() => router.push('/sala-disputa')} disabled={isSubmitting}>
             Voltar para Lista
           </Button>
           {isDisputaConfiguravel && (
-            <Button onClick={handleIniciarDisputa} disabled={isSubmitting || valorCalculadoLimite === undefined || parseCurrency(valorTotalLicitacaoInput) === undefined}>
+            <Button onClick={handleIniciarDisputa} disabled={isSubmitting || valorCalculadoLimite === undefined || parseCurrency(valorReferenciaEditalInput) === undefined}>
               {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
               Iniciar Disputa
             </Button>
@@ -483,43 +624,134 @@ export default function DisputaIndividualPage() {
         </CardFooter>
       </Card>
 
-      
-      <Dialog open={isOutcomeDialogOpen} onOpenChange={setIsOutcomeDialogOpen}>
+      {/* Item Modal */}
+      <Dialog open={isItemModalOpen} onOpenChange={setIsItemModalOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Resultado da Disputa</DialogTitle>
-            <DialogDescription>Informe o resultado da participação do cliente na licitação.</DialogDescription>
+            <DialogTitle>{editingItem ? 'Editar Item da Proposta' : 'Adicionar Novo Item à Proposta'}</DialogTitle>
+            <DialogDescription>Preencha os detalhes do item conforme o edital/proposta base.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>O cliente venceu a licitação?</Label>
-              <Select onValueChange={(value) => setClienteVenceu(value === 'true')} value={clienteVenceu?.toString()}>
-                <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="true">Sim</SelectItem>
-                  <SelectItem value="false">Não</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="space-y-1">
+              <Label htmlFor="item-lote">Lote/Grupo (Opcional)</Label>
+              <Input id="item-lote" value={currentItemData.lote || ''} onChange={e => setCurrentItemData(p => ({...p, lote: e.target.value}))} />
             </div>
-            {clienteVenceu === false && (
-              <div className="space-y-2">
-                <Label htmlFor="posicaoCliente">Qual a posição final do cliente?</Label>
-                <Input
-                  id="posicaoCliente"
-                  type="number"
-                  min="1"
-                  placeholder="Ex: 2, 3, etc."
-                  value={posicaoCliente}
-                  onChange={(e) => setPosicaoCliente(e.target.value)}
-                />
-              </div>
-            )}
+            <div className="space-y-1">
+              <Label htmlFor="item-descricao">Descrição do Item*</Label>
+              <Textarea id="item-descricao" value={currentItemData.descricao || ''} onChange={e => setCurrentItemData(p => ({...p, descricao: e.target.value}))} placeholder="Descrição detalhada do item" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                <Label htmlFor="item-unidade">Unidade*</Label>
+                <Input id="item-unidade" value={currentItemData.unidade || ''} onChange={e => setCurrentItemData(p => ({...p, unidade: e.target.value}))} placeholder="Ex: UN, CX, KG" />
+                </div>
+                <div className="space-y-1">
+                <Label htmlFor="item-quantidade">Quantidade*</Label>
+                <Input id="item-quantidade" type="number" value={currentItemData.quantidade || ''} onChange={e => setCurrentItemData(p => ({...p, quantidade: parseInt(e.target.value, 10) || 0}))} min="1" />
+                </div>
+            </div>
           </div>
           <DialogFooter>
+            <DialogClose asChild><Button variant="outline" disabled={isSavingItems}>Cancelar</Button></DialogClose>
+            <Button onClick={handleSaveItem} disabled={isSavingItems || !currentItemData.descricao || !currentItemData.unidade || !currentItemData.quantidade || currentItemData.quantidade <= 0}>
+              {isSavingItems && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {editingItem ? 'Salvar Alterações' : 'Adicionar Item'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Outcome and Final Proposal Dialog */}
+      <Dialog open={isOutcomeDialogOpen} onOpenChange={setIsOutcomeDialogOpen}>
+        <DialogContent className="sm:max-w-2xl"> {/* Wider dialog */}
+          <DialogHeader>
+            <DialogTitle>Resultado da Disputa e Proposta Final</DialogTitle>
+            <DialogDescription>Informe o resultado e os valores finais da proposta do cliente.</DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="max-h-[70vh] p-1"> {/* Added ScrollArea */}
+            <div className="space-y-6 py-4 pr-3"> {/* Added padding for scrollbar */}
+                <div className="space-y-2">
+                <Label>O cliente venceu a licitação?</Label>
+                <Select onValueChange={(value) => setClienteVenceu(value === 'true')} value={clienteVenceu?.toString()}>
+                    <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                    <SelectContent>
+                    <SelectItem value="true">Sim</SelectItem>
+                    <SelectItem value="false">Não</SelectItem>
+                    </SelectContent>
+                </Select>
+                </div>
+                {clienteVenceu === false && (
+                <div className="space-y-2">
+                    <Label htmlFor="posicaoCliente">Qual a posição final do cliente?</Label>
+                    <Input
+                    id="posicaoCliente"
+                    type="number"
+                    min="1"
+                    placeholder="Ex: 2, 3, etc."
+                    value={posicaoCliente}
+                    onChange={(e) => setPosicaoCliente(e.target.value)}
+                    />
+                </div>
+                )}
+
+                <div className="space-y-4 pt-4 border-t">
+                    <h4 className="text-md font-medium">Itens da Proposta Final do Cliente:</h4>
+                    {finalProposalItems.length === 0 && <p className="text-sm text-muted-foreground">Nenhum item da proposta inicial encontrado para precificar.</p>}
+                    {finalProposalItems.map((item, index) => (
+                        <Card key={item.id} className="p-3 space-y-2 text-sm">
+                             <p><strong>{item.lote ? `Lote ${item.lote} - ` : ''}{item.descricao}</strong></p>
+                             <div className="grid grid-cols-2 md:grid-cols-4 gap-2 items-end">
+                                <div><Label>Unidade:</Label> <Input value={item.unidade} disabled className="text-xs"/></div>
+                                <div><Label>Quantidade:</Label> <Input type="number" value={item.quantidade} disabled className="text-xs"/></div>
+                                <div>
+                                    <Label htmlFor={`item-final-price-${index}`}>Vlr. Unit. Final (R$)*</Label>
+                                    <Input
+                                        id={`item-final-price-${index}`}
+                                        type="text"
+                                        placeholder="R$ 0,00"
+                                        value={formatCurrency(item.valorUnitarioFinalCliente)}
+                                        onChange={(e) => handleFinalItemPriceChange(item.id, e.target.value)}
+                                        onBlur={(e) => {
+                                            const parsed = parseCurrency(e.target.value);
+                                            e.target.value = formatCurrency(parsed);
+                                        }}
+                                        className="text-xs"
+                                    />
+                                </div>
+                                 <div><Label>Vlr. Total Item (R$):</Label> <Input value={formatCurrency(item.valorTotalFinalCliente)} disabled className="text-xs font-semibold"/></div>
+                             </div>
+                        </Card>
+                    ))}
+                     <p className="text-right font-bold text-lg mt-2">
+                        Valor Total da Proposta Cliente: {formatCurrency(grandTotalFinalProposal)}
+                    </p>
+                </div>
+
+                <div className="space-y-2 pt-4 border-t">
+                    <Label htmlFor="finalProposalObservations">Observações da Proposta Final</Label>
+                    <Textarea
+                        id="finalProposalObservations"
+                        placeholder="Observações, condições especiais, validade da proposta, etc."
+                        value={finalProposalObservations}
+                        onChange={(e) => setFinalProposalObservations(e.target.value)}
+                        className="min-h-[80px]"
+                    />
+                </div>
+            </div>
+          </ScrollArea>
+          <DialogFooter>
             <DialogClose asChild><Button variant="outline" disabled={isSubmitting}>Cancelar</Button></DialogClose>
-            <Button onClick={handleOutcomeSubmit} disabled={isSubmitting || clienteVenceu === undefined || (clienteVenceu === false && !posicaoCliente.trim())}>
+            <Button 
+                onClick={handleOutcomeSubmit} 
+                disabled={
+                    isSubmitting || 
+                    clienteVenceu === undefined || 
+                    (clienteVenceu === false && !posicaoCliente.trim()) ||
+                    finalProposalItems.some(item => item.valorUnitarioFinalCliente === undefined || item.valorUnitarioFinalCliente < 0)
+                }
+            >
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Confirmar Resultado
+              Confirmar Resultado e Gerar Documentos
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -537,3 +769,4 @@ const formatDateLog = (date: Date | string | undefined) => {
     } catch { return 'Data Inválida';}
 };
 
+    
