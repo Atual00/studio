@@ -1,9 +1,9 @@
 
-'use client'; // Required for state, effects, and client-side interactions
+'use client';
 
-import React, {useState, useEffect} from 'react'; // Import React
+import React, {useState, useEffect} from 'react';
 import {useParams, useRouter} from 'next/navigation';
-import {format, parseISO, isValid} from 'date-fns'; // Added isValid
+import {format, parseISO, isValid} from 'date-fns';
 import {ptBR} from 'date-fns/locale';
 import {
   Card,
@@ -41,7 +41,8 @@ import {
     ArrowLeft,
     Trash2,
     CalendarCheck,
-    Clock
+    Clock,
+    FileText // Added FileText
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -55,13 +56,12 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {validateBidDocuments, type ValidateBidDocumentsOutput } from '@/ai/flows/document-validator';
-import { filesToValidateInput } from '@/lib/file-utils'; // Updated import path
+import { filesToValidateInput } from '@/lib/file-utils';
 import {useToast} from '@/hooks/use-toast';
 import { fetchLicitacaoDetails, updateLicitacao, deleteLicitacao, type LicitacaoDetails, statusMap, requiredDocuments } from '@/services/licitacaoService';
-import { type ClientDetails } from '@/components/clientes/client-form'; // For Client info type if needed
-import { fetchClientDetails } from '@/services/clientService'; // To fetch client CNPJ
+import { type ClientDetails } from '@/components/clientes/client-form';
+import { fetchClientDetails } from '@/services/clientService';
 
-// Helper to get badge variant based on custom color mapping from service
 const getBadgeVariant = (color: string | undefined): 'default' | 'secondary' | 'destructive' | 'outline' | 'success' | 'warning' | 'info' | 'accent' => {
   switch (color) {
     case 'secondary': return 'secondary';
@@ -70,14 +70,13 @@ const getBadgeVariant = (color: string | undefined): 'default' | 'secondary' | '
     case 'success': return 'success';
     case 'info': return 'info';
     case 'accent': return 'accent';
-    case 'default': return 'default'; // Map default (primary) if needed
+    case 'default': return 'default';
     case 'outline':
     default:
       return 'outline';
   }
 };
 
-// --- Component ---
 export default function LicitacaoDetalhesPage() {
   const params = useParams();
   const router = useRouter();
@@ -85,11 +84,11 @@ export default function LicitacaoDetalhesPage() {
   const {toast} = useToast();
 
   const [licitacao, setLicitacao] = useState<LicitacaoDetails | null>(null);
-  const [clientDetails, setClientDetails] = useState<ClientDetails | null>(null); // Store fetched client details
+  const [clientDetails, setClientDetails] = useState<ClientDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [checklist, setChecklist] = useState<{ [key: string]: boolean }>({});
-  const [currentStatus, setCurrentStatus] = useState(''); // Use 'currentStatus' to avoid conflict with statusMap
+  const [currentStatus, setCurrentStatus] = useState('');
   const [newComment, setNewComment] = useState('');
   const [isSavingStatus, setIsSavingStatus] = useState(false);
   const [isSavingChecklist, setIsSavingChecklist] = useState(false);
@@ -99,12 +98,11 @@ export default function LicitacaoDetalhesPage() {
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [validationResult, setValidationResult] = useState<ValidateBidDocumentsOutput | null>(null);
   const [isValidating, setIsValidating] = useState(false);
-  const [bidCriteria, setBidCriteria] = useState<string>(''); // State for bid criteria input
+  const [bidCriteria, setBidCriteria] = useState<string>('');
 
-  const [valorPrimeiroColocadoInput, setValorPrimeiroColocadoInput] = useState<string>(''); // Input as string for formatting
+  const [valorPrimeiroColocadoInput, setValorPrimeiroColocadoInput] = useState<string>('');
   const [isSavingBidResult, setIsSavingBidResult] = useState(false);
 
-  // Fetch data on mount
   useEffect(() => {
     if (id) {
       const loadData = async () => {
@@ -116,27 +114,22 @@ export default function LicitacaoDetalhesPage() {
             setLicitacao(data);
             setChecklist(data.checklist || {});
             setCurrentStatus(data.status);
-            // Format initial value for display
             setValorPrimeiroColocadoInput(
               data.valorPrimeiroColocado !== undefined && data.valorPrimeiroColocado !== null
-                ? formatCurrency(data.valorPrimeiroColocado) // Format the fetched number
+                ? formatCurrency(data.valorPrimeiroColocado)
                 : ''
             );
 
-             // Fetch client details to get CNPJ
              if(data.clienteId) {
                  const clientData = await fetchClientDetails(data.clienteId);
                  setClientDetails(clientData);
              }
 
-
-            // Pre-fill criteria based on modality (example)
             if (data.modalidade === 'Pregão Eletrônico') {
                  setBidCriteria(`Documentos necessários para Pregão Eletrônico (exemplo): ${requiredDocuments.map(d => d.label).join(', ')}. Verificar datas de validade e assinaturas. Atestados de capacidade técnica podem ser exigidos.`);
             } else {
                  setBidCriteria('Defina os critérios e documentos exigidos pelo edital aqui.');
             }
-
 
           } else {
             setError('Licitação não encontrada.');
@@ -156,15 +149,14 @@ export default function LicitacaoDetalhesPage() {
     }
   }, [id, toast]);
 
-  // Handler for status change
   const handleStatusChange = async (newStatus: string) => {
     if (!licitacao || isSavingStatus || newStatus === currentStatus) return;
     setIsSavingStatus(true);
-    setError(null); // Clear previous errors
+    setError(null);
     try {
         const success = await updateLicitacao(licitacao.id, { status: newStatus });
         if (success) {
-           setCurrentStatus(newStatus); // Update local state on success
+           setCurrentStatus(newStatus);
            setLicitacao(prev => prev ? {...prev, status: newStatus} : null);
            toast({ title: "Sucesso", description: "Status da licitação atualizado." });
         } else {
@@ -178,24 +170,19 @@ export default function LicitacaoDetalhesPage() {
     }
   };
 
-  // Handler for checklist item change
   const handleChecklistChange = async (docId: string, checked: boolean) => {
      if (!licitacao || isSavingChecklist) return;
-
-     const originalChecklistValue = checklist[docId]; // Store original value for revert
+     const originalChecklistValue = checklist[docId];
      const updatedChecklist = { ...checklist, [docId]: checked };
-     setChecklist(updatedChecklist); // Optimistic UI update
+     setChecklist(updatedChecklist);
      setIsSavingChecklist(true);
      setError(null);
-
      try {
        const success = await updateLicitacao(licitacao.id, { checklist: updatedChecklist });
        if (!success) {
             throw new Error("Falha ao salvar checklist no backend.");
        }
-         // toast({ title: "Checklist atualizado" }); // Optional success toast
      } catch (err) {
-         // Revert UI on failure
          setChecklist(prev => ({ ...prev, [docId]: originalChecklistValue }));
          setError(`Falha ao atualizar checklist. ${err instanceof Error ? err.message : ''}`);
          toast({ title: "Erro", description: `Falha ao atualizar ${requiredDocuments.find(d=>d.id===docId)?.label || docId}. ${err instanceof Error ? err.message : ''}`, variant: "destructive" });
@@ -204,36 +191,29 @@ export default function LicitacaoDetalhesPage() {
      }
   };
 
-  // Handler for adding a comment
   const handleAddComment = async () => {
      if (!licitacao || !newComment.trim() || isAddingComment) return;
      setIsAddingComment(true);
      setError(null);
-
      const commentData = {
-         id: `c${Date.now()}`, // Temporary ID, backend should generate real one
+         id: `c${Date.now()}`,
          texto: newComment.trim(),
-         data: new Date().toISOString(), // Use ISO string for storage consistency
-         autor: 'Usuário Atual' // Replace with actual user info
+         data: new Date().toISOString(),
+         autor: 'Usuário Atual'
      };
-
      const updatedComments = [...(licitacao.comentarios || []), commentData];
-
-     // Optimistic UI update
      const originalComments = licitacao.comentarios;
      setLicitacao(prev => prev ? {...prev, comentarios: updatedComments } : null);
      setNewComment('');
-
      try {
-       const success = await updateLicitacao(licitacao.id, { comentarios: updatedComments }); // Send the whole list
+       const success = await updateLicitacao(licitacao.id, { comentarios: updatedComments });
        if (!success) {
             throw new Error("Falha ao salvar comentário no backend.");
        }
          toast({ title: "Comentário adicionado." });
      } catch(err) {
-         // Revert UI on failure
          setLicitacao(prev => prev ? {...prev, comentarios: originalComments || [] } : null);
-         setNewComment(commentData.texto); // Put text back in textarea
+         setNewComment(commentData.texto);
          setError(`Falha ao adicionar comentário. ${err instanceof Error ? err.message : ''}`);
          toast({ title: "Erro", description: `Falha ao adicionar comentário. ${err instanceof Error ? err.message : ''}`, variant: "destructive" });
      } finally {
@@ -241,103 +221,73 @@ export default function LicitacaoDetalhesPage() {
      }
   };
 
- // Handler for file upload
  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files) {
-      // Prevent duplicates
       const newFiles = Array.from(event.target.files);
       setUploadedFiles(prev => {
           const existingNames = new Set(prev.map(f => f.name));
           const uniqueNewFiles = newFiles.filter(f => !existingNames.has(f.name));
           return [...prev, ...uniqueNewFiles];
       });
-      // Clear the input value to allow uploading the same file again if needed
       event.target.value = '';
-      // Clear previous validation results when new files are added
       setValidationResult(null);
-      setError(null); // Clear previous errors
+      setError(null);
     }
   };
 
-  // Remove uploaded file
   const removeFile = (index: number) => {
     setUploadedFiles(prev => prev.filter((_, i) => i !== index));
-    // If removing a file while validation results exist, clear results
     if (validationResult) {
         setValidationResult(null);
     }
      setError(null);
   };
 
- // Handler for triggering AI validation
   const handleValidateDocuments = async () => {
     if (uploadedFiles.length === 0 || !bidCriteria.trim()) {
       toast({title: "Atenção", description: "Faça upload de documentos e defina os critérios do edital.", variant: "destructive"});
       return;
     }
     setIsValidating(true);
-    setValidationResult(null); // Clear previous results
+    setValidationResult(null);
     setError(null);
-
     try {
       const input = await filesToValidateInput(uploadedFiles, bidCriteria);
       console.log("Sending to AI:", JSON.stringify({ bidCriteria, fileCount: input.documents.length, firstFileName: input.documents[0]?.filename }, null, 2));
-
       const result = await validateBidDocuments(input);
       setValidationResult(result);
       console.log("AI Result:", JSON.stringify(result, null, 2));
-
        if (result && result.validityDetails) {
          const updatedChecklist = { ...checklist };
          let allRequiredPresentAndValid = true;
          const aiChecklistUpdates: { [key: string]: boolean } = {};
-
          const validityMap = new Map(result.validityDetails.map(detail => [detail.documentName.toLowerCase(), detail]));
-
          requiredDocuments.forEach(docInfo => {
            const docId = docInfo.id;
            const docLabelLower = docInfo.label.toLowerCase();
-           // Find *any* uploaded file whose name contains the required doc label (case-insensitive)
            const uploadedFile = uploadedFiles.find(f => f.name.toLowerCase().includes(docLabelLower));
            const docFileNameLower = uploadedFile?.name.toLowerCase();
            const aiDetail = docFileNameLower ? validityMap.get(docFileNameLower) : undefined;
-
            let isConsideredValid = aiDetail?.isValid ?? false;
            const isMissing = result.missingDocuments?.some(missing => missing.toLowerCase().includes(docLabelLower));
-
-           // Determine if the checklist item should be checked based on AI validation
            const shouldBeChecked = !!uploadedFile && isConsideredValid && !isMissing;
-           aiChecklistUpdates[docId] = shouldBeChecked; // Store AI's opinion
-
-           // Update overall validity check
+           aiChecklistUpdates[docId] = shouldBeChecked;
            if (!shouldBeChecked) {
                allRequiredPresentAndValid = false;
            }
          });
-
-         // Apply AI updates to the local checklist state
          setChecklist(prev => ({ ...prev, ...aiChecklistUpdates }));
-
-         // Attempt to save the AI-updated checklist to the backend
          try {
-             const success = await updateLicitacao(id, { checklist: { ...checklist, ...aiChecklistUpdates } }); // Send combined state
+             const success = await updateLicitacao(id, { checklist: { ...checklist, ...aiChecklistUpdates } });
              if (success) {
                  toast({ title: "Checklist Atualizado", description: "Checklist atualizado com base na validação da IA." });
              } else {
                  throw new Error("Falha ao salvar checklist atualizado pela IA no backend.");
              }
          } catch (checklistSaveError) {
-              // Revert checklist changes if backend update fails
               console.error("Checklist save error:", checklistSaveError);
-              // Refetch or use original state to revert `checklist` state
-              // For simplicity, we'll just show an error toast here
               toast({ title: "Erro ao Salvar Checklist", description: `Não foi possível salvar as atualizações do checklist. ${checklistSaveError instanceof Error ? checklistSaveError.message : ''}`, variant: "destructive" });
-              // Revert local state (optional, might cause confusion if AI result is still shown)
-              // const originalData = await fetchLicitacaoDetails(id);
-              // if (originalData) setChecklist(originalData.checklist || {});
          }
-
-          // Update status based on completeness (example logic) - Only if status is appropriate
          if (currentStatus === 'EM_ANALISE' || currentStatus === 'FALTA_DOCUMENTACAO') {
             if (result.completeness && allRequiredPresentAndValid) {
                 await handleStatusChange('DOCUMENTACAO_CONCLUIDA');
@@ -345,9 +295,7 @@ export default function LicitacaoDetalhesPage() {
                 await handleStatusChange('FALTA_DOCUMENTACAO');
             }
          } else if (currentStatus === 'AGUARDANDO_ANALISE') {
-             // If just started, update to Em Análise after first validation
              await handleStatusChange('EM_ANALISE');
-             // Then potentially update again based on results
              if (result.completeness && allRequiredPresentAndValid) {
                 await handleStatusChange('DOCUMENTACAO_CONCLUIDA');
              } else {
@@ -355,17 +303,14 @@ export default function LicitacaoDetalhesPage() {
             }
          }
        } else {
-           // Handle case where AI result might be incomplete
            console.warn("AI validation result structure might be incomplete:", result);
            setError("Resultado da validação da IA está incompleto.");
        }
-
     } catch (error) {
       console.error('Erro na validação por IA:', error);
       const errorMessage = `Falha ao validar documentos com IA. ${error instanceof Error ? error.message : 'Erro desconhecido.'}`;
       setError(errorMessage);
       toast({title: "Erro de Validação", description: errorMessage, variant: "destructive"});
-       // Set a default error state in validationResult if AI fails completely
        setValidationResult({
             completeness: false,
             validityDetails: uploadedFiles.map(f => ({ documentName: f.name, isValid: false, reasoning: `Falha na validação: ${error instanceof Error ? error.message : 'Erro desconhecido.'}`})),
@@ -376,29 +321,22 @@ export default function LicitacaoDetalhesPage() {
     }
   };
 
-
-  // Format currency for display
   const formatCurrency = (value: number | undefined | null): string => {
       if (value === undefined || value === null) return '';
       return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   };
 
-   // Parse currency string to number
   const parseCurrency = (value: string): number | undefined => {
       if (!value) return undefined;
-      // Handle "0" or "R$ 0,00"
       if (value.trim() === '0' || value.trim() === 'R$ 0,00' || value.replace(/[^0-9,]/g, '') === '0') return 0;
-      // Remove R$, spaces, dots, and replace comma with dot
       const cleaned = value.replace(/[R$\s.]/g, '').replace(',', '.');
       const num = parseFloat(cleaned);
       return isNaN(num) ? undefined : num;
   };
 
-   // Handler for saving bid result (1st place value)
    const handleSaveBidResult = async () => {
        const valorNum = parseCurrency(valorPrimeiroColocadoInput);
-
-      if (!licitacao || isSavingBidResult || valorNum === undefined || valorNum < 0) { // Allow zero
+      if (!licitacao || isSavingBidResult || valorNum === undefined || valorNum < 0) {
           toast({ title: "Atenção", description: "Insira um valor válido (incluindo zero) para o primeiro colocado.", variant: "destructive" });
           return;
       }
@@ -420,23 +358,18 @@ export default function LicitacaoDetalhesPage() {
      }
    };
 
-   // Calculate bid difference
    const calculateBidDifference = () => {
       if (!licitacao || licitacao.valorPrimeiroColocado === undefined || licitacao.valorPrimeiroColocado === null || licitacao.valorCobrado === undefined || licitacao.valorCobrado === null || licitacao.valorCobrado < 0) {
-          return null; // Use valorCobrado as the client's bid value, ensure it exists
+          return null;
       }
-      const valorProprio = licitacao.valorCobrado; // This is the client's bid value (Assessoria's charged value)
+      const valorProprio = licitacao.valorCobrado;
       const valorPrimeiro = licitacao.valorPrimeiroColocado;
-
-      if (valorPrimeiro < 0) { // Allow zero for competitor, but not negative
+      if (valorPrimeiro < 0) {
          return { absolute: formatCurrency(valorProprio - valorPrimeiro), percentage: 'Inválido (1º < 0)' };
       }
       if (valorPrimeiro === 0) {
-         // If competitor bid is 0, percentage difference is infinite or undefined. Handle appropriately.
           return { absolute: formatCurrency(valorProprio - valorPrimeiro), percentage: 'N/A (1º foi R$ 0)' };
       }
-
-
       const difference = valorProprio - valorPrimeiro;
       const percentageDifference = (difference / valorPrimeiro) * 100;
       return {
@@ -447,7 +380,6 @@ export default function LicitacaoDetalhesPage() {
 
    const bidDifference = calculateBidDifference();
 
-   // Handle Licitacao deletion
    const handleDelete = async () => {
        if (!licitacao) return;
        setIsDeleting(true);
@@ -456,7 +388,7 @@ export default function LicitacaoDetalhesPage() {
            const success = await deleteLicitacao(licitacao.id);
            if (success) {
                toast({ title: "Sucesso", description: "Licitação excluída." });
-               router.push('/licitacoes'); // Redirect to the list
+               router.push('/licitacoes');
            } else {
                throw new Error("Falha na operação de exclusão no backend.");
            }
@@ -464,18 +396,15 @@ export default function LicitacaoDetalhesPage() {
            console.error('Erro ao excluir licitação:', err);
            setError(`Falha ao excluir a licitação. ${err instanceof Error ? err.message : ''}`);
            toast({ title: "Erro", description: `Não foi possível excluir a licitação. ${err instanceof Error ? err.message : ''}`, variant: "destructive" });
-           setIsDeleting(false); // Keep dialog open on error
+           setIsDeleting(false);
        }
-       // No finally needed as it redirects on success
    };
 
-
-  // --- Render Logic ---
   if (loading) {
     return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   }
 
-  if (error && !licitacao) { // Show error only if loading failed completely
+  if (error && !licitacao) {
     return (
          <div className="space-y-4">
             <Button variant="outline" onClick={() => router.push('/licitacoes')}>
@@ -505,12 +434,10 @@ export default function LicitacaoDetalhesPage() {
     );
   }
 
-  // Safely format dates, handling potential string dates from storage
     const formatDate = (date: Date | string | undefined | null, time = false): string => {
         if (!date) return 'N/A';
         try {
             const dateObj = typeof date === 'string' ? parseISO(date) : date;
-            // Check if the parsed date is valid
             if (!(dateObj instanceof Date) || !isValid(dateObj)) {
                  console.warn("Invalid date encountered:", date);
                  return 'Data inválida';
@@ -526,7 +453,6 @@ export default function LicitacaoDetalhesPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
        <div className="flex flex-col md:flex-row justify-between md:items-start gap-4">
             <div>
                <div className="flex items-center gap-2 mb-1">
@@ -559,7 +485,6 @@ export default function LicitacaoDetalhesPage() {
                         </SelectContent>
                     </Select>
                  </div>
-                 {/* Delete Button */}
                  <AlertDialog>
                     <AlertDialogTrigger asChild>
                         <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10">
@@ -585,8 +510,6 @@ export default function LicitacaoDetalhesPage() {
              </div>
        </div>
 
-
-      {/* Display general errors */}
       {error && !loading && (
            <Alert variant="destructive">
                <XCircle className="h-4 w-4"/>
@@ -595,24 +518,23 @@ export default function LicitacaoDetalhesPage() {
            </Alert>
       )}
 
-      {/* Main Content Grid */}
        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-         {/* Left Column: Details & Checklist & AI */}
          <div className="lg:col-span-2 space-y-6">
-             {/* Core Details */}
               <Card>
                 <CardHeader>
                     <CardTitle>Detalhes da Licitação</CardTitle>
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-sm">
                    <div><span className="font-medium">Protocolo:</span> {licitacao.id}</div>
-                    <div><span className="font-medium">Valor Total Licitação:</span> {formatCurrency(licitacao.valorTotalLicitacao)}</div>
+                   {/* valorTotalLicitacao REMOVED */}
                    <div><span className="font-medium">Valor Cobrado (Assessoria):</span> {formatCurrency(licitacao.valorCobrado)}</div>
                    <div className="flex items-center gap-1"><Clock className="h-3.5 w-3.5 text-muted-foreground"/> <span className="font-medium">Início Disputa:</span> {formatDate(licitacao.dataInicio, true)}</div>
                    <div className="flex items-center gap-1"><CalendarCheck className="h-3.5 w-3.5 text-muted-foreground"/> <span className="font-medium">Meta Análise:</span> {formatDate(licitacao.dataMetaAnalise)}</div>
                     {licitacao.dataHomologacao && (
                         <div className="sm:col-span-2"><span className="font-medium">Data Homologação:</span> {formatDate(licitacao.dataHomologacao)}</div>
+                    )}
+                    {licitacao.propostaItensPdfNome && (
+                        <div className="sm:col-span-2 flex items-center gap-1"><FileText className="h-3.5 w-3.5 text-muted-foreground"/> <span className="font-medium">PDF Itens da Proposta:</span> {licitacao.propostaItensPdfNome}</div>
                     )}
                    {licitacao.observacoes && (
                        <div className="sm:col-span-2 mt-2 pt-2 border-t"><span className="font-medium">Observações:</span> <p className="text-muted-foreground whitespace-pre-wrap">{licitacao.observacoes}</p></div>
@@ -620,7 +542,6 @@ export default function LicitacaoDetalhesPage() {
                 </CardContent>
             </Card>
 
-             {/* Checklist */}
             <Card>
                 <CardHeader>
                     <CardTitle>Checklist de Documentos</CardTitle>
@@ -628,13 +549,11 @@ export default function LicitacaoDetalhesPage() {
                 </CardHeader>
                 <CardContent className="space-y-3">
                     {requiredDocuments.map(doc => {
-                        // Find the AI validation result for this specific required document type
                         const docLabelLower = doc.label.toLowerCase();
                         const aiValidationDetail = validationResult?.validityDetails?.find(detail =>
                             detail.documentName.toLowerCase().includes(docLabelLower)
                         );
                         const isCurrentlySaving = isSavingChecklist && checklist[doc.id] !== licitacao.checklist?.[doc.id];
-
                         return (
                             <div key={doc.id} className="flex items-center space-x-3 group">
                                 <Checkbox
@@ -647,13 +566,11 @@ export default function LicitacaoDetalhesPage() {
                                 <Label htmlFor={`chk-${doc.id}`} className="flex-1 text-sm font-normal cursor-pointer group-hover:text-primary transition-colors">
                                     {doc.label}
                                 </Label>
-                                {/* Indicate AI validation status if available */}
                                 {aiValidationDetail ? (
                                     aiValidationDetail.isValid
                                         ? <CheckCircle className="h-4 w-4 text-green-600 shrink-0" title={`Validado pela IA ${aiValidationDetail.reasoning ? `(${aiValidationDetail.reasoning})` : ''}`} />
                                         : <XCircle className="h-4 w-4 text-red-600 shrink-0" title={`Inválido/Problema (IA): ${aiValidationDetail.reasoning || 'Sem detalhes'}`} />
                                 ) : (isValidating && <HelpCircle className="h-4 w-4 text-muted-foreground shrink-0" title="Aguardando validação da IA"/>)}
-
                                 {isCurrentlySaving && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground shrink-0" />}
                             </div>
                         );
@@ -664,7 +581,6 @@ export default function LicitacaoDetalhesPage() {
                  </CardFooter>
             </Card>
 
-            {/* AI Document Validator */}
              <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2"><Bot className="h-5 w-5" /> Validador de Documentos (IA)</CardTitle>
@@ -701,7 +617,6 @@ export default function LicitacaoDetalhesPage() {
                         )}
                     </div>
 
-                     {/* AI Validation Result Display */}
                      {validationResult && !isValidating && (
                         <Alert variant={validationResult.completeness && validationResult.validityDetails.every(d => d.isValid) ? 'success' : 'warning'} className="mt-4">
                              {validationResult.completeness && validationResult.validityDetails.every(d => d.isValid) ? <FileCheck2 className="h-4 w-4" /> : <FileX2 className="h-4 w-4" />}
@@ -726,7 +641,6 @@ export default function LicitacaoDetalhesPage() {
                             </AlertDescription>
                         </Alert>
                     )}
-
                 </CardContent>
                 <CardFooter className="flex justify-between items-center">
                     <Button onClick={handleValidateDocuments} disabled={isValidating || uploadedFiles.length === 0 || !bidCriteria.trim()}>
@@ -736,7 +650,6 @@ export default function LicitacaoDetalhesPage() {
                 </CardFooter>
             </Card>
 
-            {/* Bid Result Section */}
             {['AGUARDANDO_DISPUTA', 'EM_HOMOLOGACAO', 'AGUARDANDO_RECURSO', 'EM_PRAZO_CONTRARRAZAO', 'PROCESSO_HOMOLOGADO'].includes(currentStatus) && (
               <Card>
                 <CardHeader>
@@ -750,21 +663,19 @@ export default function LicitacaoDetalhesPage() {
                        <Input
                         id="valor-primeiro"
                         placeholder="R$ 0,00"
-                        type="text" // Use text to allow formatting
+                        type="text"
                         value={valorPrimeiroColocadoInput}
                         onChange={(e) => {
                              const rawValue = e.target.value;
-                             const parsedValue = parseCurrency(rawValue);
-                             setValorPrimeiroColocadoInput(rawValue); // Keep raw input for typing
-                             // Optionally trigger validation if needed
+                             setValorPrimeiroColocadoInput(rawValue);
                          }}
-                         onBlur={(e) => { // Format on blur
+                         onBlur={(e) => {
                              const parsedValue = parseCurrency(e.target.value);
                              setValorPrimeiroColocadoInput(formatCurrency(parsedValue));
                          }}
                         disabled={isSavingBidResult}
-                        className={parseCurrency(valorPrimeiroColocadoInput) === undefined && valorPrimeiroColocadoInput.trim() !== '' ? 'border-red-500' : ''} // Basic invalid style
-                        inputMode="decimal" // Hint for mobile keyboards
+                        className={parseCurrency(valorPrimeiroColocadoInput) === undefined && valorPrimeiroColocadoInput.trim() !== '' ? 'border-red-500' : ''}
+                        inputMode="decimal"
                       />
                       {parseCurrency(valorPrimeiroColocadoInput) === undefined && valorPrimeiroColocadoInput.trim() !== '' && <p className="text-xs text-destructive mt-1">Valor inválido.</p>}
                     </div>
@@ -784,27 +695,23 @@ export default function LicitacaoDetalhesPage() {
                              : (licitacao.valorCobrado !== undefined && licitacao.valorPrimeiroColocado !== undefined && licitacao.valorCobrado > licitacao.valorPrimeiroColocado)
                             ? `Seu lance (${formatCurrency(licitacao.valorCobrado)}) foi ${bidDifference.absolute} (${bidDifference.percentage}) acima do primeiro colocado (${formatCurrency(licitacao.valorPrimeiroColocado)}).`
                              : 'Valores indisponíveis para análise.'}
-
                        </AlertDescription>
                      </Alert>
                    )}
                 </CardContent>
               </Card>
             )}
-
          </div>
 
-
-          {/* Right Column: Comments */}
          <div className="lg:col-span-1 space-y-6">
-              <Card className="sticky top-4"> {/* Make comments sticky */}
+              <Card className="sticky top-4">
                  <CardHeader>
                      <CardTitle>Comentários</CardTitle>
                      <CardDescription>Adicione notas e atualizações sobre o processo.</CardDescription>
                  </CardHeader>
-                 <CardContent className="space-y-4 max-h-[calc(100vh-18rem)] overflow-y-auto p-4 border-t border-b"> {/* Scrollable content */}
+                 <CardContent className="space-y-4 max-h-[calc(100vh-18rem)] overflow-y-auto p-4 border-t border-b">
                     {licitacao.comentarios && licitacao.comentarios.length > 0 ? (
-                        [...licitacao.comentarios].reverse().map(comment => ( // Show newest first
+                        [...licitacao.comentarios].reverse().map(comment => (
                             <div key={comment.id} className="text-sm border rounded-md p-3 bg-muted/50">
                                 <p className="font-medium text-xs text-foreground">{comment.autor} <span className="font-normal text-muted-foreground">em {formatDate(comment.data, true)}</span></p>
                                 <p className="mt-1 whitespace-pre-wrap">{comment.texto}</p>
@@ -831,7 +738,6 @@ export default function LicitacaoDetalhesPage() {
                  </CardFooter>
               </Card>
          </div>
-
        </div>
     </div>
   );

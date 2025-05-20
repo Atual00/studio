@@ -1,35 +1,30 @@
-
-
 'use client';
 
 import {zodResolver} from '@hookform/resolvers/zod';
-import {useForm, Controller} from 'react-hook-form'; // Import Controller
+import {useForm, Controller} from 'react-hook-form';
 import {z} from 'zod';
 import {useState, useEffect} from 'react';
 import {format, parseISO} from 'date-fns';
 import {ptBR} from 'date-fns/locale';
-import {Calendar as CalendarIcon, Loader2} from 'lucide-react';
+import {Calendar as CalendarIcon, Loader2, Upload} from 'lucide-react'; // Added Upload
 
 import {Button} from '@/components/ui/button';
-import {Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage, useFormField} from '@/components/ui/form'; // Import useFormField
+import {Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage, useFormField} from '@/components/ui/form';
 import {Input} from '@/components/ui/input';
 import {Textarea} from '@/components/ui/textarea';
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@/components/ui/select';
 import {Popover, PopoverContent, PopoverTrigger} from '@/components/ui/popover';
 import {Calendar} from '@/components/ui/calendar';
-import {Label} from '@/components/ui/label'; // Import Label component
+import {Label} from '@/components/ui/label';
 import {cn} from '@/lib/utils';
-import { type ClientListItem } from '@/services/clientService'; // Import ClientListItem type
+import { type ClientListItem } from '@/services/clientService';
 
-// Example modalities and platforms (replace with actual data source if needed)
 const modalities = ['Pregão Eletrônico', 'Tomada de Preços', 'Convite', 'Concorrência', 'Leilão', 'Dispensa Eletrônica', 'Concurso', 'RDC'];
 const platforms = ['ComprasNet', 'Licitações-e (BB)', 'BEC/SP', 'BNC', 'BLL Compras', 'Portal de Compras Públicas', 'Outra Plataforma'];
 
-// Helper for parsing currency string to number
 const parseCurrencyString = (val: unknown): number | undefined => {
-  if (typeof val === 'number') return val; // Already a number
+  if (typeof val === 'number') return val;
   if (typeof val === 'string') {
-    // Allow "0", "0,00" etc. to be parsed as 0
     if (val.match(/^R?\$\s?0([,.](0+))?$/) || val.trim() === '0') return 0;
     const cleaned = val.replace(/[R$\s.]/g, '').replace(',', '.');
     const num = parseFloat(cleaned);
@@ -40,145 +35,147 @@ const parseCurrencyString = (val: unknown): number | undefined => {
 
 // Zod schema for validation
 const licitacaoFormSchema = z.object({
-  clienteId: z.string({required_error: 'Selecione o cliente participante.'}).min(1, 'Selecione o cliente participante.'), // Ensure not empty string
+  clienteId: z.string({required_error: 'Selecione o cliente participante.'}).min(1, 'Selecione o cliente participante.'),
   modalidade: z.string({required_error: 'Selecione a modalidade da licitação.'}),
   numeroLicitacao: z.string().min(1, {message: 'Número da licitação é obrigatório.'}),
-  orgaoComprador: z.string().min(1, {message: 'Órgão comprador é obrigatório.'}), // Added field
+  orgaoComprador: z.string().min(1, {message: 'Órgão comprador é obrigatório.'}),
   plataforma: z.string({required_error: 'Selecione a plataforma onde ocorrerá.'}),
   dataInicio: z.date({required_error: 'Data e hora de início são obrigatórias.'}),
   dataMetaAnalise: z.date({required_error: 'Data meta para análise é obrigatória.'}),
-  // Allow zero, handle string input for currency
   valorCobrado: z.preprocess(
     parseCurrencyString,
     z.number({required_error: 'Valor cobrado é obrigatório.', invalid_type_error: 'Valor cobrado deve ser um número.'}).min(0, { message: 'Valor deve ser zero ou positivo.' })
   ),
-  valorTotalLicitacao: z.preprocess( // Added field
-     parseCurrencyString,
-     z.number({required_error: 'Valor total da licitação é obrigatório.', invalid_type_error: 'Valor total deve ser um número.'}).min(0, { message: 'Valor total deve ser zero ou positivo.' })
-  ),
+  // valorTotalLicitacao REMOVED
+  propostaItensPdf: z.custom<File | undefined>((val) => val === undefined || val instanceof File, {
+    message: "Arquivo de itens da proposta inválido. Deve ser um PDF.",
+  }).refine(file => file ? file.type === "application/pdf" : true, "Arquivo deve ser um PDF.")
+    .optional(),
   observacoes: z.string().optional(),
 });
 
+// Add a type that includes the File object for form handling,
+// but LicitacaoDetails will store propostaItensPdfNome as string.
 export type LicitacaoFormValues = z.infer<typeof licitacaoFormSchema>;
 
+
 interface LicitacaoFormProps {
-  clients: ClientListItem[]; // Use ClientListItem type
-  initialData?: Partial<LicitacaoFormValues & { dataInicio?: string | Date; dataMetaAnalise?: string | Date }>; // Allow string dates for initial data
-  onSubmit?: (data: LicitacaoFormValues) => void | Promise<void>; // Optional submit handler
-  isSubmitting?: boolean; // Add submitting state prop
+  clients: ClientListItem[];
+  initialData?: Partial<LicitacaoFormValues & { dataInicio?: string | Date; dataMetaAnalise?: string | Date; propostaItensPdfNome?: string }>;
+  onSubmit?: (data: LicitacaoFormValues) => void | Promise<void>;
+  isSubmitting?: boolean;
 }
 
 export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitting = false}: LicitacaoFormProps) {
 
-  // Helper function to safely parse dates from initialData (which might be string or Date)
-    const parseInitialDate = (date: string | Date | undefined): Date | undefined => {
+  const parseInitialDate = (date: string | Date | undefined): Date | undefined => {
         if (!date) return undefined;
         try {
              const parsed = typeof date === 'string' ? parseISO(date) : date;
-             // Validate parsed date
              return parsed instanceof Date && !isNaN(parsed.getTime()) ? parsed : undefined;
         } catch {
             return undefined;
         }
     };
 
+  // State for managing the file input, as react-hook-form doesn't handle files directly well
+  const [selectedPropostaFile, setSelectedPropostaFile] = useState<File | undefined>(undefined);
+  const [propostaFileName, setPropostaFileName] = useState<string | undefined>(initialData?.propostaItensPdfNome);
+
 
   const form = useForm<LicitacaoFormValues>({
     resolver: zodResolver(licitacaoFormSchema),
     defaultValues: {
-      clienteId: initialData?.clienteId || '', // Use empty string instead of undefined
+      clienteId: initialData?.clienteId || '',
       modalidade: initialData?.modalidade || undefined,
       numeroLicitacao: initialData?.numeroLicitacao || '',
-      orgaoComprador: initialData?.orgaoComprador || '', // Initialize new field
+      orgaoComprador: initialData?.orgaoComprador || '',
       plataforma: initialData?.plataforma || undefined,
       dataInicio: parseInitialDate(initialData?.dataInicio),
       dataMetaAnalise: parseInitialDate(initialData?.dataMetaAnalise),
-      // Ensure valorCobrado is a number if provided, otherwise undefined
       valorCobrado: initialData?.valorCobrado !== undefined ? Number(initialData.valorCobrado) : undefined,
-      valorTotalLicitacao: initialData?.valorTotalLicitacao !== undefined ? Number(initialData.valorTotalLicitacao) : undefined, // Initialize new field
+      // valorTotalLicitacao removed
+      propostaItensPdf: undefined, // File object is not part of initial data directly
       observacoes: initialData?.observacoes || '',
     },
   });
 
-    // Effect to reset form when initialData changes (e.g., in an edit scenario)
     useEffect(() => {
         if (initialData) {
             form.reset({
                 ...initialData,
-                 clienteId: initialData?.clienteId || '', // Reset client ID correctly
+                 clienteId: initialData?.clienteId || '',
                  modalidade: initialData?.modalidade || undefined,
                  orgaoComprador: initialData?.orgaoComprador || '',
                  plataforma: initialData?.plataforma || undefined,
                  dataInicio: parseInitialDate(initialData?.dataInicio),
                  dataMetaAnalise: parseInitialDate(initialData?.dataMetaAnalise),
                  valorCobrado: initialData?.valorCobrado !== undefined ? Number(initialData.valorCobrado) : undefined,
-                 valorTotalLicitacao: initialData?.valorTotalLicitacao !== undefined ? Number(initialData.valorTotalLicitacao) : undefined,
-                 observacoes: initialData?.observacoes || '', // Ensure observacoes is reset
+                 observacoes: initialData?.observacoes || '',
             });
+            setPropostaFileName(initialData.propostaItensPdfNome);
+            // Note: We cannot pre-fill the file input for security reasons
+            setSelectedPropostaFile(undefined);
         }
     }, [initialData, form]);
 
 
-   // Format currency on input change and allow zero
   const formatCurrency = (value: number | undefined | null): string => {
     if (value === undefined || value === null) return '';
-    // Explicitly format 0 as R$ 0,00
     if (value === 0) return 'R$ 0,00';
-
     return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
    const handleCurrencyChange = (e: React.ChangeEvent<HTMLInputElement>, field: any) => {
      const rawValue = e.target.value;
-     let numberValue: number | undefined;
-
-      // Check if the raw input aims to be zero
-      if (rawValue.trim() === '0' || rawValue === 'R$ 0,00' || rawValue.replace(/[^0-9,]/g, '') === '0' || rawValue.replace(/[^0-9.]/g, '') === '0') {
-          numberValue = 0;
-          field.onChange(0); // Update form state with 0
-          // Don't format immediately onChange, format onBlur instead for better UX
-          // e.target.value = formatCurrency(0);
+     if (rawValue.trim() === '0' || rawValue === 'R$ 0,00' || rawValue.replace(/[^0-9,]/g, '') === '0' || rawValue.replace(/[^0-9.]/g, '') === '0') {
+          field.onChange(0);
           return;
       }
-
-      // Parse non-zero values
       const cleaned = rawValue.replace(/[^0-9]/g, '');
       if (cleaned === '') {
-          numberValue = undefined;
-          field.onChange(undefined); // Update form state
-          // e.target.value = ''; // Clear display if needed, but often better to keep raw input during typing
+          field.onChange(undefined);
       } else {
           const parsedNum = parseInt(cleaned, 10) / 100;
-          numberValue = isNaN(parsedNum) ? undefined : parsedNum;
-          field.onChange(numberValue); // Update form state
-          // Don't format immediately onChange, format onBlur instead for better UX
-          // e.target.value = formatCurrency(numberValue);
+          field.onChange(isNaN(parsedNum) ? undefined : parsedNum);
       }
    };
 
+  const handlePropostaFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+        if (file.type === "application/pdf") {
+            setSelectedPropostaFile(file);
+            setPropostaFileName(file.name);
+            form.setValue('propostaItensPdf', file, { shouldValidate: true });
+            form.clearErrors('propostaItensPdf');
+        } else {
+            setSelectedPropostaFile(undefined);
+            setPropostaFileName(undefined);
+            form.setValue('propostaItensPdf', undefined);
+            form.setError('propostaItensPdf', { type: 'manual', message: 'Arquivo deve ser um PDF.' });
+            event.target.value = ''; // Clear the input
+        }
+    } else {
+        setSelectedPropostaFile(undefined);
+        setPropostaFileName(undefined);
+        form.setValue('propostaItensPdf', undefined);
+    }
+  };
+
 
   const handleFormSubmit = async (data: LicitacaoFormValues) => {
-    console.log('Form Data:', data); // Log data for debugging
-    // Convert dates to ISO strings before submitting if backend expects strings
-    const dataToSubmit = {
-        ...data,
-        // Ensure dates are valid before calling toISOString
-        dataInicio: data.dataInicio instanceof Date ? data.dataInicio.toISOString() : undefined,
-        dataMetaAnalise: data.dataMetaAnalise instanceof Date ? data.dataMetaAnalise.toISOString() : undefined,
-    };
-
-    console.log('Submitting Data:', dataToSubmit);
+    console.log('Form Data (before sending to parent):', data);
+    // The 'propostaItensPdf' field in 'data' will be the File object if selected.
+    // The parent onSubmit (addLicitacao/updateLicitacao service) will handle using its name.
 
     if (onSubmit) {
       try {
-        // Pass data with Date objects if the service handles it, otherwise pass dataToSubmit
-        await onSubmit(data);
+        await onSubmit(data); // Pass the form data including the File object
       } catch (error) {
          console.error('Failed to submit licitação data:', error);
-         // Error handling is managed by the parent through toast
       }
     } else {
-      // Default action if no onSubmit provided
       console.warn('No onSubmit handler provided to LicitacaoForm.');
     }
   };
@@ -193,7 +190,6 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
           render={({field}) => (
             <FormItem>
               <FormLabel>Cliente*</FormLabel>
-              {/* Use field.value directly, ensure initial is empty string */}
               <Select onValueChange={field.onChange} value={field.value || ''} disabled={isSubmitting}>
                 <FormControl>
                   <SelectTrigger>
@@ -204,7 +200,7 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
                   {clients.length === 0 && <SelectItem value="loading" disabled>Carregando...</SelectItem>}
                   {clients.map(client => (
                     <SelectItem key={client.id} value={client.id}>
-                      {client.name} ({client.cnpj}) {/* Show CNPJ for clarity */}
+                      {client.name} ({client.cnpj})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -302,10 +298,10 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
                   <FormControl>
                     <Input
                      placeholder="R$ 0,00"
-                     type="text" // Use text type for formatting control
-                     value={field.value !== undefined ? formatCurrency(field.value) : ''} // Format value for display
+                     type="text"
+                     value={field.value !== undefined ? formatCurrency(field.value) : ''}
                      onChange={(e) => handleCurrencyChange(e, field)}
-                     onBlur={(e) => { // Ensure formatting on blur
+                     onBlur={(e) => {
                         e.target.value = formatCurrency(field.value);
                      }}
                      disabled={isSubmitting}
@@ -319,30 +315,33 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
             />
         </div>
 
+        {/* REMOVED Valor Total Estimado (Licitação) Field */}
+
         <FormField
-            control={form.control}
-            name="valorTotalLicitacao"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Valor Total Estimado/Global (Licitação)*</FormLabel>
-                <FormControl>
-                  <Input
-                     placeholder="R$ 0,00"
-                     type="text"
-                     value={field.value !== undefined ? formatCurrency(field.value) : ''} // Format value for display
-                     onChange={(e) => handleCurrencyChange(e, field)}
-                     onBlur={(e) => {
-                         e.target.value = formatCurrency(field.value);
-                      }}
-                     disabled={isSubmitting}
-                     inputMode="decimal"
-                  />
-                </FormControl>
-                <FormDescription>Valor total estimado ou global da licitação (para referência).</FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          control={form.control}
+          name="propostaItensPdf"
+          render={({ field /* Destructure field if you directly use its onChange, onBlur etc. */ }) => (
+            <FormItem>
+              <FormLabel htmlFor="propostaItensPdf">Itens da Proposta (PDF)</FormLabel>
+              <FormControl>
+                <Input
+                  id="propostaItensPdf"
+                  type="file"
+                  accept="application/pdf"
+                  onChange={handlePropostaFileChange} // Use custom handler
+                  disabled={isSubmitting}
+                  className="cursor-pointer"
+                />
+              </FormControl>
+              {propostaFileName && (
+                <FormDescription className="text-xs text-muted-foreground">
+                  Arquivo selecionado: {propostaFileName}
+                </FormDescription>
+              )}
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
 
          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -380,8 +379,7 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
                         mode="single"
                         selected={field.value}
                         onSelect={(date) => {
-                             // Preserve time if date is selected without time picker interaction
-                             const currentTime = field.value instanceof Date ? { hours: field.value.getHours(), minutes: field.value.getMinutes() } : { hours: 9, minutes: 0 }; // Default time
+                             const currentTime = field.value instanceof Date ? { hours: field.value.getHours(), minutes: field.value.getMinutes() } : { hours: 9, minutes: 0 };
                              if (date) {
                                  date.setHours(currentTime.hours, currentTime.minutes, 0, 0);
                                  field.onChange(date);
@@ -389,7 +387,6 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
                                  field.onChange(undefined);
                              }
                          }}
-                        // disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))} // Allow past dates if needed
                         initialFocus
                          disabled={isSubmitting}
                       />
@@ -401,12 +398,11 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
                             defaultValue={field.value ? format(field.value, 'HH:mm') : '09:00'}
                             onChange={(e) => {
                               const time = e.target.value;
-                              // Ensure field.value is a valid date before setting time
                               const currentValidDate = field.value instanceof Date && !isNaN(field.value.getTime()) ? field.value : new Date();
                               if (time) {
                                 const [hours, minutes] = time.split(':').map(Number);
                                 const newDate = new Date(currentValidDate);
-                                newDate.setHours(hours, minutes, 0, 0); // Set seconds and ms to 0
+                                newDate.setHours(hours, minutes, 0, 0);
                                 field.onChange(newDate);
                               }
                             }}
@@ -456,7 +452,6 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
                         mode="single"
                         selected={field.value}
                         onSelect={(date) => {
-                            // Set time to start of day for date-only fields
                             if (date) {
                                 date.setHours(0, 0, 0, 0);
                                 field.onChange(date);
@@ -464,7 +459,6 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
                                 field.onChange(undefined);
                             }
                         }}
-                         // disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))} // Allow past dates if needed
                         initialFocus
                          disabled={isSubmitting}
                       />
@@ -504,4 +498,3 @@ export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitt
     </Form>
   );
 }
-
