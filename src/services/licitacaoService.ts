@@ -54,7 +54,7 @@ const getLicitacoesFromStorage = (): LicitacaoDetails[] => {
             valorFinalPropostaCliente: typeof item.disputaLog.valorFinalPropostaCliente === 'number' ? item.disputaLog.valorFinalPropostaCliente : undefined,
          } : { mensagens: [], itensPropostaFinalCliente: [] },
        };
-     }).filter(item => item.dataInicio instanceof Date);
+     }).filter(item => item.dataInicio instanceof Date); // Ensure dataInicio is a valid Date object for filtering
   } catch (e) {
     console.error("Error parsing licitacoes from localStorage:", e);
     localStorage.removeItem(LOCAL_STORAGE_KEY_LICITACOES);
@@ -107,8 +107,8 @@ const getDebitosFromStorage = (): Debito[] => {
       };
       return {
         ...item,
-        dataVencimento: parseDate(item.dataVencimento) as Date,
-        dataReferencia: parseDate(item.dataReferencia) as Date,
+        dataVencimento: parseDate(item.dataVencimento) as Date, // Expecting Date
+        dataReferencia: parseDate(item.dataReferencia) as Date, // Expecting Date
       };
     });
   } catch (e) {
@@ -175,8 +175,8 @@ export interface LicitacaoDetails extends LicitacaoFormValues {
   checklist: { [key: string]: boolean };
   comentarios: { id: string, texto: string, data: Date | string, autor: string }[];
   valorPrimeiroColocado?: number;
-  dataInicio: Date | string;
-  dataMetaAnalise: Date | string;
+  dataInicio: Date | string; // Keep as Date | string for flexibility but ensure it's Date in logic
+  dataMetaAnalise: Date | string; // Keep as Date | string for flexibility
   dataHomologacao?: Date | string;
   orgaoComprador: string;
   // valorTotalLicitacao?: number; // REMOVED
@@ -237,8 +237,8 @@ export interface Debito {
   clienteCnpj?: string;
   descricao: string;
   valor: number;
-  dataVencimento: Date;
-  dataReferencia: Date;
+  dataVencimento: Date; // Expect Date object in runtime
+  dataReferencia: Date; // Expect Date object in runtime
   status: 'PENDENTE' | 'PAGO' | 'ENVIADO_FINANCEIRO' | 'PAGO_VIA_ACORDO';
   licitacaoNumero?: string;
   acordoId?: string;
@@ -283,10 +283,11 @@ export const fetchLicitacaoDetails = async (id: string): Promise<LicitacaoDetail
    }
 
   if (licitacao) {
+      // Ensure dates are Date objects when returning
       return {
           ...licitacao,
-          dataInicio: parseDate(licitacao.dataInicio) as Date,
-          dataMetaAnalise: parseDate(licitacao.dataMetaAnalise) as Date,
+          dataInicio: parseDate(licitacao.dataInicio) as Date, // Cast as Date, assuming it's valid after filter
+          dataMetaAnalise: parseDate(licitacao.dataMetaAnalise) as Date, // Cast as Date
           dataHomologacao: parseDate(licitacao.dataHomologacao),
           comentarios: (licitacao.comentarios || []).map(c => ({...c, data: parseDate(c.data) as Date })),
           // valorTotalLicitacao removed
@@ -328,8 +329,8 @@ export const addLicitacao = async (
     status: 'AGUARDANDO_ANALISE',
     checklist: {},
     comentarios: [],
-    dataInicio: data.dataInicio,
-    dataMetaAnalise: data.dataMetaAnalise,
+    dataInicio: data.dataInicio, // Already a Date object from the form
+    dataMetaAnalise: data.dataMetaAnalise, // Already a Date object from the form
     dataHomologacao: undefined,
     valorPrimeiroColocado: undefined,
     orgaoComprador: data.orgaoComprador,
@@ -451,16 +452,17 @@ export const updateLicitacao = async (id: string, data: Partial<LicitacaoDetails
         debitos[existingDebitIndex] = {
              ...debitos[existingDebitIndex],
              ...debitData,
-             status: currentStatus === 'PENDENTE' ? 'PENDENTE' : currentStatus
+             status: currentStatus === 'PENDENTE' ? 'PENDENTE' : currentStatus // Preserve paid status if it was manually changed
         };
     } else {
         debitos.push(debitData);
     }
     saveDebitosToStorage(debitos);
   } else if (existingLicitacao.status === 'PROCESSO_HOMOLOGADO' && data.status && data.status !== 'PROCESSO_HOMOLOGADO') {
+    // If licitacao status is changed FROM homologado TO something else, delete PENDING debit.
     const debitos = getDebitosFromStorage();
     const debitIndex = debitos.findIndex(d => d.id === id && d.tipoDebito === 'LICITACAO');
-    if (debitIndex !== -1 && debitos[debitIndex].status === 'PENDENTE') {
+    if (debitIndex !== -1 && debitos[debitIndex].status === 'PENDENTE') { // Only remove if it's still pending
         debitos.splice(debitIndex, 1);
         saveDebitosToStorage(debitos);
     }
@@ -482,8 +484,9 @@ export const deleteLicitacao = async (id: string): Promise<boolean> => {
   }
   saveLicitacoesToStorage(updatedLicitacoes);
 
+  // Also remove associated debit if it exists and is PENDING
   const debitos = getDebitosFromStorage();
-  const updatedDebitos = debitos.filter(d => !(d.id === id && d.tipoDebito === 'LICITACAO'));
+  const updatedDebitos = debitos.filter(d => !(d.id === id && d.tipoDebito === 'LICITACAO' && d.status === 'PENDENTE'));
   if (debitos.length !== updatedDebitos.length) {
       saveDebitosToStorage(updatedDebitos);
   }
@@ -501,29 +504,47 @@ export const fetchDebitos = async (): Promise<Debito[]> => {
 
   let debitsModified = false;
 
+  // Synchronize debitos with licitacoes
   for (const lic of licitacoes) {
-    if (lic.status === 'PROCESSO_HOMOLOGADO' && lic.dataHomologacao instanceof Date && isValid(lic.dataHomologacao)) {
-      const existingDebit = debitos.find(d => d.id === lic.id && d.tipoDebito === 'LICITACAO');
-      if (!existingDebit) {
-        console.log(`Creating missing debit for homologated licitacao ${lic.id}`);
-        const client = await fetchServiceClientDetails(lic.clienteId);
-        const dueDate = addMonths(lic.dataHomologacao, 1);
-        const finalDueDate = setDate(dueDate, config.diaVencimentoPadrao || 15);
+    const existingDebitIndex = debitos.findIndex(d => d.id === lic.id && d.tipoDebito === 'LICITACAO');
 
+    if (lic.status === 'PROCESSO_HOMOLOGADO' && lic.dataHomologacao instanceof Date && isValid(lic.dataHomologacao)) {
+      const client = await fetchServiceClientDetails(lic.clienteId);
+      const dueDate = addMonths(lic.dataHomologacao, 1);
+      const finalDueDate = setDate(dueDate, config.diaVencimentoPadrao || 15);
+
+      const debitData: Partial<Debito> = {
+        tipoDebito: 'LICITACAO',
+        clienteNome: lic.clienteNome,
+        clienteCnpj: client?.cnpj,
+        descricao: `Serviços Licitação ${lic.numeroLicitacao}`,
+        valor: lic.valorCobrado,
+        dataVencimento: finalDueDate,
+        dataReferencia: lic.dataHomologacao,
+        licitacaoNumero: lic.numeroLicitacao,
+      };
+
+      if (existingDebitIndex !== -1) {
+        // Update existing debit if details changed, but preserve status if not PENDING
+        const currentStatus = debitos[existingDebitIndex].status;
+        debitos[existingDebitIndex] = {
+          ...debitos[existingDebitIndex],
+          ...debitData,
+          status: currentStatus === 'PENDENTE' ? 'PENDENTE' : currentStatus,
+        } as Debito;
+        debitsModified = true; // Potentially modified
+      } else {
         debitos.push({
           id: lic.id,
-          tipoDebito: 'LICITACAO',
-          clienteNome: lic.clienteNome,
-          clienteCnpj: client?.cnpj,
-          descricao: `Serviços Licitação ${lic.numeroLicitacao}`,
-          valor: lic.valorCobrado,
-          dataVencimento: finalDueDate,
-          dataReferencia: lic.dataHomologacao,
-          status: 'PENDENTE',
-          licitacaoNumero: lic.numeroLicitacao,
-        });
+          ...debitData,
+          status: 'PENDENTE', // New debitos are PENDING
+        } as Debito);
         debitsModified = true;
       }
+    } else if (existingDebitIndex !== -1 && debitos[existingDebitIndex].status === 'PENDENTE') {
+      // If licitacao is no longer homologated, remove its PENDING debit
+      debitos.splice(existingDebitIndex, 1);
+      debitsModified = true;
     }
   }
 
@@ -531,10 +552,11 @@ export const fetchDebitos = async (): Promise<Debito[]> => {
     saveDebitosToStorage(debitos);
   }
 
+  // Sort debitos by reference date descending
   debitos.sort((a, b) => {
       const dateA = a.dataReferencia instanceof Date ? a.dataReferencia.getTime() : 0;
       const dateB = b.dataReferencia instanceof Date ? b.dataReferencia.getTime() : 0;
-      return dateB - dateA;
+      return dateB - dateA; // Newest first
   });
 
   return debitos;
@@ -559,7 +581,8 @@ export const updateDebitoStatus = async (id: string, newStatus: 'PAGO' | 'ENVIAD
   }
 };
 
-export type DebitoAvulsoFormData = Omit<Debito, 'id' | 'tipoDebito' | 'dataReferencia' | 'status' | 'licitacaoNumero'>;
+export type DebitoAvulsoFormData = Omit<Debito, 'id' | 'tipoDebito' | 'dataReferencia' | 'status' | 'licitacaoNumero' | 'acordoId' | 'originalDebitoIds' | 'jurosCalculado'>;
+
 
 export const addDebitoAvulso = async (data: DebitoAvulsoFormData): Promise<Debito | null> => {
     console.log("Adding new debito avulso:", data);
@@ -579,8 +602,8 @@ export const addDebitoAvulso = async (data: DebitoAvulsoFormData): Promise<Debit
         clienteCnpj: data.clienteCnpj,
         descricao: data.descricao,
         valor: data.valor,
-        dataVencimento: data.dataVencimento,
-        dataReferencia: new Date(),
+        dataVencimento: data.dataVencimento, // Already a Date object
+        dataReferencia: new Date(), // Current date as reference
         status: 'PENDENTE',
     };
 
@@ -608,6 +631,7 @@ export const generateAtaSessaoPDF = (
       const margin = 14;
       let yPos = 20;
 
+      // Header with Logo
       if (logoUrl) {
         try {
           const img = new Image();
@@ -615,14 +639,14 @@ export const generateAtaSessaoPDF = (
           const imageType = logoUrl.startsWith("data:image/jpeg") ? "JPEG" : "PNG";
           if (imageType === "PNG" || imageType === "JPEG") {
             doc.addImage(img, imageType, margin, yPos - 5, logoDim, logoDim);
-            yPos += logoDim - 5;
+            yPos += logoDim - 5; // Adjust yPos based on logo height
           } else {
             console.warn("Formato do logo não suportado para PDF, pulando logo.");
-            yPos +=5;
+            yPos +=5; // Minimal adjustment if no logo
           }
         } catch (e) { console.error("Error adding logo:", e); yPos += 5; }
       } else {
-        yPos += 5;
+        yPos += 5; // Minimal adjustment if no logo
       }
 
       doc.setFontSize(16);
@@ -749,7 +773,7 @@ export const generatePropostaFinalPDF = (
     }
     
     let textX = logoUrl ? margin + logoDim + 5 : margin;
-    let headerTextY = logoUrl ? yPos + 5 : yPos + 5;
+    let headerTextY = logoUrl ? yPos + 5 : yPos + 5; // Align text better if logo is present
 
     if (config) {
         doc.setFontSize(12);
@@ -762,7 +786,7 @@ export const generatePropostaFinalPDF = (
         doc.text(`${config.enderecoRua}, ${config.enderecoNumero} - ${config.enderecoBairro}`, textX, headerTextY); headerTextY +=4;
         doc.text(`${config.enderecoCidade} - CEP: ${config.enderecoCep}`, textX, headerTextY);
     }
-    yPos = Math.max(yPos + logoDim + 2, headerTextY + 8);
+    yPos = Math.max(yPos + logoDim + 2, headerTextY + 8); // Ensure yPos is below logo and header text
 
 
     doc.setFontSize(16);
@@ -805,7 +829,7 @@ export const generatePropostaFinalPDF = (
         columnStyles: tableColumnStyles,
         margin: { left: margin, right: margin },
         didDrawPage: (data) => { // Redraw header on new pages
-             yPos = data.cursor?.y || 20;
+             yPos = data.cursor?.y || 20; // Reset yPos for new page
         }
     });
 
@@ -829,7 +853,7 @@ export const generatePropostaFinalPDF = (
     }
 
     yPos = Math.max(yPos, 240); // Ensure space for signature
-    if (yPos > 270) { doc.addPage(); yPos = 30; }
+    if (yPos > 270) { doc.addPage(); yPos = 30; } // Add new page if content is too long
 
 
     doc.setFontSize(10);
@@ -837,10 +861,17 @@ export const generatePropostaFinalPDF = (
     doc.text(lic.clienteNome, margin, yPos); yPos += 5;
     const client = licitacoes.find(l => l.id === lic.id); // Assuming licitacoes is available or fetch client details
     if (client) {
-        const clientDetails = getLicitacoesFromStorage().find(c => c.id === lic.id); // A bit redundant, improve if needed
-        if (clientDetails) { // Ideally fetch full client details for CNPJ
-            const cnpj = getClientsFromStorage().find(c => c.id === clientDetails.clienteId)?.cnpj;
-             if(cnpj) doc.text(`CNPJ: ${cnpj}`, margin, yPos);
+        // Try to get CNPJ from the licitacoes array which should have client details
+        const clientDetails = getLicitacoesFromStorage().find(c => c.id === lic.id); // This seems to fetch the licitacao itself
+        // A better way would be to fetch client details separately if needed or ensure clientNome includes enough info
+        // For now, let's assume clientService might have a way to get CNPJ if needed.
+        // This example uses a placeholder if CNPJ is not directly available.
+        const licitacaoData = getLicitacoesFromStorage().find(l_item => l_item.id === lic.id);
+        if(licitacaoData){
+            const clientRecord = getClientsFromStorage().find(c => c.id === licitacaoData.clienteId);
+            if (clientRecord?.cnpj) {
+                 doc.text(`CNPJ: ${clientRecord.cnpj}`, margin, yPos);
+            }
         }
     }
 
@@ -852,18 +883,20 @@ export const generatePropostaFinalPDF = (
 // Helper function to get client CNPJ - assuming you might want it elsewhere too
 // You already have fetchServiceClientDetails which can be used.
 // For simplicity in PDF, I'll try to use existing data or skip CNPJ if not readily available.
-
-// Ensure all functions used by components are exported
-// (fetchLicitacoes, fetchLicitacaoDetails, addLicitacao, updateLicitacao, deleteLicitacao, fetchDebitos, updateDebitoStatus, addDebitoAvulso)
-
-// Add any other helper function that might be needed by more than one component if relevant.
-// E.g., a more robust parseISO or date formatter if needed across the app.
-const getClientsFromStorage = (): {id: string, cnpj?: string}[] => { // Simplified for example
+const getClientsFromStorage = (): {id: string, cnpj?: string, razaoSocial?: string}[] => { // Simplified for example
   const storedData = localStorage.getItem('licitaxClients'); // Assuming this key stores ClientDetails[]
   try {
     const clients: LicitacaoDetails[] = storedData ? JSON.parse(storedData) : []; // This type is wrong here, should be ClientDetails
     // This is a placeholder, you need to fetch actual client details or adjust
-    return clients.map(c => ({id: c.clienteId, cnpj: 'CNPJ_EXAMPLE'}));
+    // This function is incorrectly trying to get client details from licitacao storage.
+    // It should parse 'licitaxClients' which stores ClientDetails[]
+    const clientList = localStorage.getItem('licitaxClients');
+    if (clientList) {
+        const parsedClients: {id: string, cnpj: string, razaoSocial: string}[] = JSON.parse(clientList);
+        return parsedClients.map(c => ({id: c.id, cnpj: c.cnpj, razaoSocial: c.razaoSocial}));
+    }
+    return [];
+
   } catch {
     return [];
   }
@@ -872,509 +905,5 @@ const getClientsFromStorage = (): {id: string, cnpj?: string}[] => { // Simplifi
 // This is a placeholder for the global 'licitacoes' array which is not ideal.
 // It's better to fetch client details by ID when needed, like already done in addLicitacao.
 const licitacoes: LicitacaoDetails[] = getLicitacoesFromStorage();
-```
-    </content>
-  </change>
-  <change>
-    <file>/src/components/licitacoes/licitacao-form.tsx</file>
-    <content><![CDATA[
-'use client';
 
-import {zodResolver} from '@hookform/resolvers/zod';
-import {useForm, Controller} from 'react-hook-form';
-import {z} from 'zod';
-import {useState, useEffect} from 'react';
-import {format, parseISO} from 'date-fns';
-import {ptBR} from 'date-fns/locale';
-import {Calendar as CalendarIcon, Loader2, Upload} from 'lucide-react'; // Added Upload
-
-import {Button} from '@/components/ui/button';
-import {Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage, useFormField} from '@/components/ui/form';
-import {Input} from '@/components/ui/input';
-import {Textarea} from '@/components/ui/textarea';
-import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@/components/ui/select';
-import {Popover, PopoverContent, PopoverTrigger} from '@/components/ui/popover';
-import {Calendar} from '@/components/ui/calendar';
-import {Label} from '@/components/ui/label';
-import {cn} from '@/lib/utils';
-import { type ClientListItem } from '@/services/clientService';
-
-const modalities = ['Pregão Eletrônico', 'Tomada de Preços', 'Convite', 'Concorrência', 'Leilão', 'Dispensa Eletrônica', 'Concurso', 'RDC'];
-const platforms = ['ComprasNet', 'Licitações-e (BB)', 'BEC/SP', 'BNC', 'BLL Compras', 'Portal de Compras Públicas', 'Outra Plataforma'];
-
-const parseCurrencyString = (val: unknown): number | undefined => {
-  if (typeof val === 'number') return val;
-  if (typeof val === 'string') {
-    if (val.match(/^R?\$\s?0([,.](0+))?$/) || val.trim() === '0') return 0;
-    const cleaned = val.replace(/[R$\s.]/g, '').replace(',', '.');
-    const num = parseFloat(cleaned);
-    return isNaN(num) ? undefined : num;
-  }
-  return undefined;
-};
-
-// Zod schema for validation
-const licitacaoFormSchema = z.object({
-  clienteId: z.string({required_error: 'Selecione o cliente participante.'}).min(1, 'Selecione o cliente participante.'),
-  modalidade: z.string({required_error: 'Selecione a modalidade da licitação.'}),
-  numeroLicitacao: z.string().min(1, {message: 'Número da licitação é obrigatório.'}),
-  orgaoComprador: z.string().min(1, {message: 'Órgão comprador é obrigatório.'}),
-  plataforma: z.string({required_error: 'Selecione a plataforma onde ocorrerá.'}),
-  dataInicio: z.date({required_error: 'Data e hora de início são obrigatórias.'}),
-  dataMetaAnalise: z.date({required_error: 'Data meta para análise é obrigatória.'}),
-  valorCobrado: z.preprocess(
-    parseCurrencyString,
-    z.number({required_error: 'Valor cobrado é obrigatório.', invalid_type_error: 'Valor cobrado deve ser um número.'}).min(0, { message: 'Valor deve ser zero ou positivo.' })
-  ),
-  // valorTotalLicitacao REMOVED
-  propostaItensPdf: z.custom<File | undefined>((val) => val === undefined || val instanceof File, {
-    message: "Arquivo de itens da proposta inválido. Deve ser um PDF.",
-  }).refine(file => file ? file.type === "application/pdf" : true, "Arquivo deve ser um PDF.")
-    .optional(),
-  observacoes: z.string().optional(),
-});
-
-// Add a type that includes the File object for form handling,
-// but LicitacaoDetails will store propostaItensPdfNome as string.
-export type LicitacaoFormValues = z.infer<typeof licitacaoFormSchema>;
-
-
-interface LicitacaoFormProps {
-  clients: ClientListItem[];
-  initialData?: Partial<LicitacaoFormValues & { dataInicio?: string | Date; dataMetaAnalise?: string | Date; propostaItensPdfNome?: string }>;
-  onSubmit?: (data: LicitacaoFormValues) => void | Promise<void>;
-  isSubmitting?: boolean;
-}
-
-export default function LicitacaoForm({clients, initialData, onSubmit, isSubmitting = false}: LicitacaoFormProps) {
-
-  const parseInitialDate = (date: string | Date | undefined): Date | undefined => {
-        if (!date) return undefined;
-        try {
-             const parsed = typeof date === 'string' ? parseISO(date) : date;
-             return parsed instanceof Date && !isNaN(parsed.getTime()) ? parsed : undefined;
-        } catch {
-            return undefined;
-        }
-    };
-
-  // State for managing the file input, as react-hook-form doesn't handle files directly well
-  const [selectedPropostaFile, setSelectedPropostaFile] = useState<File | undefined>(undefined);
-  const [propostaFileName, setPropostaFileName] = useState<string | undefined>(initialData?.propostaItensPdfNome);
-
-
-  const form = useForm<LicitacaoFormValues>({
-    resolver: zodResolver(licitacaoFormSchema),
-    defaultValues: {
-      clienteId: initialData?.clienteId || '',
-      modalidade: initialData?.modalidade || undefined,
-      numeroLicitacao: initialData?.numeroLicitacao || '',
-      orgaoComprador: initialData?.orgaoComprador || '',
-      plataforma: initialData?.plataforma || undefined,
-      dataInicio: parseInitialDate(initialData?.dataInicio),
-      dataMetaAnalise: parseInitialDate(initialData?.dataMetaAnalise),
-      valorCobrado: initialData?.valorCobrado !== undefined ? Number(initialData.valorCobrado) : undefined,
-      // valorTotalLicitacao removed
-      propostaItensPdf: undefined, // File object is not part of initial data directly
-      observacoes: initialData?.observacoes || '',
-    },
-  });
-
-    useEffect(() => {
-        if (initialData) {
-            form.reset({
-                ...initialData,
-                 clienteId: initialData?.clienteId || '',
-                 modalidade: initialData?.modalidade || undefined,
-                 orgaoComprador: initialData?.orgaoComprador || '',
-                 plataforma: initialData?.plataforma || undefined,
-                 dataInicio: parseInitialDate(initialData?.dataInicio),
-                 dataMetaAnalise: parseInitialDate(initialData?.dataMetaAnalise),
-                 valorCobrado: initialData?.valorCobrado !== undefined ? Number(initialData.valorCobrado) : undefined,
-                 observacoes: initialData?.observacoes || '',
-            });
-            setPropostaFileName(initialData.propostaItensPdfNome);
-            // Note: We cannot pre-fill the file input for security reasons
-            setSelectedPropostaFile(undefined);
-        }
-    }, [initialData, form]);
-
-
-  const formatCurrency = (value: number | undefined | null): string => {
-    if (value === undefined || value === null) return '';
-    if (value === 0) return 'R$ 0,00';
-    return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  };
-
-   const handleCurrencyChange = (e: React.ChangeEvent<HTMLInputElement>, field: any) => {
-     const rawValue = e.target.value;
-     if (rawValue.trim() === '0' || rawValue === 'R$ 0,00' || rawValue.replace(/[^0-9,]/g, '') === '0' || rawValue.replace(/[^0-9.]/g, '') === '0') {
-          field.onChange(0);
-          return;
-      }
-      const cleaned = rawValue.replace(/[^0-9]/g, '');
-      if (cleaned === '') {
-          field.onChange(undefined);
-      } else {
-          const parsedNum = parseInt(cleaned, 10) / 100;
-          field.onChange(isNaN(parsedNum) ? undefined : parsedNum);
-      }
-   };
-
-  const handlePropostaFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-        if (file.type === "application/pdf") {
-            setSelectedPropostaFile(file);
-            setPropostaFileName(file.name);
-            form.setValue('propostaItensPdf', file, { shouldValidate: true });
-            form.clearErrors('propostaItensPdf');
-        } else {
-            setSelectedPropostaFile(undefined);
-            setPropostaFileName(undefined);
-            form.setValue('propostaItensPdf', undefined);
-            form.setError('propostaItensPdf', { type: 'manual', message: 'Arquivo deve ser um PDF.' });
-            event.target.value = ''; // Clear the input
-        }
-    } else {
-        setSelectedPropostaFile(undefined);
-        setPropostaFileName(undefined);
-        form.setValue('propostaItensPdf', undefined);
-    }
-  };
-
-
-  const handleFormSubmit = async (data: LicitacaoFormValues) => {
-    console.log('Form Data (before sending to parent):', data);
-    // The 'propostaItensPdf' field in 'data' will be the File object if selected.
-    // The parent onSubmit (addLicitacao/updateLicitacao service) will handle using its name.
-
-    if (onSubmit) {
-      try {
-        await onSubmit(data); // Pass the form data including the File object
-      } catch (error) {
-         console.error('Failed to submit licitação data:', error);
-      }
-    } else {
-      console.warn('No onSubmit handler provided to LicitacaoForm.');
-    }
-  };
-
-
-  return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-6">
-        <FormField
-          control={form.control}
-          name="clienteId"
-          render={({field}) => (
-            <FormItem>
-              <FormLabel>Cliente*</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value || ''} disabled={isSubmitting}>
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione o cliente participante" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {clients.length === 0 && <SelectItem value="loading" disabled>Carregando...</SelectItem>}
-                  {clients.map(client => (
-                    <SelectItem key={client.id} value={client.id}>
-                      {client.name} ({client.cnpj})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <FormField
-            control={form.control}
-            name="modalidade"
-            render={({field}) => (
-              <FormItem>
-                <FormLabel>Modalidade*</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value || ''} disabled={isSubmitting}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione a modalidade" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {modalities.map(mod => (
-                      <SelectItem key={mod} value={mod}>
-                        {mod}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="numeroLicitacao"
-            render={({field}) => (
-              <FormItem>
-                <FormLabel>Número da Licitação*</FormLabel>
-                <FormControl>
-                  <Input placeholder="Ex: Pregão 123/2024, TP 001/2024" {...field} value={field.value || ''} disabled={isSubmitting}/>
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-        <FormField
-            control={form.control}
-            name="orgaoComprador"
-            render={({field}) => (
-              <FormItem>
-                <FormLabel>Órgão Comprador*</FormLabel>
-                <FormControl>
-                  <Input placeholder="Ex: Prefeitura Municipal de..., Ministério da..." {...field} value={field.value || ''} disabled={isSubmitting}/>
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-           <FormField
-            control={form.control}
-            name="plataforma"
-            render={({field}) => (
-              <FormItem>
-                <FormLabel>Plataforma*</FormLabel>
-                 <Select onValueChange={field.onChange} value={field.value || ''} disabled={isSubmitting}>
-                   <FormControl>
-                     <SelectTrigger>
-                       <SelectValue placeholder="Onde a licitação ocorrerá" />
-                     </SelectTrigger>
-                   </FormControl>
-                   <SelectContent>
-                     {platforms.map(plat => (
-                       <SelectItem key={plat} value={plat}>
-                         {plat}
-                       </SelectItem>
-                     ))}
-                   </SelectContent>
-                 </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-           <FormField
-              control={form.control}
-              name="valorCobrado"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Valor Cobrado (Assessoria)*</FormLabel>
-                  <FormControl>
-                    <Input
-                     placeholder="R$ 0,00"
-                     type="text"
-                     value={field.value !== undefined ? formatCurrency(field.value) : ''}
-                     onChange={(e) => handleCurrencyChange(e, field)}
-                     onBlur={(e) => {
-                        e.target.value = formatCurrency(field.value);
-                     }}
-                     disabled={isSubmitting}
-                     inputMode="decimal"
-                    />
-                  </FormControl>
-                   <FormDescription>Valor que será faturado para o cliente (pode ser R$ 0,00).</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-        </div>
-
-        {/* REMOVED Valor Total Estimado (Licitação) Field */}
-
-        <FormField
-          control={form.control}
-          name="propostaItensPdf"
-          render={({ field /* Destructure field if you directly use its onChange, onBlur etc. */ }) => (
-            <FormItem>
-              <FormLabel htmlFor="propostaItensPdf">Itens da Proposta (PDF)</FormLabel>
-              <FormControl>
-                <Input
-                  id="propostaItensPdf"
-                  type="file"
-                  accept="application/pdf"
-                  onChange={handlePropostaFileChange} // Use custom handler
-                  disabled={isSubmitting}
-                  className="cursor-pointer"
-                />
-              </FormControl>
-              {propostaFileName && (
-                <FormDescription className="text-xs text-muted-foreground">
-                  Arquivo selecionado: {propostaFileName}
-                </FormDescription>
-              )}
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-
-         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-           <FormField
-              control={form.control}
-              name="dataInicio"
-              render={({ field }) => {
-                const { formItemId, formDescriptionId, formMessageId, error } = useFormField();
-                return (
-                <FormItem className="flex flex-col">
-                  <FormLabel>Data e Hora Início*</FormLabel>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                        <Button
-                          variant={"outline"}
-                          className={cn(
-                            "w-full pl-3 text-left font-normal",
-                            !field.value && "text-muted-foreground"
-                          )}
-                           disabled={isSubmitting}
-                           id={formItemId}
-                           aria-describedby={!error ? formDescriptionId : `${formDescriptionId} ${formMessageId}`}
-                           aria-invalid={!!error}
-                        >
-                          {field.value ? (
-                            format(field.value, "dd/MM/yyyy HH:mm", { locale: ptBR })
-                          ) : (
-                            <span>Selecione data e hora</span>
-                          )}
-                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                        </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={field.value}
-                        onSelect={(date) => {
-                             const currentTime = field.value instanceof Date ? { hours: field.value.getHours(), minutes: field.value.getMinutes() } : { hours: 9, minutes: 0 };
-                             if (date) {
-                                 date.setHours(currentTime.hours, currentTime.minutes, 0, 0);
-                                 field.onChange(date);
-                             } else {
-                                 field.onChange(undefined);
-                             }
-                         }}
-                        initialFocus
-                         disabled={isSubmitting}
-                      />
-                       <div className="p-2 border-t">
-                          <Label htmlFor="time-inicio" className="text-xs">Hora Início</Label>
-                          <Input
-                            id="time-inicio"
-                            type="time"
-                            defaultValue={field.value ? format(field.value, 'HH:mm') : '09:00'}
-                            onChange={(e) => {
-                              const time = e.target.value;
-                              const currentValidDate = field.value instanceof Date && !isNaN(field.value.getTime()) ? field.value : new Date();
-                              if (time) {
-                                const [hours, minutes] = time.split(':').map(Number);
-                                const newDate = new Date(currentValidDate);
-                                newDate.setHours(hours, minutes, 0, 0);
-                                field.onChange(newDate);
-                              }
-                            }}
-                             disabled={isSubmitting}
-                          />
-                       </div>
-                    </PopoverContent>
-                  </Popover>
-                  <FormDescription>
-                    Data e hora de início da disputa/sessão.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}}
-            />
-             <FormField
-              control={form.control}
-              name="dataMetaAnalise"
-              render={({ field }) => {
-                const { formItemId, formDescriptionId, formMessageId, error } = useFormField();
-                return (
-                <FormItem className="flex flex-col">
-                  <FormLabel>Data Meta Análise*</FormLabel>
-                   <Popover>
-                    <PopoverTrigger asChild>
-                        <Button
-                          variant={"outline"}
-                          className={cn(
-                            "w-full pl-3 text-left font-normal",
-                            !field.value && "text-muted-foreground"
-                          )}
-                           disabled={isSubmitting}
-                           id={formItemId}
-                           aria-describedby={!error ? formDescriptionId : `${formDescriptionId} ${formMessageId}`}
-                           aria-invalid={!!error}
-                        >
-                          {field.value ? (
-                            format(field.value, "dd/MM/yyyy", { locale: ptBR })
-                          ) : (
-                            <span>Selecione a data meta</span>
-                          )}
-                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                        </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={field.value}
-                        onSelect={(date) => {
-                            if (date) {
-                                date.setHours(0, 0, 0, 0);
-                                field.onChange(date);
-                            } else {
-                                field.onChange(undefined);
-                            }
-                        }}
-                        initialFocus
-                         disabled={isSubmitting}
-                      />
-                    </PopoverContent>
-                  </Popover>
-                   <FormDescription>
-                    Prazo interno para análise e juntada de documentos.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}}
-            />
-        </div>
-
-
-        <FormField
-            control={form.control}
-            name="observacoes"
-            render={({field}) => (
-              <FormItem>
-                <FormLabel>Observações</FormLabel>
-                <FormControl>
-                  <Textarea placeholder="Detalhes importantes, links adicionais, objeto resumido, etc." className="min-h-[100px]" {...field} value={field.value || ''} disabled={isSubmitting} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-        <div className="flex justify-end">
-          <Button type="submit" disabled={isSubmitting || !form.formState.isValid}>
-            {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-            {isSubmitting ? 'Salvando...' : initialData ? 'Salvar Alterações' : 'Confirmar e Salvar Licitação'}
-          </Button>
-        </div>
-      </form>
-    </Form>
-  );
-}
+    
