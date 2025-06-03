@@ -153,7 +153,16 @@ export default function DisputaIndividualPage() {
             }, 1000);
             setTimerIntervalId(interval);
           }
+        } else if (licDetails.status === 'DISPUTA_CONCLUIDA' && licDetails.disputaLog?.iniciadaEm && licDetails.disputaLog?.finalizadaEm) {
+            // If dispute is already concluded, set elapsed time to the stored duration
+             const inicio = typeof licDetails.disputaLog.iniciadaEm === 'string' ? parseISO(licDetails.disputaLog.iniciadaEm) : licDetails.disputaLog.iniciadaEm;
+             const fim = typeof licDetails.disputaLog.finalizadaEm === 'string' ? parseISO(licDetails.disputaLog.finalizadaEm) : licDetails.disputaLog.finalizadaEm;
+             if (inicio && fim && isValid(inicio) && isValid(fim)) {
+                 setElapsedTime(differenceInSeconds(fim, inicio));
+             }
         }
+
+
       } catch (err) {
         console.error('Erro ao carregar dados da disputa:', err);
         setError(`Falha ao carregar dados. ${err instanceof Error ? err.message : ''}`);
@@ -239,6 +248,10 @@ export default function DisputaIndividualPage() {
         toast({ title: "Erro", description: "Limite do cliente (valor ou percentual) é inválido ou não definido.", variant: "destructive" });
         return;
     }
+     if (!licitacao.itensProposta || licitacao.itensProposta.length === 0) {
+        toast({ title: "Atenção", description: "Adicione pelo menos um item à proposta antes de iniciar a disputa.", variant: "warning" });
+        return;
+    }
 
     setIsSubmitting(true);
     const disputaConfig: DisputaConfig = {
@@ -257,10 +270,11 @@ export default function DisputaIndividualPage() {
         status: 'EM_DISPUTA',
         valorReferenciaEdital: valorRefEditalNum, 
         disputaConfig,
-        disputaLog
+        disputaLog,
+        itensProposta: licitacao.itensProposta, // Ensure current items are saved
       });
       if (success) {
-        setLicitacao(prev => prev ? { ...prev, status: 'EM_DISPUTA', valorReferenciaEdital: valorRefEditalNum, disputaConfig, disputaLog } : null);
+        setLicitacao(prev => prev ? { ...prev, status: 'EM_DISPUTA', valorReferenciaEdital: valorRefEditalNum, disputaConfig, disputaLog, itensProposta: prev.itensProposta } : null);
         toast({ title: "Sucesso", description: "Disputa iniciada." });
         
         setElapsedTime(0); 
@@ -279,15 +293,27 @@ export default function DisputaIndividualPage() {
   const handleFinalizarDisputa = () => {
     if (timerIntervalId) clearInterval(timerIntervalId);
     setTimerIntervalId(null);
-    // Initialize finalProposalItems from licitacao.itensProposta
-    const initialFinalItems = (licitacao?.itensProposta || []).map(item => ({
-        ...item, // copy existing item properties
-        valorUnitarioFinalCliente: item.valorUnitarioEstimado, // Default to estimado if available, or undefined
-        valorTotalFinalCliente: item.valorUnitarioEstimado ? item.valorUnitarioEstimado * item.quantidade : undefined,
-    }));
-    setFinalProposalItems(initialFinalItems);
-    setFinalProposalObservations(licitacao?.observacoesPropostaFinal || '');
-    calculateGrandTotal(initialFinalItems);
+
+    if (licitacao?.status === 'DISPUTA_CONCLUIDA' && licitacao.disputaLog) {
+        // If already concluded, pre-fill with existing final data
+        setFinalProposalItems(licitacao.disputaLog.itensPropostaFinalCliente || licitacao.itensProposta || []);
+        setFinalProposalObservations(licitacao.observacoesPropostaFinal || '');
+        setGrandTotalFinalProposal(licitacao.disputaLog.valorFinalPropostaCliente || 0);
+        setClienteVenceu(licitacao.disputaLog.clienteVenceu);
+        setPosicaoCliente(licitacao.disputaLog.posicaoCliente?.toString() || '');
+    } else if (licitacao) {
+        // Initialize finalProposalItems from licitacao.itensProposta for a new finalization
+        const initialFinalItems = (licitacao.itensProposta || []).map(item => ({
+            ...item,
+            valorUnitarioFinalCliente: item.valorUnitarioEstimado, 
+            valorTotalFinalCliente: item.valorUnitarioEstimado ? item.valorUnitarioEstimado * item.quantidade : undefined,
+        }));
+        setFinalProposalItems(initialFinalItems);
+        setFinalProposalObservations(licitacao.observacoesPropostaFinal || '');
+        calculateGrandTotal(initialFinalItems);
+        setClienteVenceu(undefined); // Reset outcome for new finalization
+        setPosicaoCliente('');
+    }
     setIsOutcomeDialogOpen(true);
   };
 
@@ -328,6 +354,7 @@ export default function DisputaIndividualPage() {
 
     const disputaLogUpdate: DisputaLog = {
         ...licitacao.disputaLog,
+        iniciadaEm: licitacao.disputaLog?.iniciadaEm || new Date(), // Ensure iniciadaEm is set
         finalizadaEm,
         duracao,
         clienteVenceu,
@@ -347,8 +374,8 @@ export default function DisputaIndividualPage() {
         const updatedLic = {...licitacao, status: 'DISPUTA_CONCLUIDA', disputaLog: disputaLogUpdate, observacoesPropostaFinal: finalProposalObservations };
         setLicitacao(updatedLic);
         toast({ title: "Sucesso", description: "Disputa finalizada. Gerando documentos..." });
-        generateAtaSessaoPDF(updatedLic, configuracoes, currentUser);
-        generatePropostaFinalPDF(updatedLic, configuracoes, currentUser); // New PDF
+        await generateAtaSessaoPDF(updatedLic, configuracoes, currentUser);
+        await generatePropostaFinalPDF(updatedLic, configuracoes, currentUser); 
         setIsOutcomeDialogOpen(false);
         
       } else {
@@ -376,7 +403,8 @@ export default function DisputaIndividualPage() {
         autor: currentUser?.fullName || currentUser?.username || 'Sistema',
     };
     const updatedMensagens = [...(licitacao.disputaLog?.mensagens || []), newMessage];
-    const updatedDisputaLog = { ...licitacao.disputaLog, mensagens: updatedMensagens };
+    const updatedDisputaLog = { ...licitacao.disputaLog, iniciadaEm: licitacao.disputaLog?.iniciadaEm || new Date(), mensagens: updatedMensagens };
+
 
     try {
         const success = await updateLicitacao(idLicitacao, { disputaLog: updatedDisputaLog });
@@ -595,7 +623,7 @@ export default function DisputaIndividualPage() {
                     </AlertDescription>
                 </Alert>
                  <div className="flex justify-end gap-2">
-                     <Button variant="outline" onClick={() => generatePropostaFinalPDF(licitacao, configuracoes, currentUser)}>
+                     <Button variant="outline" onClick={async () => await generatePropostaFinalPDF(licitacao, configuracoes, currentUser)}>
                         <FileText className="mr-2 h-4 w-4" /> Gerar Proposta Final (PDF)
                     </Button>
                      <Button variant="outline" onClick={() => generateAtaSessaoPDF(licitacao, configuracoes, currentUser)}>
@@ -610,7 +638,7 @@ export default function DisputaIndividualPage() {
             Voltar para Lista
           </Button>
           {isDisputaConfiguravel && (
-            <Button onClick={handleIniciarDisputa} disabled={isSubmitting || valorCalculadoLimite === undefined || parseCurrency(valorReferenciaEditalInput) === undefined}>
+            <Button onClick={handleIniciarDisputa} disabled={isSubmitting || valorCalculadoLimite === undefined || parseCurrency(valorReferenciaEditalInput) === undefined || (licitacao.itensProposta || []).length === 0}>
               {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
               Iniciar Disputa
             </Button>
@@ -621,6 +649,11 @@ export default function DisputaIndividualPage() {
               Encerrar Disputa
             </Button>
           )}
+           {isDisputaFinalizada && (
+             <Button onClick={handleFinalizarDisputa} disabled={isSubmitting}> {/* Re-opens the outcome dialog */}
+                 <EditIcon className="mr-2 h-4 w-4" /> Ver/Refazer Finalização
+             </Button>
+           )}
         </CardFooter>
       </Card>
 
@@ -672,7 +705,7 @@ export default function DisputaIndividualPage() {
             <div className="space-y-6 py-4 pr-3"> {/* Added padding for scrollbar */}
                 <div className="space-y-2">
                 <Label>O cliente venceu a licitação?</Label>
-                <Select onValueChange={(value) => setClienteVenceu(value === 'true')} value={clienteVenceu?.toString()}>
+                <Select onValueChange={(value) => setClienteVenceu(value === 'true')} value={clienteVenceu === undefined ? '' : clienteVenceu.toString()}>
                     <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
                     <SelectContent>
                     <SelectItem value="true">Sim</SelectItem>
@@ -713,7 +746,7 @@ export default function DisputaIndividualPage() {
                                         onChange={(e) => handleFinalItemPriceChange(item.id, e.target.value)}
                                         onBlur={(e) => {
                                             const parsed = parseCurrency(e.target.value);
-                                            e.target.value = formatCurrency(parsed);
+                                            e.target.value = formatCurrency(parsed); // Format on blur
                                         }}
                                         className="text-xs"
                                     />

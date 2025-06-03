@@ -7,7 +7,7 @@ import { parseISO, isValid, addMonths, setDate, differenceInSeconds, format as f
 import { ptBR } from 'date-fns/locale';
 import { type User } from './userService';
 import { fetchConfiguracoes, type ConfiguracoesFormValues } from './configuracoesService';
-import { fetchClientDetails as fetchServiceClientDetails } from './clientService';
+import { fetchClientDetails as fetchServiceClientDetails, type ClientDetails } from './clientService'; // Import ClientDetails
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -173,6 +173,7 @@ export interface DisputaLog {
 export interface LicitacaoDetails extends LicitacaoFormValues {
   id: string;
   clienteNome: string;
+  clienteId: string; // Added to ensure client details can be fetched
   status: string;
   checklist: { [key: string]: boolean };
   comentarios: { id: string, texto: string, data: Date | string, autor: string }[];
@@ -324,6 +325,7 @@ export const addLicitacao = async (
   const newLicitacao: LicitacaoDetails = {
     ...data,
     id: `LIC-${Date.now()}`,
+    clienteId: data.clienteId, // Ensure client ID is stored
     clienteNome: client.razaoSocial,
     status: 'AGUARDANDO_ANALISE',
     checklist: {},
@@ -729,49 +731,44 @@ export const generateAtaSessaoPDF = (
       doc.save(`Ata_Disputa_${lic.numeroLicitacao.replace(/[^\w]/g, '_')}.pdf`);
   };
 
-export const generatePropostaFinalPDF = (
+export const generatePropostaFinalPDF = async ( // Made async to fetch client details
     lic: LicitacaoDetails,
-    config: ConfiguracoesFormValues | null,
-    user: { username: string; fullName?: string; cpf?: string } | null
+    config: ConfiguracoesFormValues | null, // Assessor config is not used for client details
+    user: { username: string; fullName?: string; cpf?: string } | null // User who generated it
   ) => {
     if (!lic.disputaLog?.itensPropostaFinalCliente || lic.disputaLog.itensPropostaFinalCliente.length === 0) {
         console.warn("Não há itens finais da proposta para gerar o PDF.");
+        // Consider throwing an error or notifying the user more formally
         return;
     }
 
+    const clientDetails = await fetchServiceClientDetails(lic.clienteId); // Fetch client details
+
     const doc = new jsPDF();
     const hoje = formatDateFns(new Date(), "dd/MM/yyyy", { locale: ptBR });
-    const logoUrl = config?.logoUrl;
-    const logoDim = 25;
     const margin = 14;
     let yPos = 20;
 
-    if (logoUrl) {
-        try {
-            const img = new Image();
-            img.src = logoUrl;
-            const imageType = logoUrl.startsWith("data:image/jpeg") ? "JPEG" : "PNG";
-            if (imageType === "PNG" || imageType === "JPEG") {
-                doc.addImage(img, imageType, margin, yPos - 5, logoDim, logoDim);
-            }
-        } catch (e) { console.error("Error adding logo to Proposta PDF:", e); }
-    }
-    
-    let textX = logoUrl ? margin + logoDim + 5 : margin;
-    let headerTextY = logoUrl ? yPos + 5 : yPos + 5; 
-
-    if (config) {
+    // Client Header
+    if (clientDetails) {
         doc.setFontSize(12);
         doc.setFont(undefined, 'bold');
-        doc.text(config.nomeFantasia || config.razaoSocial, textX, headerTextY); headerTextY +=6;
+        doc.text(clientDetails.razaoSocial, margin, yPos); yPos +=6;
         doc.setFont(undefined, 'normal');
         doc.setFontSize(9);
-        doc.text(`CNPJ: ${config.cnpj}`, textX, headerTextY); headerTextY +=4;
-        doc.text(`Email: ${config.email} | Tel: ${config.telefone}`, textX, headerTextY); headerTextY +=4;
-        doc.text(`${config.enderecoRua}, ${config.enderecoNumero} - ${config.enderecoBairro}`, textX, headerTextY); headerTextY +=4;
-        doc.text(`${config.enderecoCidade} - CEP: ${config.enderecoCep}`, textX, headerTextY);
+        doc.text(`CNPJ: ${clientDetails.cnpj}`, margin, yPos); yPos +=4;
+        doc.text(`Email: ${clientDetails.email} | Tel: ${clientDetails.telefone}`, margin, yPos); yPos +=4;
+        doc.text(`${clientDetails.enderecoRua}, ${clientDetails.enderecoNumero}${clientDetails.enderecoComplemento ? ' - '+clientDetails.enderecoComplemento : ''} - ${clientDetails.enderecoBairro}`, margin, yPos); yPos +=4;
+        doc.text(`${clientDetails.enderecoCidade} - CEP: ${clientDetails.enderecoCep}`, margin, yPos);
+    } else {
+        // Fallback if client details couldn't be fetched
+        doc.setFontSize(12);
+        doc.setFont(undefined, 'bold');
+        doc.text(lic.clienteNome, margin, yPos); yPos +=6;
+        doc.setFontSize(9);
+        doc.text(`(Detalhes do cliente não puderam ser carregados)`, margin, yPos); yPos +=4;
     }
-    yPos = Math.max(yPos + logoDim + 2, headerTextY + 8); 
+    yPos += 8;
 
 
     doc.setFontSize(16);
@@ -782,8 +779,10 @@ export const generatePropostaFinalPDF = (
     doc.setFont(undefined, 'normal');
     doc.text(`Licitação Nº: ${lic.numeroLicitacao}`, margin, yPos);
     doc.text(`Data: ${hoje}`, 196 - margin, yPos, {align: 'right'}); yPos += 7;
-    doc.text(`Órgão Licitante: ${lic.orgaoComprador}`, margin, yPos); yPos += 7;
-    doc.text(`Proponente: ${lic.clienteNome}`, margin, yPos); yPos += 10;
+    doc.text(`Órgão Licitante: ${lic.orgaoComprador}`, margin, yPos); yPos += 10; // Increased spacing
+
+    // Removed "Proponente:" as the header is now the client's details.
+    // doc.text(`Proponente: ${lic.clienteNome}`, margin, yPos); yPos += 10; 
 
     doc.text("Prezados Senhores,", margin, yPos); yPos += 7;
     doc.text("Apresentamos nossa proposta para o fornecimento dos itens abaixo, conforme condições do edital:", margin, yPos, {maxWidth: 196 - margin*2 }); yPos += 10;
@@ -837,32 +836,48 @@ export const generatePropostaFinalPDF = (
         yPos += obsLines.length * 5 + 5;
     }
 
-    yPos = Math.max(yPos, 240); 
-    if (yPos > 270) { doc.addPage(); yPos = 30; } 
+    // Ensure there's enough space for signature, otherwise add a new page
+    if (yPos > 250) { // Check if yPos is too close to the bottom
+        doc.addPage();
+        yPos = 30; // Reset yPos for the new page
+    } else {
+      yPos = Math.max(yPos, 240); // Ensure a minimum yPos for signature if not new page
+    }
 
 
     doc.setFontSize(10);
     doc.text("________________________________________", margin, yPos); yPos += 5;
     doc.text(lic.clienteNome, margin, yPos); yPos += 5;
     
-    const licitacaoData = getLicitacoesFromStorage().find(l_item => l_item.id === lic.id);
-    if(licitacaoData){
-        const clientRecord = _getClientsFromStorage().find(c => c.id === licitacaoData.clienteId);
-        if (clientRecord?.cnpj) {
-             doc.text(`CNPJ: ${clientRecord.cnpj}`, margin, yPos);
-        }
+    if(clientDetails?.cnpj) { // Use fetched client CNPJ
+        doc.text(`CNPJ: ${clientDetails.cnpj}`, margin, yPos);
     }
 
     doc.save(`Proposta_Final_${lic.numeroLicitacao.replace(/[^\w]/g, '_')}.pdf`);
   };
 
-const _getClientsFromStorage = (): {id: string, cnpj?: string, razaoSocial?: string}[] => {
+
+// Helper to get client details from storage (used internally by generatePropostaFinalPDF before full service client was integrated there)
+// This might be redundant if fetchServiceClientDetails is always used but kept for safety or direct calls if needed.
+const _getClientsFromStorage = (): {id: string, cnpj?: string, razaoSocial?: string, email?: string, telefone?: string, enderecoRua?: string, enderecoNumero?: string, enderecoComplemento?: string, enderecoBairro?: string, enderecoCidade?: string, enderecoCep?: string}[] => {
   const storedData = localStorage.getItem('licitaxClients'); 
   try {
     const clientList = localStorage.getItem('licitaxClients');
     if (clientList) {
-        const parsedClients: {id: string, cnpj: string, razaoSocial: string}[] = JSON.parse(clientList);
-        return parsedClients.map(c => ({id: c.id, cnpj: c.cnpj, razaoSocial: c.razaoSocial}));
+        const parsedClients: ClientDetails[] = JSON.parse(clientList); // Use ClientDetails type
+        return parsedClients.map(c => ({
+            id: c.id, 
+            cnpj: c.cnpj, 
+            razaoSocial: c.razaoSocial,
+            email: c.email,
+            telefone: c.telefone,
+            enderecoRua: c.enderecoRua,
+            enderecoNumero: c.enderecoNumero,
+            enderecoComplemento: c.enderecoComplemento,
+            enderecoBairro: c.enderecoBairro,
+            enderecoCidade: c.enderecoCidade,
+            enderecoCep: c.enderecoCep,
+        }));
     }
     return [];
 
