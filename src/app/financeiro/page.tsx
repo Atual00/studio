@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'; // Import Popover
 import { Calendar } from '@/components/ui/calendar'; // Import Calendar
 import { Checkbox } from '@/components/ui/checkbox'; // Import Checkbox
+import { Badge } from '@/components/ui/badge'; // Import Badge component
 import { type DateRange } from 'react-day-picker'; // Import DateRange type
 import { Download, FileText, Filter, Loader2, Send, CheckCircle, Clock, CalendarIcon, X, Receipt, Mail, PlusCircle, Handshake, AlertCircle } from 'lucide-react'; // Import icons + Receipt + Mail + Handshake
 import { format, parseISO, startOfDay, endOfDay, isWithinInterval, addMonths, setDate, isValid, differenceInDays, addDays, addWeeks, isBefore } from 'date-fns'; // Updated date-fns imports + isValid + differenceInDays
