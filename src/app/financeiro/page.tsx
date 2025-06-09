@@ -1,5 +1,4 @@
 
-
 'use client'; // Required for state and client-side interaction
 
 import React, { useState, useEffect, useMemo } from 'react'; // Import React
@@ -9,7 +8,6 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'; // Import Popover
 import { Calendar } from '@/components/ui/calendar'; // Import Calendar
 import { Checkbox } from '@/components/ui/checkbox'; // Import Checkbox
@@ -37,7 +35,8 @@ import {
   FormField,
   FormMessage,
   FormLabel,
-  FormItem, // Added FormItem
+  FormItem,
+  useFormField, // Added useFormField import
 } from "@/components/ui/form";
 import { fetchClients, type ClientListItem } from '@/services/clientService';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
@@ -832,16 +831,47 @@ export default function FinanceiroPage() {
                                     <FormField control={debitoAvulsoForm.control} name="clienteCnpj" render={({ field }) => ( <FormItem> <FormLabel>CNPJ do Cliente</FormLabel> <FormControl><Input placeholder="XX.XXX.XXX/XXXX-XX (Opcional)" {...field} onChange={(e) => field.onChange(formatCnpjInput(e.target.value))} disabled={isSubmittingDebitoAvulso} /></FormControl> <FormMessage /> </FormItem> )}/>
                                     <FormField control={debitoAvulsoForm.control} name="descricao" render={({ field }) => ( <FormItem> <FormLabel>Descrição do Débito*</FormLabel> <FormControl><Textarea placeholder="Ex: Consultoria XYZ, Taxa de Serviço..." {...field} disabled={isSubmittingDebitoAvulso} /></FormControl> <FormMessage /> </FormItem> )}/>
                                     <FormField control={debitoAvulsoForm.control} name="valor" render={({ field }) => ( <FormItem> <FormLabel>Valor do Débito*</FormLabel> <FormControl><Input type="text" placeholder="R$ 0,00" value={field.value !== undefined ? formatCurrencyInput(field.value.toString()) : ''} onChange={(e) => { const rawValue = e.target.value; const cleaned = rawValue.replace(/\D/g, ''); if (cleaned === '') { field.onChange(undefined); } else { const numValue = parseFloat(cleaned) / 100; field.onChange(isNaN(numValue) ? undefined : numValue); } }} onBlur={(e) => { if (field.value !== undefined) { e.target.value = formatCurrencyInput(field.value.toString()); } }} disabled={isSubmittingDebitoAvulso} inputMode="decimal" /></FormControl> <FormMessage /> </FormItem> )}/>
-                                    <FormField control={debitoAvulsoForm.control} name="dataVencimento" render={({ field }) => ( <FormItem className="flex flex-col"> <FormLabel>Data de Vencimento*</FormLabel> <Popover> <PopoverTrigger asChild> <FormControl>
-                                        <Button variant={"outline"} className={cn( "w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground" )} disabled={isSubmittingDebitoAvulso} > 
-                                            <span className="flex w-full items-center justify-between">
-                                                <span>
-                                                    {field.value ? (format(field.value, "dd/MM/yyyy", { locale: ptBR })) : ("Selecione a data")}
-                                                </span>
-                                                <CalendarIcon className="h-4 w-4 opacity-50"/>
-                                            </span>
-                                        </Button>
-                                    </FormControl> </PopoverTrigger> <PopoverContent className="w-auto p-0" align="start"> <Calendar mode="single" selected={field.value} onSelect={(date) => field.onChange(date || null)} disabled={(dateParam) => (dateParam ? dateParam < startOfDay(new Date()) : false) || isSubmittingDebitoAvulso} initialFocus /> </PopoverContent> </Popover> <FormMessage/> </FormItem> )}/>
+                                    <FormField
+                                        control={debitoAvulsoForm.control}
+                                        name="dataVencimento"
+                                        render={({ field }) => {
+                                        const { formItemId, formDescriptionId, formMessageId, error } = useFormField();
+                                        return (
+                                            <FormItem className="flex flex-col">
+                                            <FormLabel>Data de Vencimento*</FormLabel>
+                                            <Popover>
+                                                <PopoverTrigger asChild>
+                                                <Button
+                                                    variant={"outline"}
+                                                    className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}
+                                                    disabled={isSubmittingDebitoAvulso}
+                                                    id={formItemId}
+                                                    aria-describedby={!error ? formDescriptionId : `${formDescriptionId} ${formMessageId}`}
+                                                    aria-invalid={!!error}
+                                                >
+                                                    <span className="flex w-full items-center justify-between">
+                                                    <span>
+                                                        {field.value ? (format(field.value, "dd/MM/yyyy", { locale: ptBR })) : ("Selecione a data")}
+                                                    </span>
+                                                    <CalendarIcon className="h-4 w-4 opacity-50"/>
+                                                    </span>
+                                                </Button>
+                                                </PopoverTrigger>
+                                                <PopoverContent className="w-auto p-0" align="start">
+                                                <Calendar
+                                                    mode="single"
+                                                    selected={field.value}
+                                                    onSelect={(date) => field.onChange(date || null)}
+                                                    disabled={(dateParam) => (dateParam ? dateParam < startOfDay(new Date()) : false) || isSubmittingDebitoAvulso}
+                                                    initialFocus
+                                                />
+                                                </PopoverContent>
+                                            </Popover>
+                                            <FormMessage/>
+                                            </FormItem>
+                                        );
+                                        }}
+                                    />
                                     <DialogFooter> <DialogClose asChild><Button type="button" variant="outline" disabled={isSubmittingDebitoAvulso}>Cancelar</Button></DialogClose> <Button type="submit" disabled={isSubmittingDebitoAvulso}> {isSubmittingDebitoAvulso && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Adicionar Débito </Button> </DialogFooter>
                                 </form>
                             </Form>
