@@ -15,6 +15,7 @@ import {
   Briefcase,
   Flame, // Icon for Sala de Disputa
   DatabaseZap, // Icon for Consulta Licitações (PNCP)
+  Paperclip, // Icon for Anexos
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
@@ -36,6 +37,7 @@ const baseMenuItems = [
   { href: '/sala-disputa', label: 'Sala de Disputa', icon: Flame },
   { href: '/financeiro', label: 'Financeiro', icon: DollarSign },
   { href: '/documentos', label: 'Documentos', icon: FileText },
+  { href: '/anexos', label: 'Anexos', icon: Paperclip },
   { href: '/senhas', label: 'Senhas', icon: KeyRound },
   { href: '/calendario/metas', label: 'Calendário Metas', icon: CalendarDays },
   { href: '/calendario/disputas', label: 'Calendário Disputas', icon: CalendarDays },
@@ -112,4 +114,3 @@ export default function AppSidebar() {
     </>
   );
 }
-
