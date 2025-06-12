@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Send, Loader2, AlertCircle, Users, ArrowLeft, X } from 'lucide-react';
+import { Send, Loader2, AlertCircle, Users, ArrowLeft, X, Minus } from 'lucide-react'; // Added Minus
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter, SheetClose } from '@/components/ui/sheet';
 import { useAuth } from '@/context/AuthContext';
 import { fetchMessages, sendMessage, formatMessageTimestamp, type ChatMessage } from '@/services/chatService';
@@ -15,14 +15,21 @@ import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { useChatWidget } from '@/context/ChatWidgetContext';
 import { Separator } from '../ui/separator';
 
+// Consistent Room ID generation
 const generateRoomId = (userId1: string, userId2: string): string => {
   const ids = [userId1, userId2].sort();
-  return `chatwidget_${ids[0]}_${ids[1]}`; // Use a different prefix if needed
+  return `chat_room_${ids[0]}_${ids[1]}`; 
 };
 
 export default function ChatWidget() {
   const { user: currentUser } = useAuth();
-  const { isPanelOpen, setIsPanelOpen, selectedUserForWidget, setSelectedUserForWidget } = useChatWidget();
+  const { 
+    isPanelOpen, 
+    setIsPanelOpen, 
+    selectedUserForWidget, 
+    setSelectedUserForWidget,
+    setIsFloatingButtonMinimized // Get the setter for minimized state
+  } = useChatWidget();
 
   const [allUsers, setAllUsers] = useState<AppUser[]>([]);
   const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
@@ -40,7 +47,7 @@ export default function ChatWidget() {
   }, []);
 
   useEffect(() => {
-    if (isPanelOpen && currentUser) {
+    if (isPanelOpen && currentUser && !selectedUserForWidget) { // Only load users if no one is selected yet in widget
       setIsLoadingUsers(true);
       fetchUsers()
         .then(fetchedUsers => {
@@ -51,28 +58,31 @@ export default function ChatWidget() {
           setError("Falha ao carregar usuários.");
         })
         .finally(() => setIsLoadingUsers(false));
-    } else {
-      setAllUsers([]); // Clear users if panel is closed or no current user
+    } else if (!isPanelOpen) {
+      setAllUsers([]); 
     }
-  }, [isPanelOpen, currentUser]);
+  }, [isPanelOpen, currentUser, selectedUserForWidget]);
 
   useEffect(() => {
-    if (currentRoomId && selectedUserForWidget && isPanelOpen) {
+    if (selectedUserForWidget && currentUser && isPanelOpen) {
+      const roomId = generateRoomId(currentUser.id, selectedUserForWidget.id);
+      setCurrentRoomId(roomId);
       setIsLoadingMessages(true);
       setError(null);
-      fetchMessages(currentRoomId)
+      fetchMessages(roomId)
         .then(fetchedMessages => {
           setMessages(fetchedMessages);
         })
         .catch(err => {
-          console.error(`Error fetching messages for widget room ${currentRoomId}:`, err);
+          console.error(`Error fetching messages for widget room ${roomId}:`, err);
           setError("Falha ao carregar mensagens.");
         })
         .finally(() => setIsLoadingMessages(false));
     } else {
       setMessages([]);
+      setCurrentRoomId(null);
     }
-  }, [currentRoomId, selectedUserForWidget, isPanelOpen]);
+  }, [selectedUserForWidget, currentUser, isPanelOpen]);
 
   useEffect(() => {
     if (messages.length > 0) {
@@ -83,9 +93,8 @@ export default function ChatWidget() {
   const handleSelectUserForWidget = (userToChatWith: AppUser) => {
     if (!currentUser) return;
     setSelectedUserForWidget(userToChatWith);
-    const roomId = generateRoomId(currentUser.id, userToChatWith.id);
-    setCurrentRoomId(roomId);
-    setError(null); // Clear previous errors
+    // Room ID and message fetching will be handled by the useEffect watching selectedUserForWidget
+    setError(null); 
   };
 
   const handleSendMessageInWidget = async (e: React.FormEvent) => {
@@ -116,18 +125,20 @@ export default function ChatWidget() {
 
   const handleGoBackToUserListInWidget = () => {
     setSelectedUserForWidget(null);
-    setCurrentRoomId(null);
-    setMessages([]);
+    // currentRoomId and messages will be cleared by useEffect watching selectedUserForWidget
     setError(null);
   };
   
   const handleClosePanel = () => {
     setIsPanelOpen(false);
-    // Optionally reset selected user when panel closes
-    // setSelectedUserForWidget(null); 
-    // setCurrentRoomId(null);
-    // setMessages([]);
+    // User selection in context is preserved if panel is closed.
+    // It will be cleared if user clicks "back" inside the panel or selects null on main page.
   }
+
+  const handleMinimizeButtonClick = () => {
+    setIsFloatingButtonMinimized(true);
+    setIsPanelOpen(false);
+  };
 
   if (!isPanelOpen || !currentUser) {
     return null;
@@ -141,7 +152,12 @@ export default function ChatWidget() {
             <SheetHeader className="p-4 border-b">
               <div className="flex justify-between items-center">
                 <SheetTitle className="flex items-center gap-2"><Users className="h-5 w-5"/> Iniciar Conversa</SheetTitle>
-                <SheetClose asChild><Button variant="ghost" size="icon"><X className="h-4 w-4"/></Button></SheetClose>
+                <div className="flex items-center gap-1">
+                  <Button variant="ghost" size="icon" onClick={handleMinimizeButtonClick} title="Minimizar Ícone do Chat">
+                      <Minus className="h-4 w-4"/>
+                  </Button>
+                  <SheetClose asChild><Button variant="ghost" size="icon" title="Fechar Painel"><X className="h-4 w-4"/></Button></SheetClose>
+                </div>
               </div>
               <SheetDescription>Selecione um usuário para conversar.</SheetDescription>
             </SheetHeader>
@@ -184,20 +200,25 @@ export default function ChatWidget() {
         ) : (
           <>
             <SheetHeader className="p-4 border-b sticky top-0 bg-background z-10">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1 sm:gap-3">
                 <Button variant="ghost" size="icon" onClick={handleGoBackToUserListInWidget} className="shrink-0">
                   <ArrowLeft className="h-5 w-5" />
                 </Button>
                 <Avatar className="h-9 w-9">
                   <AvatarFallback>{selectedUserForWidget.fullName?.substring(0, 1).toUpperCase() || selectedUserForWidget.username.substring(0,1).toUpperCase() || 'U'}</AvatarFallback>
                 </Avatar>
-                <div>
-                  <SheetTitle className="text-lg">{selectedUserForWidget.fullName || selectedUserForWidget.username}</SheetTitle>
+                <div className="flex-1 min-w-0">
+                  <SheetTitle className="text-lg truncate">{selectedUserForWidget.fullName || selectedUserForWidget.username}</SheetTitle>
                   {/* <SheetDescription>Online/Offline status later</SheetDescription> */}
                 </div>
-                 <SheetClose asChild className="ml-auto">
-                    <Button variant="ghost" size="icon"><X className="h-4 w-4"/></Button>
-                 </SheetClose>
+                <div className="flex items-center gap-1 ml-auto shrink-0">
+                     <Button variant="ghost" size="icon" onClick={handleMinimizeButtonClick} title="Minimizar Ícone do Chat">
+                        <Minus className="h-4 w-4"/>
+                    </Button>
+                    <SheetClose asChild>
+                        <Button variant="ghost" size="icon" title="Fechar Painel"><X className="h-4 w-4"/></Button>
+                    </SheetClose>
+                </div>
               </div>
             </SheetHeader>
             <ScrollArea className="flex-1 p-4 space-y-4 bg-muted/30">
@@ -253,7 +274,7 @@ export default function ChatWidget() {
               <div ref={messagesEndRef} />
             </ScrollArea>
             <SheetFooter className="p-4 border-t sticky bottom-0 bg-background z-10">
-              {error && !isLoadingMessages && (
+              {error && !isLoadingMessages && ( // Display send error or persistent load error
                 <Alert variant="destructive" className="mb-2">
                   <AlertCircle className="h-4 w-4" />
                   <AlertTitle>Erro</AlertTitle>

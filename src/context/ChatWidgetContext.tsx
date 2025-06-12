@@ -9,6 +9,8 @@ interface ChatWidgetContextType {
   setIsPanelOpen: (isOpen: boolean) => void;
   selectedUserForWidget: AppUser | null;
   setSelectedUserForWidget: (user: AppUser | null) => void;
+  isFloatingButtonMinimized: boolean; // New state for minimized button
+  setIsFloatingButtonMinimized: (minimized: boolean) => void; // New setter
 }
 
 const ChatWidgetContext = createContext<ChatWidgetContextType | undefined>(undefined);
@@ -16,12 +18,15 @@ const ChatWidgetContext = createContext<ChatWidgetContextType | undefined>(undef
 export function ChatWidgetProvider({ children }: { children: ReactNode }) {
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [selectedUserForWidget, setSelectedUserForWidget] = useState<AppUser | null>(null);
+  const [isFloatingButtonMinimized, setIsFloatingButtonMinimized] = useState(false); // Initialize as not minimized
 
   const value = {
     isPanelOpen,
     setIsPanelOpen,
     selectedUserForWidget,
     setSelectedUserForWidget,
+    isFloatingButtonMinimized,
+    setIsFloatingButtonMinimized,
   };
 
   return <ChatWidgetContext.Provider value={value}>{children}</ChatWidgetContext.Provider>;
@@ -34,3 +39,4 @@ export function useChatWidget() {
   }
   return context;
 }
+

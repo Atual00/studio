@@ -12,18 +12,28 @@ import { useAuth } from '@/context/AuthContext';
 import { fetchMessages, sendMessage, formatMessageTimestamp, type ChatMessage } from '@/services/chatService';
 import { fetchUsers, type User as AppUser } from '@/services/userService';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { useChatWidget } from '@/context/ChatWidgetContext'; // Import the context hook
 
+// Consistent Room ID generation
 const generateRoomId = (userId1: string, userId2: string): string => {
   const ids = [userId1, userId2].sort();
-  return `chat_${ids[0]}_${ids[1]}`;
+  return `chat_room_${ids[0]}_${ids[1]}`;
 };
 
 export default function ChatPage() {
   const { user: currentUser, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { 
+    selectedUserForWidget, 
+    setSelectedUserForWidget, 
+    isPanelOpen, 
+    setIsPanelOpen,
+    setIsFloatingButtonMinimized // To ensure button isn't minimized if user navigates here
+  } = useChatWidget();
+
   const [allUsers, setAllUsers] = useState<AppUser[]>([]);
-  const [selectedUser, setSelectedUser] = useState<AppUser | null>(null);
-  const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
+  // currentRoomId and messages will be derived from selectedUserForWidget
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
   const [newMessage, setNewMessage] = useState('');
 
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
@@ -49,27 +59,35 @@ export default function ChatPage() {
           setError("Falha ao carregar lista de usuários.");
         })
         .finally(() => setIsLoadingUsers(false));
+        
+      // Ensure floating button isn't minimized when on main chat page
+      setIsFloatingButtonMinimized(false);
+      // If a user is selected in the widget, keep the panel open when navigating here.
+      // if (selectedUserForWidget && !isPanelOpen) setIsPanelOpen(true); // Optional: auto-open widget if user selected
     }
-  }, [isAuthenticated, currentUser]);
+  }, [isAuthenticated, currentUser, setIsFloatingButtonMinimized]);
 
-  // Fetch messages when a user is selected (room ID changes)
+  // Fetch messages when selectedUserForWidget changes (from context)
   useEffect(() => {
-    if (currentRoomId && selectedUser) {
+    if (selectedUserForWidget && currentUser) {
+      const roomId = generateRoomId(currentUser.id, selectedUserForWidget.id);
+      setCurrentRoomId(roomId);
       setIsLoadingMessages(true);
       setError(null);
-      fetchMessages(currentRoomId)
+      fetchMessages(roomId)
         .then(fetchedMessages => {
           setMessages(fetchedMessages);
         })
         .catch(err => {
-          console.error(`Error fetching messages for room ${currentRoomId}:`, err);
+          console.error(`Error fetching messages for room ${roomId}:`, err);
           setError("Falha ao carregar mensagens.");
         })
         .finally(() => setIsLoadingMessages(false));
     } else {
-      setMessages([]); // Clear messages if no room is selected
+      setMessages([]); // Clear messages if no user is selected in context
+      setCurrentRoomId(null);
     }
-  }, [currentRoomId, selectedUser]);
+  }, [selectedUserForWidget, currentUser]);
 
   // Scroll to bottom when new messages arrive
   useEffect(() => {
@@ -80,9 +98,9 @@ export default function ChatPage() {
 
   const handleSelectUser = (userToChatWith: AppUser) => {
     if (!currentUser) return;
-    setSelectedUser(userToChatWith);
-    const roomId = generateRoomId(currentUser.id, userToChatWith.id);
-    setCurrentRoomId(roomId);
+    setSelectedUserForWidget(userToChatWith); // Update context
+    // Message fetching is handled by the useEffect watching selectedUserForWidget
+    setError(null); // Clear local error
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -112,9 +130,8 @@ export default function ChatPage() {
   };
 
   const handleGoBackToUserList = () => {
-    setSelectedUser(null);
-    setCurrentRoomId(null);
-    setMessages([]);
+    setSelectedUserForWidget(null); // Update context
+    // currentRoomId and messages will be cleared by useEffect watching selectedUserForWidget
     setError(null);
   };
 
@@ -141,8 +158,8 @@ export default function ChatPage() {
     );
   }
 
-  // User List View
-  if (!selectedUser) {
+  // User List View (if selectedUserForWidget from context is null)
+  if (!selectedUserForWidget) {
     return (
       <Card className="shadow-lg rounded-lg overflow-hidden h-full flex flex-col">
         <CardHeader className="border-b">
@@ -156,7 +173,7 @@ export default function ChatPage() {
                 <Loader2 className="h-6 w-6 animate-spin text-primary" />
                 <p className="ml-2 text-muted-foreground">Carregando usuários...</p>
               </div>
-            ) : error ? (
+            ) : error && allUsers.length === 0 ? ( // Error for user loading
                  <Alert variant="destructive">
                     <AlertCircle className="h-4 w-4" />
                     <AlertTitle>Erro ao Carregar Usuários</AlertTitle>
@@ -192,7 +209,7 @@ export default function ChatPage() {
     );
   }
 
-  // Chat View with Selected User
+  // Chat View with Selected User (selectedUserForWidget from context is not null)
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)] md:h-[calc(100vh-6rem)]">
       <Card className="flex-1 flex flex-col shadow-lg rounded-lg overflow-hidden">
@@ -202,10 +219,10 @@ export default function ChatPage() {
                 <ArrowLeft className="h-5 w-5" />
             </Button>
             <Avatar className="h-9 w-9">
-                <AvatarFallback>{selectedUser.fullName?.substring(0, 1).toUpperCase() || selectedUser.username.substring(0,1).toUpperCase() || 'U'}</AvatarFallback>
+                <AvatarFallback>{selectedUserForWidget.fullName?.substring(0, 1).toUpperCase() || selectedUserForWidget.username.substring(0,1).toUpperCase() || 'U'}</AvatarFallback>
             </Avatar>
             <div>
-                <CardTitle className="text-lg">Chat com {selectedUser.fullName || selectedUser.username}</CardTitle>
+                <CardTitle className="text-lg">Chat com {selectedUserForWidget.fullName || selectedUserForWidget.username}</CardTitle>
                 <CardDescription>Conversa privada.</CardDescription>
             </div>
           </div>
@@ -218,7 +235,7 @@ export default function ChatPage() {
                     <Loader2 className="h-6 w-6 animate-spin text-primary" />
                     <p className="ml-2 text-muted-foreground">Carregando mensagens...</p>
                 </div>
-            ) : error && messages.length === 0 ? ( // Show error only if no messages could be loaded
+            ) : error && messages.length === 0 ? ( // Error for message loading
                 <Alert variant="destructive">
                     <AlertCircle className="h-4 w-4" />
                     <AlertTitle>Erro ao Carregar Mensagens</AlertTitle>
