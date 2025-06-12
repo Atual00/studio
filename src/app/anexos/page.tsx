@@ -206,8 +206,9 @@ export default function AnexosPage() {
               disabled={isProcessingAI}
             />
             <p className="text-xs text-muted-foreground mt-1">
-                Placeholders comuns: `{{razaoSocial}}`, `{{nomeFantasia}}`, `{{cnpj}}`, `{{inscricaoEstadual}}`, `{{enderecoCompleto}}`, `{{email}}`, `{{telefone}}`, `{{socioNome}}`, `{{socioCpf}}`, `{{socioRg}}`, `{{socioEnderecoCompleto}}`. <br/>
-                Para datas: `{{diaAtual}}`, `{{mesAtual}}` (ex: Janeiro), `{{anoAtual}}`, `{{dataExtenso}}` (ex: 12 de Julho de 2024), `{{cidadeEmpresa}}` (local da assinatura).
+                {'Placeholders comuns: `{{razaoSocial}}`, `{{nomeFantasia}}`, `{{cnpj}}`, `{{inscricaoEstadual}}`, `{{enderecoCompleto}}`, `{{email}}`, `{{telefone}}`, `{{socioNome}}`, `{{socioCpf}}`, `{{socioRg}}`, `{{socioEnderecoCompleto}}`.'}
+                <br/>
+                {'Para datas: `{{diaAtual}}`, `{{mesAtual}}` (ex: Janeiro), `{{anoAtual}}`, `{{dataExtenso}}` (ex: 12 de Julho de 2024), `{{cidadeEmpresa}}` (local da assinatura).'}
             </p>
           </div>
 
