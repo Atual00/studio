@@ -25,14 +25,14 @@ const LicitacaoSummarySchema = z.object({
 });
 export type LicitacaoSummary = z.infer<typeof LicitacaoSummarySchema>;
 
-export const FilterLicitacoesInputSchema = z.object({
+const FilterLicitacoesInputSchema = z.object({
   licitacoes: z.array(LicitacaoSummarySchema).describe('An array of licitação summary objects to be filtered.'),
   regiao: z.string().optional().describe('The Brazilian region to filter by (e.g., "Nordeste", "Sul", "Sudeste", "Norte", "Centro-Oeste").'),
   tipoLicitacao: z.string().optional().describe('The specific bid type to filter by (e.g., "Pregão Eletrônico", "Concorrência"). Corresponds to modalidadeContratacaoNome.'),
 });
 export type FilterLicitacoesInput = z.infer<typeof FilterLicitacoesInputSchema>;
 
-export const FilterLicitacoesOutputSchema = z.object({
+const FilterLicitacoesOutputSchema = z.object({
   filteredLicitacoes: z.array(LicitacaoSummarySchema).describe('An array of licitação summary objects that match the filter criteria.'),
 });
 export type FilterLicitacoesOutput = z.infer<typeof FilterLicitacoesOutputSchema>;
