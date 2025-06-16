@@ -1,7 +1,7 @@
 
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { FileSearch, FileCheck2, ListFilter, Building } from 'lucide-react'; // Added Building icon
+import { Building } from 'lucide-react'; // Using Building icon for Contratações
 
 interface ConsultaLink {
   href: string;
@@ -13,67 +13,70 @@ interface ConsultaLink {
 const consultaLinks: ConsultaLink[] = [
   {
     href: '/consulta-pncp/contratacoes',
-    title: 'Consultar Contratações (PNCP Lei 14.133/2021)',
-    description: 'Busque informações sobre contratações integrais publicadas no PNCP.',
+    title: 'Consultar Contratações por Data de Publicação (PNCP)',
+    description: 'Busque informações sobre contratações publicadas no PNCP, conforme a Lei 14.133/2021.',
     icon: Building,
   },
-  {
-    href: '/consulta-pncp/itens-contratacoes',
-    title: 'Consultar Itens de Contratações (PNCP Lei 14.133/2021)',
-    description: 'Obtenha dados sobre itens de contratações publicados no PNCP.',
-    icon: FileSearch,
-  },
-  {
-    href: '/consulta-pncp/resultado-itens',
-    title: 'Consultar Resultado dos Itens (PNCP Lei 14.133/2021)',
-    description: 'Acesse os resultados associados aos itens contratados via PNCP.',
-    icon: FileCheck2,
-  },
+  // Links para 'Itens de Contratações' e 'Resultado dos Itens' removidos,
+  // pois a refatoração atual foca no endpoint de 'Consultar Contratações por Data de Publicação'
+  // conforme o guia fornecido.
 ];
 
 export default function ConsultaPncpPage() {
   return (
     <div className="space-y-6">
       <CardHeader className="px-0">
-        <CardTitle className="text-2xl font-semibold">Consulta de Licitações (Lei 14.133/2021)</CardTitle>
+        <CardTitle className="text-2xl font-semibold">Consulta de Contratações (PNCP - Lei 14.133/2021)</CardTitle>
         <CardDescription>
-          Acesse dados abertos de contratações (PNCP) do Compras.gov.br regidas pela nova Lei de Licitações.
+          Acesse dados abertos de contratações do Portal Nacional de Contratações Públicas (PNCP) regidas pela nova Lei de Licitações.
+          Atualmente, a consulta disponível é por data de publicação.
         </CardDescription>
       </CardHeader>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {consultaLinks.map((link) => (
-          <Link href={link.href} key={link.href} passHref legacyBehavior>
-            <a className="block hover:no-underline">
-              <Card className="h-full hover:shadow-lg transition-shadow duration-200 flex flex-col">
-                <CardHeader className="flex flex-row items-start gap-4 space-y-0 pb-3">
-                  <div className="p-2 bg-primary/10 rounded-md">
-                    <link.icon className="h-6 w-6 text-primary" />
-                  </div>
-                  <div className="flex-1">
-                    <CardTitle className="text-lg">{link.title}</CardTitle>
-                  </div>
-                </CardHeader>
-                <CardContent className="flex-1">
-                  <p className="text-sm text-muted-foreground">{link.description}</p>
-                </CardContent>
-              </Card>
-            </a>
-          </Link>
-        ))}
-      </div>
-       <Card className="mt-6 bg-amber-50 border-amber-200 dark:bg-amber-900/30 dark:border-amber-700/50">
+      {consultaLinks.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {consultaLinks.map((link) => (
+            <Link href={link.href} key={link.href} passHref legacyBehavior>
+              <a className="block hover:no-underline">
+                <Card className="h-full hover:shadow-lg transition-shadow duration-200 flex flex-col">
+                  <CardHeader className="flex flex-row items-start gap-4 space-y-0 pb-3">
+                    <div className="p-2 bg-primary/10 rounded-md">
+                      <link.icon className="h-6 w-6 text-primary" />
+                    </div>
+                    <div className="flex-1">
+                      <CardTitle className="text-lg">{link.title}</CardTitle>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="flex-1">
+                    <p className="text-sm text-muted-foreground">{link.description}</p>
+                  </CardContent>
+                </Card>
+              </a>
+            </Link>
+          ))}
+        </div>
+      ) : (
+         <Card>
+            <CardContent className="pt-6">
+                <p className="text-muted-foreground">
+                    Nenhuma consulta PNCP está configurada no momento.
+                </p>
+            </CardContent>
+        </Card>
+      )}
+
+      <Card className="mt-6 bg-sky-50 border-sky-200 dark:bg-sky-900/30 dark:border-sky-700/50">
         <CardHeader>
-          <CardTitle className="text-amber-700 dark:text-amber-300 text-lg">Nota Importante</CardTitle>
+          <CardTitle className="text-sky-700 dark:text-sky-300 text-lg">Nota sobre a API PNCP</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-amber-600 dark:text-amber-400">
-            Este módulo utiliza uma Cloud Function (Firebase) como proxy para acessar a API pública do Compras.gov.br.
-            Certifique-se de que a URL da sua Cloud Function está corretamente configurada na variável de ambiente <code className="bg-amber-100 dark:bg-amber-800 px-1 py-0.5 rounded text-xs">NEXT_PUBLIC_COMPRAS_GOV_PROXY_URL</code> no arquivo <code className="bg-amber-100 dark:bg-amber-800 px-1 py-0.5 rounded text-xs">.env</code>.
+          <p className="text-sm text-sky-600 dark:text-sky-400">
+            Este módulo agora conecta-se diretamente à API pública do PNCP (`https://pncp.gov.br/api/consulta`).
+            Não é mais necessário um proxy (Cloud Function) para estas consultas específicas do PNCP.
+            Certifique-se de que sua aplicação tem acesso à internet para alcançar a API do PNCP.
           </p>
         </CardContent>
       </Card>
     </div>
   );
 }
-

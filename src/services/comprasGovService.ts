@@ -1,65 +1,64 @@
 
 'use client';
 
-import { format, parseISO, isValid } from 'date-fns'; // Added parseISO and isValid
+import { format, parseISO, isValid, formatISO } from 'date-fns';
 
-// IMPORTANT: REPLACE THIS WITH YOUR ACTUAL CLOUD FUNCTION URL
+// IMPORTANT: REPLACE THIS WITH YOUR ACTUAL CLOUD FUNCTION URL for LEGACY calls
 const PLACEHOLDER_PROXY_URL = 'https://YOUR_REGION-YOUR_PROJECT_ID.cloudfunctions.net/consultarApiComprasGov';
 const PROXY_URL = process.env.NEXT_PUBLIC_COMPRAS_GOV_PROXY_URL || PLACEHOLDER_PROXY_URL;
 
-if (PROXY_URL === PLACEHOLDER_PROXY_URL && process.env.NODE_ENV !== 'test') { // Added NODE_ENV check for testing
+if (PROXY_URL === PLACEHOLDER_PROXY_URL && process.env.NODE_ENV !== 'test') {
   console.error(
     "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n" +
-    "CRITICAL ERROR: A URL da Cloud Function para o Compras.gov.br NÃO ESTÁ CONFIGURADA!\n" +
+    "CRITICAL ERROR: A URL da Cloud Function para o Compras.gov.br (LEGACY) NÃO ESTÁ CONFIGURADA!\n" +
     `Por favor, defina a variável de ambiente NEXT_PUBLIC_COMPRAS_GOV_PROXY_URL no seu arquivo .env (ou similar).\n` +
     `O valor atual é o placeholder: "${PLACEHOLDER_PROXY_URL}".\n` +
-    "As consultas à API do Compras.gov.br NÃO FUNCIONARÃO até que isso seja corrigido.\n" +
+    "As consultas à API do Compras.gov.br (LEGACY) NÃO FUNCIONARÃO até que isso seja corrigido.\n" +
     "Você deve substituir o valor acima pela URL da sua Cloud Function implantada.\n" +
     "Exemplo: https://southamerica-east1-meuprojeto-12345.cloudfunctions.net/consultarApiComprasGov\n"+
     "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
   );
 }
 
+const PNCP_BASE_URL = 'https://pncp.gov.br/api/consulta';
+
 
 interface ComprasGovParams {
-  [key: string]: string | number | boolean | undefined | null; // Allow null for optional date fields
+  [key: string]: string | number | boolean | undefined | null;
 }
 
-// Interface for the generic API response structure
 interface ComprasGovApiResponse<T> {
-  resultado?: T[]; // For endpoints that return a 'resultado' array
-  _embedded?: { // For endpoints that use HATEOAS _embedded structure
-    [key: string]: T[] | any; // Assuming the data array is under some key in _embedded
+  resultado?: T[];
+  _embedded?: {
+    [key: string]: T[] | any;
   };
   totalRegistros?: number;
   totalPaginas?: number;
-  // Add other common pagination/response fields
   _pagination?: {
     total?: number;
     totalPages?: number;
     perPage?: number;
     page?: number;
   };
-  // For single object responses, the data might be at the root
-  [key: string]: any; // Allow other potential root-level fields
+  data?: T[]; // For new PNCP API structure
+  numeroPagina?: number; // For new PNCP API structure
+  [key: string]: any;
 }
 
 
-async function fetchFromComprasGov<T>(
+async function fetchFromComprasGovProxy<T>(
   apiEndpointPath: string,
   params: ComprasGovParams
 ): Promise<ComprasGovApiResponse<T>> {
-  // Upfront check for placeholder URL
   if (PROXY_URL === PLACEHOLDER_PROXY_URL && process.env.NODE_ENV !== 'test') {
     const configErrorMsg = "CONFIGURAÇÃO NECESSÁRIA: A URL do proxy (NEXT_PUBLIC_COMPRAS_GOV_PROXY_URL) não está configurada. " +
                            "Por favor, defina esta variável no seu arquivo .env com a URL da sua Cloud Function. " +
-                           "As consultas à API do Compras.gov.br não podem continuar sem esta configuração.";
-    console.error("fetchFromComprasGov aborted due to missing proxy URL configuration.");
+                           "As consultas à API do Compras.gov.br (LEGACY) não podem continuar sem esta configuração.";
+    console.error("fetchFromComprasGovProxy aborted due to missing proxy URL configuration.");
     throw new Error(configErrorMsg);
   }
 
   const queryParams = new URLSearchParams();
-
   for (const key in params) {
     const value = params[key];
     if (value !== undefined && value !== null) {
@@ -71,8 +70,7 @@ async function fetchFromComprasGov<T>(
       }
     }
   }
-
-  queryParams.set('endpoint', apiEndpointPath); // Pass the target Compras.gov.br endpoint path to the proxy
+  queryParams.set('endpoint', apiEndpointPath);
 
   const url = `${PROXY_URL}?${queryParams.toString()}`;
   console.log(`Consultando API Compras.gov.br via Proxy: ${url}`);
@@ -80,50 +78,34 @@ async function fetchFromComprasGov<T>(
   try {
     const response = await fetch(url, {
       method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-      },
+      headers: { 'Accept': 'application/json' },
     });
 
     if (!response.ok) {
       let errorData;
       let errorBodyText = "Nenhum detalhe adicional do corpo da resposta.";
-      try {
-        errorData = await response.json();
-        errorBodyText = JSON.stringify(errorData);
-      } catch (e) {
-        try {
-            errorBodyText = await response.text();
-            if (errorBodyText.length > 200) errorBodyText = errorBodyText.substring(0, 200) + "... (truncated)";
-        } catch (textError) {
-            errorBodyText = "Não foi possível ler o corpo da resposta.";
-        }
+      try { errorData = await response.json(); errorBodyText = JSON.stringify(errorData); }
+      catch (e) {
+        try { errorBodyText = await response.text(); if (errorBodyText.length > 200) errorBodyText = errorBodyText.substring(0, 200) + "... (truncated)"; }
+        catch (textError) { errorBodyText = "Não foi possível ler o corpo da resposta."; }
         errorData = { message: response.statusText || "Status code indicated error" };
       }
       console.error(`Error from proxy/API for target endpoint ${apiEndpointPath}: Status ${response.status}`, "Raw body sample:", errorBodyText, "Parsed error data:", errorData);
-
       let detailedMessage = `Falha na consulta via proxy para o endpoint '${apiEndpointPath}' (Status: ${response.status}).`;
-      
       if (response.status === 404 && PROXY_URL === PLACEHOLDER_PROXY_URL && process.env.NODE_ENV !== 'test') {
         detailedMessage += ` A URL do proxy (NEXT_PUBLIC_COMPRAS_GOV_PROXY_URL) está configurada com o valor placeholder. Verifique a configuração no seu arquivo .env.`;
       } else if (response.status === 404) {
          detailedMessage += ` Verifique se a URL do proxy (NEXT_PUBLIC_COMPRAS_GOV_PROXY_URL=${PROXY_URL}) está correta e se a Cloud Function está implantada e acessível no caminho esperado ('${new URL(PROXY_URL).pathname}'). URL completa da requisição ao proxy: ${url}. O endpoint de destino na API do Compras.gov.br ('${apiEndpointPath}') pode não existir ou a Cloud Function não conseguiu encontrá-lo.`;
       }
-      
       const serviceErrorMessage = errorData?.message || errorData?.fault?.faultstring || errorData?.errors?.[0]?.message || errorData?._embedded?.errors?.[0]?.message || response.statusText || "Erro desconhecido do serviço.";
       const bodyDetails = errorBodyText === JSON.stringify(errorData) && Object.keys(errorData).length > 0 ? '(corpo JSON já logado no console)' : errorBodyText;
       detailedMessage += ` Detalhes do erro: ${serviceErrorMessage}. Corpo da resposta (amostra): ${bodyDetails}`;
-
       throw new Error(detailedMessage);
     }
     return await response.json() as ComprasGovApiResponse<T>;
   } catch (error) {
-    // If the error is due to the upfront configuration check, rethrow it directly.
-    if (error instanceof Error && error.message.startsWith("CONFIGURAÇÃO NECESSÁRIA")) {
-        throw error;
-    }
-
-    console.error('Network or other error in fetchFromComprasGov for endpoint', apiEndpointPath, 'using proxy URL', PROXY_URL, 'Full URL attempted:', url, 'Error:', error);
+    if (error instanceof Error && error.message.startsWith("CONFIGURAÇÃO NECESSÁRIA")) throw error;
+    console.error('Network or other error in fetchFromComprasGovProxy for endpoint', apiEndpointPath, 'using proxy URL', PROXY_URL, 'Full URL attempted:', url, 'Error:', error);
     if (error instanceof TypeError && error.message.toLowerCase().includes('failed to fetch')) {
       let additionalInfo = "";
       if (PROXY_URL === PLACEHOLDER_PROXY_URL && process.env.NODE_ENV !== 'test') {
@@ -138,16 +120,51 @@ async function fetchFromComprasGov<T>(
         `Erro original: ${error.message}`
       );
     } else if (error instanceof Error) {
-      // Re-throw specific errors from the try block if they are already detailed
-      if (error.message.startsWith('Falha na consulta via proxy para o endpoint')) {
-        throw error;
-      }
+      if (error.message.startsWith('Falha na consulta via proxy para o endpoint')) throw error;
       throw new Error(`Erro ao processar consulta para '${apiEndpointPath}': ${error.message}`);
     }
     throw new Error(`Erro desconhecido ao conectar com o serviço de consulta para '${apiEndpointPath}'.`);
   }
 }
 
+async function fetchDirectPNCP<T>(
+  endpointPath: string,
+  params: Record<string, string | number | boolean | undefined>
+): Promise<ComprasGovApiResponse<T>> {
+  const queryParams = new URLSearchParams();
+  for (const key in params) {
+    const value = params[key];
+    if (value !== undefined && value !== null) {
+      queryParams.append(key, String(value));
+    }
+  }
+
+  const url = `${PNCP_BASE_URL}${endpointPath}?${queryParams.toString()}`;
+  console.log(`Consultando API PNCP Direto: ${url}`);
+
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+    });
+
+    if (!response.ok) {
+      let errorBodyText = "Nenhum detalhe adicional do corpo da resposta.";
+      try {
+        const errorData = await response.json();
+        errorBodyText = JSON.stringify(errorData);
+      } catch (e) {
+        try { errorBodyText = await response.text(); if (errorBodyText.length > 200) errorBodyText = errorBodyText.substring(0,200) + "...";}
+        catch (textErr) { errorBodyText = "Não foi possível ler o corpo da resposta.";}
+      }
+      throw new Error(`Erro na API PNCP: ${response.status} ${response.statusText}. Detalhes: ${errorBodyText}`);
+    }
+    return await response.json() as ComprasGovApiResponse<T>;
+  } catch (error) {
+    console.error('Erro na chamada direta à API PNCP:', error);
+    throw error; // Re-throw to be caught by the caller
+  }
+}
 
 // --- PNCP MODULE ENDPOINTS (Lei 14.133/2021) ---
 
@@ -155,164 +172,97 @@ async function fetchFromComprasGov<T>(
 export interface ConsultarContratacoesPNCPParams {
   pagina?: number;
   tamanhoPagina?: number;
-  dataPublicacaoPncpInicial: Date; // Obrigatório
-  dataPublicacaoPncpFinal: Date;   // Obrigatório
-  codigoModalidade: number;        // Obrigatório
-  unidadeOrgaoCodigoUnidade?: number;
-  orgaoEntidadeCnpj?: string;
-  itemCategoriaIdPncp?: number;
-  criterioJulgamentoIdPncp?: number;
-  tipoInstrumentoConvocatorioId?: number;
-  amparoLegalId?: number;
-  modoDisputaId?: number;
-  situacaoCompraId?: number;
-  sequencialCompra?: number;
-  anoCompra?: number;
-  dataAtualizacaoPncp?: Date | null;
-  contratacaoDesconsiderada?: boolean;
+  dataInicial: Date; // Date object from form
+  dataFinal: Date;   // Date object from form
+  codigoModalidadeContratacao: number;
+  // Optional parameters from the guide that might be added to the form later
+  // unidadeOrgaoCodigoUnidade?: number; // Example of an optional param
+  // orgaoEntidadeCnpj?: string;
+  // itemCategoriaIdPncp?: number;
+  // ... and others from spec if needed
 }
 
 export const consultarContratacoesPNCP = async (params: ConsultarContratacoesPNCPParams) => {
-  const apiParams = { ...params };
-  if (params.contratacaoDesconsiderada !== undefined) {
-    apiParams.contratacaoDesconsiderada = params.contratacaoDesconsiderada;
+  const apiParams: Record<string, string | number | undefined> = {
+    dataInicial: format(params.dataInicial, 'yyyyMMdd'),
+    dataFinal: format(params.dataFinal, 'yyyyMMdd'),
+    codigoModalidadeContratacao: params.codigoModalidadeContratacao,
+    pagina: params.pagina || 1,
+  };
+  if (params.tamanhoPagina) {
+    apiParams.tamanhoPagina = params.tamanhoPagina;
   }
-  return fetchFromComprasGov<any>('/modulocontratacoes/1_consultarContratacoes_PNCP_14133', apiParams);
+  // Add other optional params here if they are implemented in the form
+  // e.g., if (params.unidadeOrgaoCodigoUnidade) apiParams.unidadeOrgaoCodigoUnidade = params.unidadeOrgaoCodigoUnidade;
+
+  return fetchDirectPNCP<any>('/v1/contratacoes/publicacao', apiParams);
 };
 
 
-// 2. Consultar Itens de Contratações PNCP (Lei 14.133/2021)
-export interface ConsultarItensContratacoesPNCPParams {
-  pagina?: number;
-  tamanhoPagina?: number;
-  unidadeOrgaoCodigoUnidade?: number;
-  orgaoEntidadeCnpj?: string;
-  situacaoCompraItem?: string;
-  materialOuServico: 'M' | 'S'; // Obrigatório
-  codigoClasse: number; // Obrigatório
-  codigoGrupo: number; // Obrigatório
-  codItemCatalogo?: number;
-  temResultado?: boolean; // true, false
-  codFornecedor?: string;
-  dataInclusaoPncpInicial?: Date | null;
-  dataInclusaoPncpFinal?: Date | null;
-  dataAtualizacaoPncp?: Date | null;
-  bps?: boolean; // true, false
-  margemPreferenciaNormal?: boolean; // true, false
-  codigoNCM?: string;
-}
-export const consultarItensContratacoesPNCP = async (params: ConsultarItensContratacoesPNCPParams) => {
-  const apiParams = { ...params };
-  if (params.temResultado !== undefined) apiParams.temResultado = params.temResultado;
-  if (params.bps !== undefined) apiParams.bps = params.bps;
-  if (params.margemPreferenciaNormal !== undefined) apiParams.margemPreferenciaNormal = params.margemPreferenciaNormal;
-  
-  return fetchFromComprasGov<any>('/modulocontratacoes/2_consultarItensContratacoes_PNCP_14133', apiParams);
-};
+// --- MÓDULO LEGADO ENDPOINTS (Using Proxy) ---
+// These remain unchanged and continue to use the proxy
 
-// 3. Consultar Resultado dos Itens das Contratações PNCP (Lei 14.133/2021)
-export interface ConsultarResultadoItensPNCPParams {
-  pagina?: number;
-  tamanhoPagina?: number;
-  dataResultadoPncpInicial: Date; // Obrigatório
-  dataResultadoPncpFinal: Date; // Obrigatório
-  unidadeOrgaoCodigoUnidade?: string;
-  niFornecedor?: string;
-  codigoPais?: string;
-  porteFornecedorId?: number;
-  naturezaJuridicaId?: string;
-  situacaoCompraItemResultadoId?: number;
-  valorUnitarioHomologadoInicial?: number;
-  valorUnitarioHomologadoFinal?: number;
-  valorTotalHomologadoInicial?: number;
-  valorTotalHomologadoFinal?: number;
-  aplicacaoMargemPreferencia?: boolean; 
-  aplicacaoBeneficioMeepp?: boolean; 
-  aplicacaoCriterioDesempate?: boolean; 
-}
-export const consultarResultadoItensPNCP = async (params: ConsultarResultadoItensPNCPParams) => {
-  const apiParams = { ...params };
-  if (params.aplicacaoMargemPreferencia !== undefined) apiParams.aplicacaoMargemPreferencia = params.aplicacaoMargemPreferencia;
-  if (params.aplicacaoBeneficioMeepp !== undefined) apiParams.aplicacaoBeneficioMeepp = params.aplicacaoBeneficioMeepp;
-  if (params.aplicacaoCriterioDesempate !== undefined) apiParams.aplicacaoCriterioDesempate = params.aplicacaoCriterioDesempate;
-
-  return fetchFromComprasGov<any>('/modulocontratacoes/3_consultarResultadoItensContratacoes_PNCP_14133', apiParams);
-};
-
-
-// --- MÓDULO LEGADO ENDPOINTS ---
-// Note: These endpoints are less likely to work if the proxy path is '/consultarApiComprasGov' 
-// which was designed for '/modulo-contratacoes'. If the proxy is generic enough to handle 
-// '/modulo-legado' as well, these might work. Otherwise, a separate proxy or a modified
-// proxy function might be needed if the base path in the proxy is hardcoded for contratacoes.
-
-// 1. Consultar Licitação (Lei 8.666/93)
 export interface ConsultarLicitacaoLegadoParams {
   pagina?: number;
   tamanhoPagina?: number;
   uasg?: number;
-  numero_aviso?: number; 
+  numero_aviso?: number;
   modalidade?: number;
-  data_publicacao_inicial: Date; 
-  data_publicacao_final: Date;   
+  data_publicacao_inicial: Date;
+  data_publicacao_final: Date;
 }
 export const consultarLicitacaoLegado = (params: ConsultarLicitacaoLegadoParams) =>
-  fetchFromComprasGov<any>('/modulo-legado/1_consultarLicitacao', params);
+  fetchFromComprasGovProxy<any>('/modulo-legado/1_consultarLicitacao', params);
 
-// 2. Consultar Itens de Licitações (Lei 8.666/93)
 export interface ConsultarItemLicitacaoLegadoParams {
   pagina?: number;
   tamanhoPagina?: number;
   uasg?: number;
   numero_aviso?: number;
-  modalidade: number; // Obrigatório
+  modalidade: number;
   codigo_item_material?: number;
   codigo_item_servico?: number;
   cnpj_fornecedor?: string;
-  cpfVencedor?: string; 
+  cpfVencedor?: string;
 }
 export const consultarItemLicitacaoLegado = (params: ConsultarItemLicitacaoLegadoParams) =>
-  fetchFromComprasGov<any>('/modulo-legado/2_consultarItemLicitacao', params);
+  fetchFromComprasGovProxy<any>('/modulo-legado/2_consultarItemLicitacao', params);
 
-// 3. Consultar Pregão
 export interface ConsultarPregoesLegadoParams {
   pagina?: number;
   tamanhoPagina?: number;
   co_uasg?: number;
   numero?: number;
-  dt_data_edital_inicial: Date; 
-  dt_data_edital_final: Date;   
+  dt_data_edital_inicial: Date;
+  dt_data_edital_final: Date;
 }
 export const consultarPregoesLegado = (params: ConsultarPregoesLegadoParams) =>
-  fetchFromComprasGov<any>('/modulo-legado/3_consultarPregoes', params);
+  fetchFromComprasGovProxy<any>('/modulo-legado/3_consultarPregoes', params);
 
-// 4. Consultar Itens de Pregões
 export interface ConsultarItensPregoesLegadoParams {
   pagina?: number;
   tamanhoPagina?: number;
   co_uasg?: number;
-  dt_hom_inicial: Date; 
-  dt_hom_final: Date;   
+  dt_hom_inicial: Date;
+  dt_hom_final: Date;
 }
 export const consultarItensPregoesLegado = (params: ConsultarItensPregoesLegadoParams) =>
-  fetchFromComprasGov<any>('/modulo-legado/4_consultarItensPregoes', params);
+  fetchFromComprasGovProxy<any>('/modulo-legado/4_consultarItensPregoes', params);
 
-// 5. Consultar Compra sem Licitação (Dispensa/Inexigibilidade)
 export interface ConsultarComprasSemLicitacaoLegadoParams {
   pagina?: number;
   tamanhoPagina?: number;
-  dt_ano_aviso: number; // Obrigatório
+  dt_ano_aviso: number;
   co_uasg?: number;
-  co_modalidade_licitacao?: 6 | 7; 
+  co_modalidade_licitacao?: 6 | 7;
 }
 export const consultarComprasSemLicitacaoLegado = (params: ConsultarComprasSemLicitacaoLegadoParams) =>
-  fetchFromComprasGov<any>('/modulo-legado/5_consultarComprasSemLicitacao', params);
+  fetchFromComprasGovProxy<any>('/modulo-legado/5_consultarComprasSemLicitacao', params);
 
-// 6. Consultar Itens de Compras sem Licitação
 export interface ConsultarCompraItensSemLicitacaoLegadoParams {
   pagina?: number;
   tamanhoPagina?: number;
-  dt_ano_aviso_licitacao: number; // Obrigatório
+  dt_ano_aviso_licitacao: number;
   co_uasg?: number;
   co_modalidade_licitacao?: number;
   co_conjunto_materiais?: number;
@@ -320,15 +270,13 @@ export interface ConsultarCompraItensSemLicitacaoLegadoParams {
   nu_cpf_cnpj_fornecedor?: string;
 }
 export const consultarCompraItensSemLicitacaoLegado = (params: ConsultarCompraItensSemLicitacaoLegadoParams) =>
-  fetchFromComprasGov<any>('/modulo-legado/6_consultarCompraItensSemLicitacao', params);
+  fetchFromComprasGovProxy<any>('/modulo-legado/6_consultarCompraItensSemLicitacao', params);
 
-// 7. Consultar RDC (Regime Diferenciado de Contratações)
 export interface ConsultarRdcLegadoParams {
   pagina?: number;
   tamanhoPagina?: number;
-  data_publicacao_min: Date; 
-  data_publicacao_max: Date;   
+  data_publicacao_min: Date;
+  data_publicacao_max: Date;
 }
 export const consultarRdcLegado = (params: ConsultarRdcLegadoParams) =>
-  fetchFromComprasGov<any>('/modulo-legado/7_consultarRdc', params);
-
+  fetchFromComprasGovProxy<any>('/modulo-legado/7_consultarRdc', params);

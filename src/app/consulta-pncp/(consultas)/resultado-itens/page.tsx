@@ -1,133 +1,86 @@
-
 'use client';
 
 import React from 'react';
-import { useForm } from 'react-hook-form';
-import { z } from 'zod';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
-import ApiConsultaForm from '@/components/consulta-legado/common/ApiConsultaForm';
-import { consultarResultadoItensPNCP } from '@/services/comprasGovService';
-import { FormField, FormItem, FormLabel, FormControl, FormMessage, FormDescription } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
-import { CalendarIcon } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
-const formSchema = z.object({
-  dataResultadoPncpInicial: z.date({ required_error: 'Data de Resultado Inicial é obrigatória.' }),
-  dataResultadoPncpFinal: z.date({ required_error: 'Data de Resultado Final é obrigatória.' }),
-  pagina: z.preprocess(val => Number(val) || 1, z.number().min(1).optional().default(1)),
-  tamanhoPagina: z.preprocess(val => Number(val) || 10, z.number().min(1).max(500).optional().default(10)),
-  unidadeOrgaoCodigoUnidade: z.string().optional().transform(val => val || undefined),
-  niFornecedor: z.string().optional().transform(val => val || undefined),
-  codigoPais: z.string().optional().transform(val => val || undefined),
-  porteFornecedorId: z.preprocess(val => val ? Number(val) : undefined, z.number().optional()),
-  naturezaJuridicaId: z.string().optional().transform(val => val || undefined),
-  situacaoCompraItemResultadoId: z.preprocess(val => val ? Number(val) : undefined, z.number().optional()),
-  valorUnitarioHomologadoInicial: z.preprocess(val => val ? parseFloat(String(val).replace(',', '.')) : undefined, z.number().optional()),
-  valorUnitarioHomologadoFinal: z.preprocess(val => val ? parseFloat(String(val).replace(',', '.')) : undefined, z.number().optional()),
-  valorTotalHomologadoInicial: z.preprocess(val => val ? parseFloat(String(val).replace(',', '.')) : undefined, z.number().optional()),
-  valorTotalHomologadoFinal: z.preprocess(val => val ? parseFloat(String(val).replace(',', '.')) : undefined, z.number().optional()),
-  aplicacaoMargemPreferencia: z.enum(['all', 'true', 'false']).optional().transform(val => val === 'all' ? undefined : val === 'true'),
-  aplicacaoBeneficioMeepp: z.enum(['all', 'true', 'false']).optional().transform(val => val === 'all' ? undefined : val === 'true'),
-  aplicacaoCriterioDesempate: z.enum(['all', 'true', 'false']).optional().transform(val => val === 'all' ? undefined : val === 'true'),
-}).refine(data => data.dataResultadoPncpFinal >= data.dataResultadoPncpInicial, {
-  message: "Data final deve ser maior ou igual à data inicial.",
-  path: ["dataResultadoPncpFinal"],
-});
-
-type FormValues = z.infer<typeof formSchema>;
-
-export default function ConsultarResultadoItensPncpPage() {
-  const defaultValues: FormValues = {
-    dataResultadoPncpInicial: new Date(new Date().getFullYear(), 0, 1), // Default to start of current year
-    dataResultadoPncpFinal: new Date(), // Default to today
-    pagina: 1,
-    tamanhoPagina: 10,
-    aplicacaoMargemPreferencia: undefined,
-    aplicacaoBeneficioMeepp: undefined,
-    aplicacaoCriterioDesempate: undefined,
-  };
-
-  const renderForm = (form: ReturnType<typeof useForm<FormValues>>) => (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      <FormField control={form.control} name="dataResultadoPncpInicial" render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Data Resultado PNCP Inicial*</FormLabel><Popover><PopoverTrigger asChild><FormControl><Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>{field.value ? format(field.value, "dd/MM/yyyy") : <span>Escolha uma data</span>}<CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus /></PopoverContent></Popover><FormMessage /></FormItem>)} />
-      <FormField control={form.control} name="dataResultadoPncpFinal" render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Data Resultado PNCP Final*</FormLabel><Popover><PopoverTrigger asChild><FormControl><Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>{field.value ? format(field.value, "dd/MM/yyyy") : <span>Escolha uma data</span>}<CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus /></PopoverContent></Popover><FormMessage /></FormItem>)} />
-      <FormField control={form.control} name="unidadeOrgaoCodigoUnidade" render={({ field }) => (<FormItem><FormLabel>Cód. Unidade Órgão</FormLabel><FormControl><Input placeholder="Ex: 120001" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
-      <FormField control={form.control} name="niFornecedor" render={({ field }) => (<FormItem><FormLabel>NI Fornecedor</FormLabel><FormControl><Input placeholder="CNPJ/CPF" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
-      <FormField control={form.control} name="codigoPais" render={({ field }) => (<FormItem><FormLabel>Cód. País Fornecedor</FormLabel><FormControl><Input placeholder="Ex: BR" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
-      <FormField control={form.control} name="porteFornecedorId" render={({ field }) => (<FormItem><FormLabel>ID Porte Fornecedor</FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
-      <FormField control={form.control} name="naturezaJuridicaId" render={({ field }) => (<FormItem><FormLabel>ID Natureza Jurídica</FormLabel><FormControl><Input placeholder="Ex: 2062" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
-      <FormField control={form.control} name="situacaoCompraItemResultadoId" render={({ field }) => (<FormItem><FormLabel>ID Situação Item Resultado</FormLabel><FormControl><Input type="number" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
-      <FormField control={form.control} name="valorUnitarioHomologadoInicial" render={({ field }) => (<FormItem><FormLabel>Valor Unit. Homolog. Inicial</FormLabel><FormControl><Input type="number" step="0.01" placeholder="Ex: 100.50" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
-      <FormField control={form.control} name="valorUnitarioHomologadoFinal" render={({ field }) => (<FormItem><FormLabel>Valor Unit. Homolog. Final</FormLabel><FormControl><Input type="number" step="0.01" placeholder="Ex: 150.75" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
-      <FormField control={form.control} name="valorTotalHomologadoInicial" render={({ field }) => (<FormItem><FormLabel>Valor Total Homolog. Inicial</FormLabel><FormControl><Input type="number" step="0.01" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
-      <FormField control={form.control} name="valorTotalHomologadoFinal" render={({ field }) => (<FormItem><FormLabel>Valor Total Homolog. Final</FormLabel><FormControl><Input type="number" step="0.01" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
-      <FormField
-        control={form.control}
-        name="aplicacaoMargemPreferencia"
-        render={({ field }) => (
-          <FormItem><FormLabel>Aplic. Margem Preferência?</FormLabel>
-            <Select onValueChange={field.onChange} value={field.value === undefined ? "all" : String(field.value)}>
-              <FormControl><SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger></FormControl>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="true">Sim</SelectItem>
-                <SelectItem value="false">Não</SelectItem>
-              </SelectContent>
-            </Select><FormMessage />
-          </FormItem>
-        )}
-      />
-      <FormField
-        control={form.control}
-        name="aplicacaoBeneficioMeepp"
-        render={({ field }) => (
-          <FormItem><FormLabel>Aplic. Benefício ME/EPP?</FormLabel>
-            <Select onValueChange={field.onChange} value={field.value === undefined ? "all" : String(field.value)}>
-              <FormControl><SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger></FormControl>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="true">Sim</SelectItem>
-                <SelectItem value="false">Não</SelectItem>
-              </SelectContent>
-            </Select><FormMessage />
-          </FormItem>
-        )}
-      />
-      <FormField
-        control={form.control}
-        name="aplicacaoCriterioDesempate"
-        render={({ field }) => (
-          <FormItem><FormLabel>Aplic. Critério Desempate?</FormLabel>
-            <Select onValueChange={field.onChange} value={field.value === undefined ? "all" : String(field.value)}>
-              <FormControl><SelectTrigger><SelectValue placeholder="Todos" /></SelectTrigger></FormControl>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="true">Sim</SelectItem>
-                <SelectItem value="false">Não</SelectItem>
-              </SelectContent>
-            </Select><FormMessage />
-          </FormItem>
-        )}
-      />
-      <FormField control={form.control} name="tamanhoPagina" render={({ field }) => (<FormItem><FormLabel>Resultados por Página</FormLabel><FormControl><Input type="number" min="1" max="500" placeholder="Padrão: 10" {...field} value={field.value ?? ''} /></FormControl><FormMessage /></FormItem>)} />
-    </div>
-  );
-
-  return (
-    <ApiConsultaForm
-      formSchema={formSchema}
-      defaultValues={defaultValues}
-      renderFormFields={renderForm}
-      fetchDataFunction={consultarResultadoItensPNCP}
-      formTitle="Consultar Resultado dos Itens (PNCP Lei 14.133/2021)"
-      formDescription="Busque resultados de itens de contratações do PNCP."
-    />
-  );
+interface ResultsDisplayProps {
+  data: any; // The raw data from the API
+  currentPage: number;
+  onPageChange: (newPage: number) => void;
 }
 
+export default function ResultsDisplay({ data, currentPage, onPageChange }: ResultsDisplayProps) {
+  // Adapt to the new PNCP API response structure
+  const itemsData = data?.data ?? []; // Data is under the 'data' key
+  const totalRegistros = data?.totalRegistros ?? 0;
+  const totalPaginas = data?.totalPaginas ?? 0;
+  const paginaAtualApi = data?.numeroPagina ?? currentPage; // 'numeroPagina' for current page
+  const tamanhoPaginaApi = data?.tamanhoPagina ?? (itemsData.length > 0 ? itemsData.length : 10); // 'tamanhoPagina' if present
+
+  const hasPrevPage = paginaAtualApi > 1;
+  const hasNextPage = paginaAtualApi < totalPaginas;
+
+  // Handle cases where data might be an error object from the service
+  let displayData = data;
+  if (data instanceof Error) {
+    displayData = { error: data.message, details: data.stack };
+  } else if (typeof data === 'string') {
+    try {
+      displayData = JSON.parse(data); // If data is a JSON string
+    } catch (e) {
+      displayData = { raw_string_data: data }; // If not valid JSON, show raw string
+    }
+  }
+
+
+  return (
+    <Card className="mt-6">
+      <CardHeader>
+        <CardTitle>Resultados da Consulta</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <ScrollArea className="h-[400px] w-full rounded-md border p-4">
+          <pre className="text-xs whitespace-pre-wrap break-all">
+            {JSON.stringify(displayData, null, 2)}
+          </pre>
+        </ScrollArea>
+      </CardContent>
+      {(totalPaginas > 0 || totalRegistros > 0 || (data && !data.error && itemsData.length > 0)) && (
+        <CardFooter className="flex flex-col sm:flex-row justify-between items-center gap-2 pt-4 border-t">
+           <p className="text-sm text-muted-foreground">
+            {totalRegistros > 0 ? (
+                `Página ${paginaAtualApi} de ${totalPaginas}. Total de ${totalRegistros} registros.`
+            ) : itemsData.length > 0 ? (
+                `Mostrando ${itemsData.length} registros nesta página.` // Fallback if pagination info is missing but data exists
+            ) : (
+                 `Nenhum registro encontrado.`
+            )}
+          </p>
+          <div className="flex items-center space-x-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onPageChange(paginaAtualApi - 1)}
+              disabled={!hasPrevPage || totalPaginas === 0}
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Anterior
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onPageChange(paginaAtualApi + 1)}
+              disabled={!hasNextPage || totalPaginas === 0}
+            >
+              Próxima
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </CardFooter>
+      )}
+    </Card>
+  );
+}
