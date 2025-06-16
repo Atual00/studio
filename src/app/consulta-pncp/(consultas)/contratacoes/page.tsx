@@ -61,8 +61,8 @@ const formSchema = z.object({
   uf: z.string().optional().transform(val => val === 'todos' || !val ? undefined : val),
   termoBusca: z.string().optional(),
   // AI Filters
-  aiRegiao: z.string().optional(), // Changed from Select to Input - no transform needed
-  aiTipoLicitacao: z.string().optional(), // Changed from Select to Input - no transform needed
+  aiRegiao: z.string().optional(), 
+  aiTipoLicitacao: z.string().optional(), 
 }).refine(data => data.dataFinal >= data.dataInicial, {
   message: "Data final deve ser maior ou igual à data inicial.",
   path: ["dataFinal"],
@@ -74,13 +74,13 @@ export default function ConsultarContratacoesPncpPage() {
   const defaultValues: FormValues = {
     dataInicial: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
     dataFinal: new Date(),
-    codigoModalidadeContratacao: 6, // Default to Pregão Eletrônico
+    codigoModalidadeContratacao: 6, 
     pagina: 1,
     tamanhoPagina: 50,
     uf: undefined,
     termoBusca: '',
-    aiRegiao: '', // Default to empty string for Input
-    aiTipoLicitacao: '', // Default to empty string for Input
+    aiRegiao: '', 
+    aiTipoLicitacao: '', 
   };
 
   const [apiRawData, setApiRawData] = useState<any>(null);
@@ -94,6 +94,10 @@ export default function ConsultarContratacoesPncpPage() {
     defaultValues,
   });
 
+  // Watch AI filter input values to trigger re-filtering
+  const watchedAiRegiao = form.watch('aiRegiao');
+  const watchedAiTipoLicitacao = form.watch('aiTipoLicitacao');
+
   useEffect(() => {
     const performAiFiltering = async () => {
       if (!apiRawData || !apiRawData.data || apiRawData.data.length === 0) {
@@ -101,13 +105,12 @@ export default function ConsultarContratacoesPncpPage() {
         return;
       }
 
-      const { aiRegiao, aiTipoLicitacao } = form.getValues();
-      // Check if filters are non-empty strings
-      const hasAiRegiaoFilter = typeof aiRegiao === 'string' && aiRegiao.trim() !== '';
-      const hasAiTipoLicitacaoFilter = typeof aiTipoLicitacao === 'string' && aiTipoLicitacao.trim() !== '';
+      // Use watched values for checking if filters are active
+      const hasAiRegiaoFilter = typeof watchedAiRegiao === 'string' && watchedAiRegiao.trim() !== '';
+      const hasAiTipoLicitacaoFilter = typeof watchedAiTipoLicitacao === 'string' && watchedAiTipoLicitacao.trim() !== '';
 
       if (!hasAiRegiaoFilter && !hasAiTipoLicitacaoFilter) {
-        setProcessedDataForDisplay(apiRawData);
+        setProcessedDataForDisplay(apiRawData); // Set to raw if no AI filters are active
         return;
       }
 
@@ -128,28 +131,31 @@ export default function ConsultarContratacoesPncpPage() {
 
         const input: FilterLicitacoesInput = {
           licitacoes: licitacoesToFilter,
-          ...(hasAiRegiaoFilter && { regiao: aiRegiao?.trim() }),
-          ...(hasAiTipoLicitacaoFilter && { tipoLicitacao: aiTipoLicitacao?.trim() }),
+          // Pass watched values to the AI flow
+          ...(hasAiRegiaoFilter && { regiao: watchedAiRegiao?.trim() }),
+          ...(hasAiTipoLicitacaoFilter && { tipoLicitacao: watchedAiTipoLicitacao?.trim() }),
         };
+        
         const result: FilterLicitacoesOutput = await filterLicitacoesWithAI(input);
         
         setProcessedDataForDisplay({
-            ...apiRawData,
+            ...apiRawData, // Keep original pagination info
             data: result.filteredLicitacoes,
-            totalRegistrosFiltradosAI: result.filteredLicitacoes.length,
+            totalRegistrosFiltradosAI: result.filteredLicitacoes.length, // Add count of AI filtered items
         });
 
       } catch (err) {
         console.error("Error during AI filtering:", err);
-        setAiFilterError(err instanceof Error ? err.message : "Erro desconhecido no filtro IA.");
-        setProcessedDataForDisplay(apiRawData);
+        const errorMessage = err instanceof Error ? err.message : "Erro desconhecido no filtro IA.";
+        setAiFilterError(errorMessage);
+        setProcessedDataForDisplay(apiRawData); // Fallback to raw data on AI error
       } finally {
         setIsFilteringWithAI(false);
       }
     };
 
     performAiFiltering();
-  }, [apiRawData, form]);
+  }, [apiRawData, watchedAiRegiao, watchedAiTipoLicitacao]); // Add watched values to dependency array
 
 
   const renderFormFields = (currentForm: ReturnType<typeof useForm<FormValues>>) => (
@@ -196,12 +202,13 @@ export default function ConsultarContratacoesPncpPage() {
         termoBusca: values.termoBusca,
      };
      const rawResult = await consultarContratacoesPNCP(params);
-     setApiRawData(rawResult); 
-     return rawResult;
+     setApiRawData(rawResult); // This will trigger the useEffect for AI filtering
+     // We no longer directly setProcessedDataForDisplay here, AI effect will handle it.
+     return rawResult; // Return raw result, ApiConsultaForm might use it for pagination based on API directly
   }
 
   const handleApiFormPageChange = (newPage: number) => {
-    setCurrentPage(newPage);
+    setCurrentPage(newPage); // Update local current page, which then feeds into fetchDataFunction
   };
 
 
@@ -211,7 +218,7 @@ export default function ConsultarContratacoesPncpPage() {
         formSchema={formSchema}
         defaultValues={defaultValues}
         renderFormFields={renderFormFields}
-        fetchDataFunction={(values) => handleFetchData(values, currentPage)} 
+        fetchDataFunction={(values) => handleFetchData(values, currentPage)} // Pass currentPage
         onPageChange={handleApiFormPageChange} 
         formTitle="Consultar Contratações por Data de Publicação (PNCP)"
         formDescription="Busque contratações publicadas no PNCP. Filtros IA são aplicados após a busca inicial."
@@ -232,3 +239,5 @@ export default function ConsultarContratacoesPncpPage() {
     </FormProvider>
   );
 }
+
+    
