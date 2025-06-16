@@ -33,8 +33,7 @@ export default function ChatWidget() {
     selectedUserForWidget, 
     setSelectedUserForWidget,
     setIsFloatingButtonMinimized,
-    setHasNewChatActivity, // For clearing general notification
-    removeUnreadRoom // If implementing per-room unread
+    removeUnreadRoom, // Use removeUnreadRoom
   } = useChatWidget();
 
   const [allUsers, setAllUsers] = useState<AppUser[]>([]);
@@ -88,7 +87,7 @@ export default function ChatWidget() {
       fetchMessages(roomId)
         .then(fetchedMessages => {
           setMessages(fetchedMessages);
-           if (typeof removeUnreadRoom === 'function') removeUnreadRoom(roomId); // Clear per-room unread
+          removeUnreadRoom(roomId); // Mark as read when chat is opened in widget
         })
         .catch(err => {
           console.error(`Error fetching messages for widget room ${roomId}:`, err);
@@ -111,6 +110,7 @@ export default function ChatWidget() {
     if (!currentUser) return;
     setSelectedUserForWidget(userToChatWith);
     setError(null); 
+    // removeUnreadRoom will be called by the effect listening to selectedUserForWidget
   };
 
   const handleSendMessageInWidget = async (e: React.FormEvent) => {
@@ -230,7 +230,10 @@ export default function ChatWidget() {
   return (
     <Sheet open={isPanelOpen} onOpenChange={ (open) => {
         setIsPanelOpen(open);
-        if(open) setHasNewChatActivity(false); // Clear general notification
+        if(open && selectedUserForWidget && currentUser) {
+           const roomId = `chat_room_${[currentUser.id, selectedUserForWidget.id].sort().join('_')}`;
+           removeUnreadRoom(roomId);
+        }
     }}>
       <SheetContent className="p-0 flex flex-col h-full w-full sm:max-w-md md:max-w-lg">
         {!selectedUserForWidget ? (

@@ -31,8 +31,8 @@ export default function ChatPage() {
     selectedUserForWidget, 
     setSelectedUserForWidget, 
     setIsFloatingButtonMinimized,
-    setHasNewChatActivity, // For clearing general notification
-    removeUnreadRoom // If implementing per-room unread
+    removeUnreadRoom, // Use removeUnreadRoom
+    clearAllUnreadRooms, // Use clearAllUnreadRooms
   } = useChatWidget();
 
   const [allUsers, setAllUsers] = useState<AppUser[]>([]);
@@ -74,10 +74,14 @@ export default function ChatPage() {
         })
         .finally(() => setIsLoadingUsers(false));
         
-      setIsFloatingButtonMinimized(false);
-      setHasNewChatActivity(false); // Clear general notification when main chat page is active
+      setIsFloatingButtonMinimized(false); // Ensure button isn't minimized
+      if (!selectedUserForWidget) {
+        // If on user list view, clear all room notifications
+        // clearAllUnreadRooms(); // Decided against this for now, as it might be too aggressive.
+                                // Notifications are cleared when a specific chat is opened.
+      }
     }
-  }, [isAuthenticated, currentUser, setIsFloatingButtonMinimized, setHasNewChatActivity]);
+  }, [isAuthenticated, currentUser, setIsFloatingButtonMinimized, selectedUserForWidget, clearAllUnreadRooms]);
 
   useEffect(() => {
     if (selectedUserForWidget && currentUser) {
@@ -88,7 +92,7 @@ export default function ChatPage() {
       fetchMessages(roomId)
         .then(fetchedMessages => {
           setMessages(fetchedMessages);
-           if (typeof removeUnreadRoom === 'function') removeUnreadRoom(roomId); // Clear per-room unread
+          removeUnreadRoom(roomId); // Mark this room as read when opened on main page
         })
         .catch(err => {
           console.error(`Error fetching messages for room ${roomId}:`, err);
@@ -111,6 +115,7 @@ export default function ChatPage() {
     if (!currentUser) return;
     setSelectedUserForWidget(userToChatWith); 
     setError(null); 
+    // removeUnreadRoom will be called by the effect listening to selectedUserForWidget
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {

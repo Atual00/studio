@@ -36,6 +36,17 @@ const getBadgeVariant = (color: string | undefined): 'default' | 'secondary' | '
 };
 
 const finalizedStatuses = ['PROCESSO_HOMOLOGADO', 'PROCESSO_ENCERRADO'];
+// Define statuses that belong to the Habilitação module
+const habilitacaoModuleStatuses = [
+  'EM_HABILITACAO',
+  'HABILITADO',
+  'INABILITADO',
+  'RECURSO_HABILITACAO',
+  'CONTRARRAZOES_HABILITACAO',
+  'AGUARDANDO_RECURSO',
+  'EM_PRAZO_CONTRARRAZAO',
+  // 'EM_HOMOLOGACAO' // Decided EM_HOMOLOGACAO stays here as "active" until truly finalized.
+];
 
 
 export default function LicitacoesPage() {
@@ -78,7 +89,11 @@ export default function LicitacoesPage() {
 
      // 1. Filter by Tab (Active/Finalized)
      if (activeTab === 'ativas') {
-        result = result.filter(lic => !finalizedStatuses.includes(lic.status));
+        // Exclude finalized and habilitacao module statuses from "Ativas"
+        result = result.filter(lic => 
+            !finalizedStatuses.includes(lic.status) && 
+            !habilitacaoModuleStatuses.includes(lic.status)
+        );
      } else { // finalizadas
         result = result.filter(lic => finalizedStatuses.includes(lic.status));
      }
@@ -124,8 +139,8 @@ export default function LicitacoesPage() {
     // Sort by start date descending (newest first)
     result.sort((a, b) => {
         try {
-             const dateA = a.dataInicio instanceof Date ? a.dataInicio : parseISO(a.dataInicio);
-             const dateB = b.dataInicio instanceof Date ? b.dataInicio : parseISO(b.dataInicio);
+             const dateA = a.dataInicio instanceof Date ? a.dataInicio : parseISO(a.dataInicio as string);
+             const dateB = b.dataInicio instanceof Date ? b.dataInicio : parseISO(b.dataInicio as string);
              if (!(dateA instanceof Date) || !isValid(dateA)) return 1; // Invalid dates last
              if (!(dateB instanceof Date) || !isValid(dateB)) return -1;
              return dateB.getTime() - dateA.getTime();
@@ -183,7 +198,7 @@ export default function LicitacoesPage() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-lg flex items-center gap-2">
-             <Filter className="h-5 w-5" /> Filtros ({activeTab === 'ativas' ? 'Ativas' : 'Finalizadas'})
+             <Filter className="h-5 w-5" /> Filtros ({activeTab === 'ativas' ? 'Ativas (Exceto Habilitação)' : 'Finalizadas'})
           </CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
@@ -209,11 +224,12 @@ export default function LicitacoesPage() {
                 <SelectItem value="all_status">Todos Status</SelectItem>
                  {/* Filter status options based on the current tab */}
                  {Object.entries(statusMap)
-                    .filter(([key]) =>
-                        activeTab === 'ativas'
-                            ? !finalizedStatuses.includes(key)
-                            : finalizedStatuses.includes(key)
-                    )
+                    .filter(([key]) => {
+                        if (activeTab === 'ativas') {
+                            return !finalizedStatuses.includes(key) && !habilitacaoModuleStatuses.includes(key);
+                        }
+                        return finalizedStatuses.includes(key);
+                    })
                     .map(([key, { label }]) => (
                         <SelectItem key={key} value={key}>{label}</SelectItem>
                 ))}
@@ -253,7 +269,7 @@ export default function LicitacoesPage() {
       {/* Tabs for Active/Finalized */}
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'ativas' | 'finalizadas')} className="w-full">
          <TabsList className="mb-4">
-           <TabsTrigger value="ativas">Ativas</TabsTrigger>
+           <TabsTrigger value="ativas">Ativas (Exceto Habilitação)</TabsTrigger>
            <TabsTrigger value="finalizadas">Finalizadas</TabsTrigger>
          </TabsList>
 

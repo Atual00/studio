@@ -1,67 +1,125 @@
 
 'use client';
 
-import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
+import React, { createContext, useState, useContext, ReactNode, useEffect, useCallback } from 'react';
 import type { User as AppUser } from '@/services/userService';
+import { useAuth } from './AuthContext'; // Import useAuth to get currentUser
 
 interface ChatWidgetContextType {
   isPanelOpen: boolean;
   setIsPanelOpen: (isOpen: boolean) => void;
   selectedUserForWidget: AppUser | null;
   setSelectedUserForWidget: (user: AppUser | null) => void;
-  isFloatingButtonMinimized: boolean; 
-  setIsFloatingButtonMinimized: (minimized: boolean) => void; 
-  hasNewChatActivity: boolean; // For general new activity visual cue
-  setHasNewChatActivity: (hasActivity: boolean) => void;
+  isFloatingButtonMinimized: boolean;
+  setIsFloatingButtonMinimized: (minimized: boolean) => void;
+  unreadRoomIds: Set<string>;
+  addUnreadRoom: (roomId: string) => void;
+  removeUnreadRoom: (roomId: string) => void;
+  clearAllUnreadRooms: () => void;
 }
 
 const ChatWidgetContext = createContext<ChatWidgetContextType | undefined>(undefined);
 
 export function ChatWidgetProvider({ children }: { children: ReactNode }) {
   const [isPanelOpen, setIsPanelOpen] = useState(false);
-  const [selectedUserForWidget, setSelectedUserForWidget] = useState<AppUser | null>(null);
+  const [selectedUserForWidget, setSelectedUserForWidgetInternal] = useState<AppUser | null>(null);
   const [isFloatingButtonMinimized, setIsFloatingButtonMinimized] = useState(false);
-  const [hasNewChatActivity, setHasNewChatActivity] = useState(false);
+  const [unreadRoomIds, setUnreadRoomIds] = useState<Set<string>>(new Set());
+  const { user: currentUser } = useAuth(); // Get the current authenticated user
 
-  // Listen for localStorage changes to update chat activity
+  const addUnreadRoom = useCallback((roomId: string) => {
+    setUnreadRoomIds(prev => {
+      const newSet = new Set(prev);
+      newSet.add(roomId);
+      return newSet;
+    });
+  }, []);
+
+  const removeUnreadRoom = useCallback((roomId: string) => {
+    setUnreadRoomIds(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(roomId);
+      return newSet;
+    });
+  }, []);
+
+  const clearAllUnreadRooms = useCallback(() => {
+    setUnreadRoomIds(new Set());
+  }, []);
+  
+  const setSelectedUserForWidget = (user: AppUser | null) => {
+    setSelectedUserForWidgetInternal(user);
+    if (user && currentUser) { // If a user is selected for chat
+        const roomId = `chat_room_${[currentUser.id, user.id].sort().join('_')}`;
+        removeUnreadRoom(roomId); // Mark this room as read
+    }
+  };
+
+
   useEffect(() => {
     const handleStorageChange = (event: StorageEvent) => {
-      if (event.key && event.key.startsWith('licitaxChatMessages_') && event.newValue) {
-        // A chat message was added or updated in some room
-        // Check if the panel for this specific room is NOT currently open
-        // For simplicity, we'll just set a general flag.
-        // More advanced: check if event.key corresponds to a room *not* currently viewed by selectedUserForWidget
-        const activeRoomId = selectedUserForWidget && (window as any).currentUserForChatWidgetContext // Quick way to get current user for room ID; improve this
-          ? `chat_room_${[selectedUserForWidget.id, (window as any).currentUserForChatWidgetContext.id].sort().join('_')}`
-          : null;
+      if (currentUser && event.key && event.key.startsWith('licitaxChatMessages_') && event.newValue) {
+        const changedRoomId = event.key.substring('licitaxChatMessages_'.length);
         
-        const changedRoomKey = event.key.substring('licitaxChatMessages_'.length);
+        // Try to parse the messages to find the last sender
+        try {
+            const messages: {senderId: string}[] = JSON.parse(event.newValue);
+            if (messages.length > 0) {
+                const lastMessage = messages[messages.length -1];
+                // Only mark as unread if the last message is NOT from the current user
+                if (lastMessage.senderId === currentUser.id) {
+                    return; 
+                }
+            }
+        } catch (e) {
+            console.error("Error parsing messages for notification check:", e);
+        }
 
-        if (!isPanelOpen || (isPanelOpen && activeRoomId !== changedRoomKey)) {
-            setHasNewChatActivity(true);
+
+        let isActiveChatInWidget = false;
+        if (isPanelOpen && selectedUserForWidget) {
+          const activeWidgetRoomId = `chat_room_${[currentUser.id, selectedUserForWidget.id].sort().join('_')}`;
+          if (activeWidgetRoomId === changedRoomId) {
+            isActiveChatInWidget = true;
+          }
+        }
+        
+        // Also consider if the main /chat page is open and viewing this room (more complex to check here directly)
+        // For simplicity, we'll primarily rely on the widget's state.
+        // A more robust solution would involve checking the current browser path if main chat page is active.
+
+        if (!isActiveChatInWidget) {
+          addUnreadRoom(changedRoomId);
         }
       }
     };
-  
+
     window.addEventListener('storage', handleStorageChange);
     return () => {
       window.removeEventListener('storage', handleStorageChange);
     };
-  }, [isPanelOpen, selectedUserForWidget]); // Re-run if panel or selected user changes to correctly assess active room
+  }, [isPanelOpen, selectedUserForWidget, currentUser, addUnreadRoom]);
 
 
   const value = {
     isPanelOpen,
     setIsPanelOpen: (isOpen: boolean) => {
         setIsPanelOpen(isOpen);
-        if(isOpen) setHasNewChatActivity(false); // Clear general notification when panel is opened
+        if (isOpen && selectedUserForWidget && currentUser) { // If panel is opened to a specific chat
+             const roomId = `chat_room_${[currentUser.id, selectedUserForWidget.id].sort().join('_')}`;
+             removeUnreadRoom(roomId);
+        } else if (isOpen && !selectedUserForWidget) {
+            // If panel is opened to the user list, no specific room is "read" yet
+        }
     },
     selectedUserForWidget,
-    setSelectedUserForWidget,
+    setSelectedUserForWidget, // Use the wrapped setter
     isFloatingButtonMinimized,
     setIsFloatingButtonMinimized,
-    hasNewChatActivity,
-    setHasNewChatActivity,
+    unreadRoomIds,
+    addUnreadRoom,
+    removeUnreadRoom,
+    clearAllUnreadRooms,
   };
 
   return <ChatWidgetContext.Provider value={value}>{children}</ChatWidgetContext.Provider>;
