@@ -8,9 +8,9 @@ const PLACEHOLDER_PROXY_URL = 'https://YOUR_REGION-YOUR_PROJECT_ID.cloudfunction
 const PROXY_URL = process.env.NEXT_PUBLIC_COMPRAS_GOV_PROXY_URL || PLACEHOLDER_PROXY_URL;
 
 if (PROXY_URL === PLACEHOLDER_PROXY_URL && process.env.NODE_ENV !== 'test') {
-  console.error(
+  console.warn( // Changed to warn to avoid breaking dev server on initial setup
     "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n" +
-    "CRITICAL ERROR: A URL da Cloud Function para o Compras.gov.br (LEGACY) NÃO ESTÁ CONFIGURADA!\n" +
+    "AVISO DE CONFIGURAÇÃO: A URL da Cloud Function para o Compras.gov.br (LEGACY) NÃO ESTÁ CONFIGURADA!\n" +
     `Por favor, defina a variável de ambiente NEXT_PUBLIC_COMPRAS_GOV_PROXY_URL no seu arquivo .env (ou similar).\n` +
     `O valor atual é o placeholder: "${PLACEHOLDER_PROXY_URL}".\n` +
     "As consultas à API do Compras.gov.br (LEGACY) NÃO FUNCIONARÃO até que isso seja corrigido.\n" +
@@ -134,7 +134,7 @@ async function fetchDirectPNCP<T>(
   const queryParams = new URLSearchParams();
   for (const key in params) {
     const value = params[key];
-    if (value !== undefined && value !== null && String(value).trim() !== '') { // Ensure value is not empty string
+    if (value !== undefined && value !== null && String(value).trim() !== '') {
       queryParams.append(key, String(value));
     }
   }
@@ -150,19 +150,30 @@ async function fetchDirectPNCP<T>(
 
     if (!response.ok) {
       let errorBodyText = "Nenhum detalhe adicional do corpo da resposta.";
+      let errorData = null;
       try {
-        const errorData = await response.json();
+        errorData = await response.json();
         errorBodyText = JSON.stringify(errorData);
       } catch (e) {
         try { errorBodyText = await response.text(); if (errorBodyText.length > 200) errorBodyText = errorBodyText.substring(0,200) + "...";}
         catch (textErr) { errorBodyText = "Não foi possível ler o corpo da resposta.";}
       }
-      throw new Error(`Erro na API PNCP: ${response.status} ${response.statusText}. Detalhes: ${errorBodyText}`);
+      // Log the error details
+      console.error(`Erro na API PNCP (Status: ${response.status} ${response.statusText}):`, errorData || errorBodyText);
+
+      // Construct a more user-friendly error message if possible
+      let message = `Erro na API PNCP: ${response.status} ${response.statusText}.`;
+      if (errorData && errorData.message) { // Check if the JSON error object has a 'message' field
+        message += ` Detalhes: ${errorData.message}`;
+      } else if (errorBodyText) {
+         message += ` Detalhes: ${errorBodyText}`;
+      }
+      throw new Error(message);
     }
     return await response.json() as ComprasGovApiResponse<T>;
   } catch (error) {
     console.error('Erro na chamada direta à API PNCP:', error);
-    throw error; // Re-throw to be caught by the caller
+    throw error; 
   }
 }
 
@@ -174,13 +185,8 @@ export interface ConsultarContratacoesPNCPParams {
   dataInicial: Date;
   dataFinal: Date;
   codigoModalidadeContratacao: number;
-  uf?: string; // Optional: Unidade da Federação
-  termoBusca?: string; // Optional: General search term
-  // Outros filtros opcionais podem ser adicionados aqui conforme a API suportar
-  // e forem necessários no formulário. Ex:
-  // unidadeOrgaoCodigoUnidade?: number;
-  // orgaoEntidadeCnpj?: string;
-  // itemCategoriaIdPncp?: number;
+  uf?: string;
+  termoBusca?: string;
 }
 
 export const consultarContratacoesPNCP = async (params: ConsultarContratacoesPNCPParams) => {
@@ -196,18 +202,15 @@ export const consultarContratacoesPNCP = async (params: ConsultarContratacoesPNC
   if (params.uf) {
     apiParams.uf = params.uf;
   }
-  if (params.termoBusca) {
-    apiParams.termoBusca = params.termoBusca;
+  if (params.termoBusca && params.termoBusca.trim() !== '') {
+    apiParams.termoBusca = params.termoBusca.trim();
   }
-  // Add other optional params here if they are implemented in the form
-  // e.g., if (params.unidadeOrgaoCodigoUnidade) apiParams.unidadeOrgaoCodigoUnidade = params.unidadeOrgaoCodigoUnidade;
 
   return fetchDirectPNCP<any>('/v1/contratacoes/publicacao', apiParams);
 };
 
 
 // --- MÓDULO LEGADO ENDPOINTS (Using Proxy) ---
-// These remain unchanged and continue to use the proxy
 
 export interface ConsultarLicitacaoLegadoParams {
   pagina?: number;
@@ -218,8 +221,8 @@ export interface ConsultarLicitacaoLegadoParams {
   data_publicacao_inicial: Date;
   data_publicacao_final: Date;
 }
-export const consultarLicitacaoLegado = (params: ConsultarLicitacaoLegadoParams) =>
-  fetchFromComprasGovProxy<any>('/modulo-legado/1_consultarLicitacao', params);
+// export const consultarLicitacaoLegado = (params: ConsultarLicitacaoLegadoParams) =>
+//   fetchFromComprasGovProxy<any>('/modulo-legado/1_consultarLicitacao', params);
 
 export interface ConsultarItemLicitacaoLegadoParams {
   pagina?: number;
@@ -232,8 +235,8 @@ export interface ConsultarItemLicitacaoLegadoParams {
   cnpj_fornecedor?: string;
   cpfVencedor?: string;
 }
-export const consultarItemLicitacaoLegado = (params: ConsultarItemLicitacaoLegadoParams) =>
-  fetchFromComprasGovProxy<any>('/modulo-legado/2_consultarItemLicitacao', params);
+// export const consultarItemLicitacaoLegado = (params: ConsultarItemLicitacaoLegadoParams) =>
+//   fetchFromComprasGovProxy<any>('/modulo-legado/2_consultarItemLicitacao', params);
 
 export interface ConsultarPregoesLegadoParams {
   pagina?: number;
@@ -243,8 +246,8 @@ export interface ConsultarPregoesLegadoParams {
   dt_data_edital_inicial: Date;
   dt_data_edital_final: Date;
 }
-export const consultarPregoesLegado = (params: ConsultarPregoesLegadoParams) =>
-  fetchFromComprasGovProxy<any>('/modulo-legado/3_consultarPregoes', params);
+// export const consultarPregoesLegado = (params: ConsultarPregoesLegadoParams) =>
+//   fetchFromComprasGovProxy<any>('/modulo-legado/3_consultarPregoes', params);
 
 export interface ConsultarItensPregoesLegadoParams {
   pagina?: number;
@@ -253,8 +256,8 @@ export interface ConsultarItensPregoesLegadoParams {
   dt_hom_inicial: Date;
   dt_hom_final: Date;
 }
-export const consultarItensPregoesLegado = (params: ConsultarItensPregoesLegadoParams) =>
-  fetchFromComprasGovProxy<any>('/modulo-legado/4_consultarItensPregoes', params);
+// export const consultarItensPregoesLegado = (params: ConsultarItensPregoesLegadoParams) =>
+//   fetchFromComprasGovProxy<any>('/modulo-legado/4_consultarItensPregoes', params);
 
 export interface ConsultarComprasSemLicitacaoLegadoParams {
   pagina?: number;
@@ -263,8 +266,8 @@ export interface ConsultarComprasSemLicitacaoLegadoParams {
   co_uasg?: number;
   co_modalidade_licitacao?: 6 | 7;
 }
-export const consultarComprasSemLicitacaoLegado = (params: ConsultarComprasSemLicitacaoLegadoParams) =>
-  fetchFromComprasGovProxy<any>('/modulo-legado/5_consultarComprasSemLicitacao', params);
+// export const consultarComprasSemLicitacaoLegado = (params: ConsultarComprasSemLicitacaoLegadoParams) =>
+//   fetchFromComprasGovProxy<any>('/modulo-legado/5_consultarComprasSemLicitacao', params);
 
 export interface ConsultarCompraItensSemLicitacaoLegadoParams {
   pagina?: number;
@@ -276,8 +279,8 @@ export interface ConsultarCompraItensSemLicitacaoLegadoParams {
   co_servico?: number;
   nu_cpf_cnpj_fornecedor?: string;
 }
-export const consultarCompraItensSemLicitacaoLegado = (params: ConsultarCompraItensSemLicitacaoLegadoParams) =>
-  fetchFromComprasGovProxy<any>('/modulo-legado/6_consultarCompraItensSemLicitacao', params);
+// export const consultarCompraItensSemLicitacaoLegado = (params: ConsultarCompraItensSemLicitacaoLegadoParams) =>
+//   fetchFromComprasGovProxy<any>('/modulo-legado/6_consultarCompraItensSemLicitacao', params);
 
 export interface ConsultarRdcLegadoParams {
   pagina?: number;
@@ -285,5 +288,5 @@ export interface ConsultarRdcLegadoParams {
   data_publicacao_min: Date;
   data_publicacao_max: Date;
 }
-export const consultarRdcLegado = (params: ConsultarRdcLegadoParams) =>
-  fetchFromComprasGovProxy<any>('/modulo-legado/7_consultarRdc', params);
+// export const consultarRdcLegado = (params: ConsultarRdcLegadoParams) =>
+//   fetchFromComprasGovProxy<any>('/modulo-legado/7_consultarRdc', params);

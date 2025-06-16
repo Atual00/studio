@@ -5,35 +5,112 @@ import React from 'react';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ExternalLink, Info } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import { format, parseISO, isValid } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+
+interface LicitacaoResultItem {
+  numeroControlePNCP: string;
+  objetoCompra: string;
+  modalidadeContratacaoNome?: string;
+  orgaoEntidadeNome?: string; // Was orgaoEntidade.nomeRazaoSocial
+  unidadeOrgao?: {
+    municipioNome?: string;
+    uf?: string;
+  };
+  valorTotalEstimado?: number;
+  dataPublicacaoPncp?: string;
+  linkSistemaOrigem?: string; // Added for direct link
+  // Add other fields you might want to display from the AI's simplified LicitacaoSummary
+  municipioNome?: string; // If AI flow flattens this
+  uf?: string; // If AI flow flattens this
+}
 
 interface ResultsDisplayProps {
-  data: any; // The raw data from the API
+  data: any;
   currentPage: number;
   onPageChange: (newPage: number) => void;
 }
 
+const formatCurrencyForDisplay = (value: number | undefined | null): string => {
+  if (value === undefined || value === null) return 'N/A';
+  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+};
+
+const formatDateForDisplay = (dateString: string | undefined | null): string => {
+  if (!dateString) return 'N/A';
+  try {
+    const date = parseISO(dateString);
+    return isValid(date) ? format(date, 'dd/MM/yyyy', { locale: ptBR }) : 'Data Inválida';
+  } catch {
+    return 'Data Inválida';
+  }
+};
+
 export default function ResultsDisplay({ data, currentPage, onPageChange }: ResultsDisplayProps) {
-  // Adapt to the new PNCP API response structure
-  const itemsData = data?.data ?? []; // Data is under the 'data' key
+  if (data instanceof Error) {
+    return (
+      <Card className="mt-6">
+        <CardHeader><CardTitle>Erro ao Processar Resultados</CardTitle></CardHeader>
+        <CardContent>
+          <Alert variant="destructive">
+            <AlertTitle>Ocorreu um Erro</AlertTitle>
+            <AlertDescription>{data.message}</AlertDescription>
+          </Alert>
+          <ScrollArea className="h-[200px] w-full rounded-md border p-4 mt-2">
+            <pre className="text-xs whitespace-pre-wrap break-all">
+              {JSON.stringify({ error: data.message, details: data.stack }, null, 2)}
+            </pre>
+          </ScrollArea>
+        </CardContent>
+      </Card>
+    );
+  }
+  
+  const itemsData: LicitacaoResultItem[] = data?.data ?? [];
   const totalRegistros = data?.totalRegistros ?? 0;
   const totalPaginas = data?.totalPaginas ?? 0;
-  const paginaAtualApi = data?.numeroPagina ?? currentPage; // 'numeroPagina' for current page
-  const tamanhoPaginaApi = data?.tamanhoPagina ?? (itemsData.length > 0 ? itemsData.length : 10); // 'tamanhoPagina' if present
+  const paginaAtualApi = data?.numeroPagina ?? currentPage;
+  const totalRegistrosFiltradosAI = data?.totalRegistrosFiltradosAI; // For AI filtered count
 
   const hasPrevPage = paginaAtualApi > 1;
   const hasNextPage = paginaAtualApi < totalPaginas;
 
-  // Handle cases where data might be an error object from the service
-  let displayData = data;
-  if (data instanceof Error) {
-    displayData = { error: data.message, details: data.stack };
-  } else if (typeof data === 'string') {
-    try {
-      displayData = JSON.parse(data); // If data is a JSON string
-    } catch (e) {
-      displayData = { raw_string_data: data }; // If not valid JSON, show raw string
-    }
+  if (!data || (!itemsData.length && !totalRegistros && !data.error)) {
+    return (
+        <Card className="mt-6">
+            <CardHeader><CardTitle>Resultados da Consulta</CardTitle></CardHeader>
+            <CardContent>
+                 <Alert variant="info">
+                    <Info className="h-4 w-4" />
+                    <AlertTitle>Nenhum resultado</AlertTitle>
+                    <AlertDescription>Sua busca não retornou resultados ou os filtros aplicados são muito restritivos.</AlertDescription>
+                </Alert>
+            </CardContent>
+        </Card>
+    );
+  }
+  
+  if (data.error) {
+     return (
+      <Card className="mt-6">
+        <CardHeader><CardTitle>Erro na Resposta da API</CardTitle></CardHeader>
+        <CardContent>
+          <Alert variant="destructive">
+            <AlertTitle>Erro da API</AlertTitle>
+            <AlertDescription>{typeof data.error === 'string' ? data.error : JSON.stringify(data.error)}</AlertDescription>
+          </Alert>
+           <ScrollArea className="h-[200px] w-full rounded-md border p-4 mt-2">
+            <pre className="text-xs whitespace-pre-wrap break-all">
+              {JSON.stringify(data, null, 2)}
+            </pre>
+          </ScrollArea>
+        </CardContent>
+      </Card>
+    );
   }
 
 
@@ -41,23 +118,62 @@ export default function ResultsDisplay({ data, currentPage, onPageChange }: Resu
     <Card className="mt-6">
       <CardHeader>
         <CardTitle>Resultados da Consulta</CardTitle>
+        {totalRegistrosFiltradosAI !== undefined && totalRegistrosFiltradosAI !== totalRegistros && (
+            <p className="text-sm text-muted-foreground">
+                Mostrando {itemsData.length} de {totalRegistrosFiltradosAI} licitações após filtro IA (original: {totalRegistros} na API).
+            </p>
+        )}
       </CardHeader>
       <CardContent>
-        <ScrollArea className="h-[400px] w-full rounded-md border p-4">
-          <pre className="text-xs whitespace-pre-wrap break-all">
-            {JSON.stringify(displayData, null, 2)}
-          </pre>
-        </ScrollArea>
+        {itemsData.length > 0 ? (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Controle PNCP</TableHead>
+                <TableHead>Objeto</TableHead>
+                <TableHead>Modalidade</TableHead>
+                <TableHead>Órgão/UF</TableHead>
+                <TableHead>Publicação</TableHead>
+                <TableHead className="text-right">Valor Estimado</TableHead>
+                <TableHead>Link</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {itemsData.map((item) => (
+                <TableRow key={item.numeroControlePNCP}>
+                  <TableCell className="font-medium">{item.numeroControlePNCP}</TableCell>
+                  <TableCell className="max-w-xs truncate" title={item.objetoCompra}>{item.objetoCompra}</TableCell>
+                  <TableCell><Badge variant="secondary">{item.modalidadeContratacaoNome || 'N/A'}</Badge></TableCell>
+                  <TableCell>
+                    {item.orgaoEntidadeNome || item.unidadeOrgao?.municipioNome || 'N/A'}
+                    {item.unidadeOrgao?.uf && ` (${item.unidadeOrgao.uf})`}
+                  </TableCell>
+                  <TableCell>{formatDateForDisplay(item.dataPublicacaoPncp)}</TableCell>
+                  <TableCell className="text-right">{formatCurrencyForDisplay(item.valorTotalEstimado)}</TableCell>
+                  <TableCell>
+                    {item.linkSistemaOrigem ? (
+                      <Button variant="ghost" size="sm" asChild>
+                        <a href={item.linkSistemaOrigem} target="_blank" rel="noopener noreferrer">
+                          <ExternalLink className="h-4 w-4" />
+                        </a>
+                      </Button>
+                    ) : 'N/A'}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : (
+          <p className="text-muted-foreground">Nenhum item encontrado para os critérios selecionados.</p>
+        )}
       </CardContent>
-      {(totalPaginas > 0 || totalRegistros > 0 || (data && !data.error && itemsData.length > 0)) && (
+      {(totalPaginas > 0 || totalRegistros > 0) && (
         <CardFooter className="flex flex-col sm:flex-row justify-between items-center gap-2 pt-4 border-t">
            <p className="text-sm text-muted-foreground">
             {totalRegistros > 0 ? (
-                `Página ${paginaAtualApi} de ${totalPaginas}. Total de ${totalRegistros} registros.`
-            ) : itemsData.length > 0 ? (
-                `Mostrando ${itemsData.length} registros nesta página.` // Fallback if pagination info is missing but data exists
+                `Página ${paginaAtualApi} de ${totalPaginas}. Total de ${totalRegistros} registros na API.`
             ) : (
-                 `Nenhum registro encontrado.`
+                 `Nenhum registro encontrado na API.`
             )}
           </p>
           <div className="flex items-center space-x-2">

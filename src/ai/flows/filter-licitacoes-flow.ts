@@ -1,0 +1,121 @@
+
+'use server';
+/**
+ * @fileOverview An AI agent for filtering lists of licitações based on criteria like region and bid type.
+ *
+ * - filterLicitacoesWithAI - A function that filters licitações using AI.
+ * - FilterLicitacoesInput - The input type for the filterLicitacoesWithAI function.
+ * - FilterLicitacoesOutput - The return type for the filterLicitacoesWithAI function.
+ */
+
+import {ai} from '@/ai/ai-instance'; // Assuming your global AI instance is here
+import {z} from 'genkit';
+
+// A simplified structure for licitacao data relevant for filtering
+const LicitacaoSummarySchema = z.object({
+  numeroControlePNCP: z.string().describe('Unique control number from PNCP.'),
+  objetoCompra: z.string().describe('The object of the bid/purchase.'),
+  modalidadeContratacaoNome: z.string().optional().describe('Name of the bid modality (e.g., "Pregão Eletrônico").'),
+  uf: z.string().optional().describe('The state (Unidade Federativa, e.g., "SP", "RJ") where the bid is located.'),
+  municipioNome: z.string().optional().describe('The name of the municipality.'),
+  valorTotalEstimado: z.number().optional().describe('Estimated total value of the bid.'),
+  dataPublicacaoPncp: z.string().optional().describe('Publication date on PNCP (ISO format YYYY-MM-DD).'),
+  linkSistemaOrigem: z.string().optional().describe('Link to the original system.'),
+  orgaoEntidadeNome: z.string().optional().describe('Name of the purchasing body/entity.'),
+});
+export type LicitacaoSummary = z.infer<typeof LicitacaoSummarySchema>;
+
+export const FilterLicitacoesInputSchema = z.object({
+  licitacoes: z.array(LicitacaoSummarySchema).describe('An array of licitação summary objects to be filtered.'),
+  regiao: z.string().optional().describe('The Brazilian region to filter by (e.g., "Nordeste", "Sul", "Sudeste", "Norte", "Centro-Oeste").'),
+  tipoLicitacao: z.string().optional().describe('The specific bid type to filter by (e.g., "Pregão Eletrônico", "Concorrência"). Corresponds to modalidadeContratacaoNome.'),
+});
+export type FilterLicitacoesInput = z.infer<typeof FilterLicitacoesInputSchema>;
+
+export const FilterLicitacoesOutputSchema = z.object({
+  filteredLicitacoes: z.array(LicitacaoSummarySchema).describe('An array of licitação summary objects that match the filter criteria.'),
+});
+export type FilterLicitacoesOutput = z.infer<typeof FilterLicitacoesOutputSchema>;
+
+export async function filterLicitacoesWithAI(input: FilterLicitacoesInput): Promise<FilterLicitacoesOutput> {
+  return filterLicitacoesFlow(input);
+}
+
+const regionToUfMap = {
+  NORTE: ['AC', 'AP', 'AM', 'PA', 'RO', 'RR', 'TO'],
+  NORDESTE: ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE'],
+  CENTRO_OESTE: ['DF', 'GO', 'MT', 'MS'],
+  SUDESTE: ['ES', 'MG', 'RJ', 'SP'],
+  SUL: ['PR', 'RS', 'SC'],
+};
+
+const filterLicitacoesPrompt = ai.definePrompt({
+  name: 'filterLicitacoesPrompt',
+  input: { schema: FilterLicitacoesInputSchema },
+  output: { schema: FilterLicitacoesOutputSchema },
+  prompt: `Você é um assistente especializado em filtrar listas de licitações públicas brasileiras.
+Sua tarefa é analisar a lista de licitações fornecida e retornar APENAS aquelas que atendem aos critérios de filtro especificados pelo usuário: região e/ou tipo de licitação.
+
+**Critérios de Mapeamento:**
+- **Região:** Para filtrar por região, use o campo 'uf' de cada licitação. Mapeie o UF para a região correspondente:
+    - Norte: AC, AP, AM, PA, RO, RR, TO
+    - Nordeste: AL, BA, CE, MA, PB, PE, PI, RN, SE
+    - Centro-Oeste: DF, GO, MT, MS
+    - Sudeste: ES, MG, RJ, SP
+    - Sul: PR, RS, SC
+    Se o campo 'uf' estiver ausente ou não corresponder a nenhuma região, a licitação não deve ser incluída se um filtro de região estiver ativo.
+- **Tipo de Licitação:** Para filtrar por tipo, compare o valor do filtro com o campo 'modalidadeContratacaoNome' da licitação. A correspondência deve ser exata (case-insensitive).
+
+**Instruções:**
+1.  Se um filtro de 'regiao' for fornecido, inclua apenas licitações cujo 'uf' pertença à região especificada.
+2.  Se um filtro de 'tipoLicitacao' for fornecido, inclua apenas licitações cujo 'modalidadeContratacaoNome' corresponda (ignorando maiúsculas/minúsculas) ao tipo especificado.
+3.  Se AMBOS os filtros ('regiao' e 'tipoLicitacao') forem fornecidos, a licitação DEVE atender a AMBOS os critérios para ser incluída.
+4.  Se NENHUM filtro for fornecido ('regiao' e 'tipoLicitacao' estão ausentes ou vazios), retorne TODAS as licitações da lista de entrada.
+5.  Se um campo relevante (como 'uf' para filtro de região ou 'modalidadeContratacaoNome' para filtro de tipo) estiver ausente na licitação, ela não deve corresponder a esse filtro específico.
+
+**Lista de Licitações para Filtrar:**
+\`\`\`json
+{{{json licitacoes}}}
+\`\`\`
+
+**Filtros Solicitados:**
+- Região Desejada: {{#if regiao}}'{{regiao}}'{{else}}Nenhuma{{/if}}
+- Tipo de Licitação Desejado: {{#if tipoLicitacao}}'{{tipoLicitacao}}'{{else}}Nenhum{{/if}}
+
+Retorne um objeto JSON contendo APENAS a chave 'filteredLicitacoes', que deve ser um array com as licitações que passaram pelos filtros. Se nenhuma licitação atender aos critérios, retorne um array vazio para 'filteredLicitacoes'.
+Não inclua nenhuma explicação ou texto adicional na sua resposta, apenas o JSON.
+`,
+});
+
+const filterLicitacoesFlow = ai.defineFlow(
+  {
+    name: 'filterLicitacoesFlow',
+    inputSchema: FilterLicitacoesInputSchema,
+    outputSchema: FilterLicitacoesOutputSchema,
+  },
+  async (input) => {
+    console.log('AI Filtering Input:', JSON.stringify(input, null, 2));
+    if (input.licitacoes.length === 0) {
+        return { filteredLicitacoes: [] };
+    }
+    if (!input.regiao && !input.tipoLicitacao) {
+        return { filteredLicitacoes: input.licitacoes }; // No filters, return all
+    }
+
+    try {
+      const { output } = await filterLicitacoesPrompt(input);
+      if (!output || !Array.isArray(output.filteredLicitacoes)) {
+        console.error('AI output structure error for filterLicitacoesFlow:', output);
+        // Fallback to returning all if AI fails structurally, or an empty list if strict filtering is preferred
+        return { filteredLicitacoes: input.licitacoes };
+      }
+      console.log('AI Filtering Output Count:', output.filteredLicitacoes.length);
+      return output;
+    } catch (error) {
+      console.error("Error during AI prompt execution for filterLicitacoesFlow:", error);
+      // Fallback strategy: return all input licitacoes on error to avoid losing data,
+      // or return empty list if stricter failure handling is needed.
+      return { filteredLicitacoes: input.licitacoes };
+    }
+  }
+);
