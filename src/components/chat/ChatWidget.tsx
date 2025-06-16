@@ -3,17 +3,21 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Input } from '@/components/ui/input'; // Keep for mention filter if needed
+import { Textarea } from '@/components/ui/textarea'; // Use Textarea for chat input
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Send, Loader2, AlertCircle, Users, ArrowLeft, X, Minus } from 'lucide-react'; // Added Minus
+import { Send, Loader2, AlertCircle, Users, ArrowLeft, X, Minus, AtSign } from 'lucide-react'; 
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter, SheetClose } from '@/components/ui/sheet';
 import { useAuth } from '@/context/AuthContext';
 import { fetchMessages, sendMessage, formatMessageTimestamp, type ChatMessage } from '@/services/chatService';
 import { fetchUsers, type User as AppUser } from '@/services/userService';
+import { fetchActiveLicitacoes, type LicitacaoListItem } from '@/services/licitacaoService';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { useChatWidget } from '@/context/ChatWidgetContext';
 import { Separator } from '../ui/separator';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import ChatMessageRenderer from '@/components/chat/ChatMessageRenderer'; // Import the new renderer
 
 // Consistent Room ID generation
 const generateRoomId = (userId1: string, userId2: string): string => {
@@ -28,7 +32,9 @@ export default function ChatWidget() {
     setIsPanelOpen, 
     selectedUserForWidget, 
     setSelectedUserForWidget,
-    setIsFloatingButtonMinimized // Get the setter for minimized state
+    setIsFloatingButtonMinimized,
+    setHasNewChatActivity, // For clearing general notification
+    removeUnreadRoom // If implementing per-room unread
   } = useChatWidget();
 
   const [allUsers, setAllUsers] = useState<AppUser[]>([]);
@@ -41,13 +47,23 @@ export default function ChatWidget() {
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatInputRefWidget = useRef<HTMLTextAreaElement>(null);
+
+  // For @mention functionality
+  const [showLicitacaoMentionPopoverWidget, setShowLicitacaoMentionPopoverWidget] = useState(false);
+  const [licitacaoMentionQueryWidget, setLicitacaoMentionQueryWidget] = useState('');
+  const [activeLicitacoesForMentionWidget, setActiveLicitacoesForMentionWidget] = useState<LicitacaoListItem[]>([]);
+  const [mentionPopoverTargetWidget, setMentionPopoverTargetWidget] = useState<HTMLTextAreaElement | null>(null);
+  const [loadingMentionsWidget, setLoadingMentionsWidget] = useState(false);
+  const [atPositionWidget, setAtPositionWidget] = useState<number | null>(null);
+
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, []);
 
   useEffect(() => {
-    if (isPanelOpen && currentUser && !selectedUserForWidget) { // Only load users if no one is selected yet in widget
+    if (isPanelOpen && currentUser && !selectedUserForWidget) { 
       setIsLoadingUsers(true);
       fetchUsers()
         .then(fetchedUsers => {
@@ -72,6 +88,7 @@ export default function ChatWidget() {
       fetchMessages(roomId)
         .then(fetchedMessages => {
           setMessages(fetchedMessages);
+           if (typeof removeUnreadRoom === 'function') removeUnreadRoom(roomId); // Clear per-room unread
         })
         .catch(err => {
           console.error(`Error fetching messages for widget room ${roomId}:`, err);
@@ -82,7 +99,7 @@ export default function ChatWidget() {
       setMessages([]);
       setCurrentRoomId(null);
     }
-  }, [selectedUserForWidget, currentUser, isPanelOpen]);
+  }, [selectedUserForWidget, currentUser, isPanelOpen, removeUnreadRoom]);
 
   useEffect(() => {
     if (messages.length > 0) {
@@ -93,7 +110,6 @@ export default function ChatWidget() {
   const handleSelectUserForWidget = (userToChatWith: AppUser) => {
     if (!currentUser) return;
     setSelectedUserForWidget(userToChatWith);
-    // Room ID and message fetching will be handled by the useEffect watching selectedUserForWidget
     setError(null); 
   };
 
@@ -125,27 +141,97 @@ export default function ChatWidget() {
 
   const handleGoBackToUserListInWidget = () => {
     setSelectedUserForWidget(null);
-    // currentRoomId and messages will be cleared by useEffect watching selectedUserForWidget
     setError(null);
   };
   
   const handleClosePanel = () => {
     setIsPanelOpen(false);
-    // User selection in context is preserved if panel is closed.
-    // It will be cleared if user clicks "back" inside the panel or selects null on main page.
   }
 
   const handleMinimizeButtonClick = () => {
     setIsFloatingButtonMinimized(true);
     setIsPanelOpen(false);
   };
+  
+  // --- @mention Licitacao Functions for Widget ---
+  const handleChatInputChangeWidget = async (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const text = e.target.value;
+    setNewMessage(text);
+
+    const cursorPos = e.target.selectionStart;
+    const textBeforeCursor = text.substring(0, cursorPos);
+    const atMatch = textBeforeCursor.match(/@(\S*)$/);
+
+    if (atMatch) {
+      setAtPositionWidget(cursorPos - atMatch[0].length);
+      const query = atMatch[1];
+      setLicitacaoMentionQueryWidget(query);
+      setShowLicitacaoMentionPopoverWidget(true);
+      setMentionPopoverTargetWidget(e.target); // Anchor to textarea
+      if (!loadingMentionsWidget && activeLicitacoesForMentionWidget.length === 0) {
+        setLoadingMentionsWidget(true);
+        try {
+            const licitacoes = await fetchActiveLicitacoes();
+            setActiveLicitacoesForMentionWidget(licitacoes);
+        } catch (mentionError) {
+            console.error("Error fetching licitacoes for mention (widget):", mentionError);
+        } finally {
+            setLoadingMentionsWidget(false);
+        }
+      }
+    } else {
+      setShowLicitacaoMentionPopoverWidget(false);
+      setAtPositionWidget(null);
+    }
+  };
+
+  const handleSelectLicitacaoMentionWidget = (licitacao: LicitacaoListItem) => {
+    const mentionText = `@[${licitacao.numeroLicitacao} - ${licitacao.clienteNome}](/licitacoes/${licitacao.id}) `;
+    
+    if (chatInputRefWidget.current && atPositionWidget !== null) {
+        const currentText = newMessage;
+        let startReplaceIndex = -1;
+        for(let i = atPositionWidget; i >= 0; i--) {
+            if(currentText[i] === '@') {
+                startReplaceIndex = i;
+                break;
+            }
+        }
+
+        if (startReplaceIndex !== -1) {
+            const textBefore = currentText.substring(0, startReplaceIndex);
+            const textAfter = currentText.substring(chatInputRefWidget.current.selectionStart);
+            
+            const finalMessage = textBefore + mentionText + textAfter;
+            setNewMessage(finalMessage);
+
+            const newCursorPos = (textBefore + mentionText).length;
+            setTimeout(() => {
+                chatInputRefWidget.current?.focus();
+                chatInputRefWidget.current?.setSelectionRange(newCursorPos, newCursorPos);
+            }, 0);
+        }
+    }
+    setShowLicitacaoMentionPopoverWidget(false);
+    setLicitacaoMentionQueryWidget('');
+    setActiveLicitacoesForMentionWidget([]);
+    setAtPositionWidget(null);
+  };
+
+  const filteredLicitacoesForPopoverWidget = activeLicitacoesForMentionWidget.filter(lic =>
+    `${lic.numeroLicitacao} ${lic.clienteNome}`.toLowerCase().includes(licitacaoMentionQueryWidget.toLowerCase())
+  );
+
 
   if (!isPanelOpen || !currentUser) {
     return null;
   }
 
   return (
-    <Sheet open={isPanelOpen} onOpenChange={handleClosePanel}>
+    <Sheet open={isPanelOpen} onOpenChange={ (open) => {
+        setIsPanelOpen(open);
+        if(open) setHasNewChatActivity(false); // Clear general notification
+    }}>
       <SheetContent className="p-0 flex flex-col h-full w-full sm:max-w-md md:max-w-lg">
         {!selectedUserForWidget ? (
           <>
@@ -165,7 +251,6 @@ export default function ChatWidget() {
               {isLoadingUsers ? (
                 <div className="flex justify-center items-center py-10">
                   <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                  <p className="ml-2 text-muted-foreground">Carregando usuários...</p>
                 </div>
               ) : error && allUsers.length === 0 ? (
                 <Alert variant="destructive">
@@ -209,7 +294,6 @@ export default function ChatWidget() {
                 </Avatar>
                 <div className="flex-1 min-w-0">
                   <SheetTitle className="text-lg truncate">{selectedUserForWidget.fullName || selectedUserForWidget.username}</SheetTitle>
-                  {/* <SheetDescription>Online/Offline status later</SheetDescription> */}
                 </div>
                 <div className="flex items-center gap-1 ml-auto shrink-0">
                      <Button variant="ghost" size="icon" onClick={handleMinimizeButtonClick} title="Minimizar Ícone do Chat">
@@ -257,7 +341,7 @@ export default function ChatWidget() {
                         {!isCurrentUserMessage && (
                           <p className="text-xs font-semibold mb-0.5 opacity-80">{msg.senderName}</p>
                         )}
-                        <p className="whitespace-pre-wrap">{msg.text}</p>
+                        <ChatMessageRenderer text={msg.text} />
                         <p className={`text-xs mt-1 opacity-70 ${isCurrentUserMessage ? 'text-right' : 'text-left'}`}>
                           {formatMessageTimestamp(msg.timestamp)}
                         </p>
@@ -274,27 +358,67 @@ export default function ChatWidget() {
               <div ref={messagesEndRef} />
             </ScrollArea>
             <SheetFooter className="p-4 border-t sticky bottom-0 bg-background z-10">
-              {error && !isLoadingMessages && ( // Display send error or persistent load error
+              {error && !isLoadingMessages && ( 
                 <Alert variant="destructive" className="mb-2">
                   <AlertCircle className="h-4 w-4" />
                   <AlertTitle>Erro</AlertTitle>
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
               )}
-              <form onSubmit={handleSendMessageInWidget} className="flex w-full items-center space-x-2">
-                <Input
-                  type="text"
-                  placeholder="Digite sua mensagem..."
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  disabled={isSending || isLoadingMessages}
-                  className="flex-1"
-                />
-                <Button type="submit" disabled={isSending || isLoadingMessages || !newMessage.trim()}>
-                  {isSending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-                  Enviar
-                </Button>
-              </form>
+              <Popover open={showLicitacaoMentionPopoverWidget} onOpenChange={setShowLicitacaoMentionPopoverWidget}>
+                <PopoverTrigger asChild>
+                     {/* This is a dummy trigger for anchoring, popover is controlled programmatically */}
+                    <span ref={setMentionPopoverTargetWidget as any} />
+                </PopoverTrigger>
+                <form onSubmit={handleSendMessageInWidget} className="flex w-full items-center space-x-2 relative">
+                    <Textarea
+                    ref={chatInputRefWidget}
+                    placeholder="Digite ou use @ para mencionar..."
+                    value={newMessage}
+                    onChange={handleChatInputChangeWidget}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !showLicitacaoMentionPopoverWidget) { handleSendMessageInWidget(e as any); } }}
+                    disabled={isSending || isLoadingMessages}
+                    className="flex-1 min-h-[40px] max-h-[100px]"
+                    />
+                    <Button type="submit" disabled={isSending || isLoadingMessages || !newMessage.trim() || showLicitacaoMentionPopoverWidget}>
+                    {isSending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+                    Enviar
+                    </Button>
+                     <PopoverContent 
+                        className="w-[300px] p-0" 
+                        side="top" 
+                        align="start"
+                         style={{ 
+                            position: 'absolute', 
+                            bottom: '100%', 
+                            marginBottom: '8px',
+                        }}
+                        hidden={!showLicitacaoMentionPopoverWidget} // Controlled by state
+                        onInteractOutside={() => setShowLicitacaoMentionPopoverWidget(false)} // Close on outside click
+                    >
+                        {loadingMentionsWidget ? (
+                            <div className="p-4 text-center"><Loader2 className="h-5 w-5 animate-spin mx-auto" /></div>
+                        ) : filteredLicitacoesForPopoverWidget.length > 0 ? (
+                            <ScrollArea className="max-h-40"> {/* Max height for popover list */}
+                                <div className="p-1">
+                                {filteredLicitacoesForPopoverWidget.map(lic => (
+                                    <Button
+                                    key={lic.id}
+                                    variant="ghost"
+                                    className="w-full justify-start text-left h-auto py-1.5 px-2 text-sm"
+                                    onClick={() => handleSelectLicitacaoMentionWidget(lic)}
+                                    >
+                                    {lic.numeroLicitacao} - {lic.clienteNome}
+                                    </Button>
+                                ))}
+                                </div>
+                            </ScrollArea>
+                        ) : (
+                            <p className="p-4 text-sm text-muted-foreground text-center">Nenhuma licitação ativa encontrada {licitacaoMentionQueryWidget ? `para "@${licitacaoMentionQueryWidget}"`: ''}.</p>
+                        )}
+                    </PopoverContent>
+                </form>
+              </Popover>
             </SheetFooter>
           </>
         )}

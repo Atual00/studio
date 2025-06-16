@@ -341,6 +341,34 @@ export const fetchLicitacoes = async (): Promise<LicitacaoListItem[]> => {
   }));
 };
 
+export const fetchActiveLicitacoes = async (): Promise<LicitacaoListItem[]> => {
+  console.log('Fetching active licitações...');
+  await new Promise(resolve => setTimeout(resolve, 300));
+  const licitacoes = getLicitacoesFromStorage();
+  const finalizedStatuses = ['PROCESSO_HOMOLOGADO', 'PROCESSO_ENCERRADO'];
+  return licitacoes
+    .filter(lic => !finalizedStatuses.includes(lic.status))
+    .map(({ id, clienteNome, modalidade, numeroLicitacao, plataforma, dataInicio, dataMetaAnalise, status, orgaoComprador }) => ({
+      id,
+      clienteNome,
+      modalidade,
+      numeroLicitacao,
+      orgaoComprador,
+      plataforma,
+      dataInicio,
+      dataMetaAnalise,
+      status,
+    }))
+    .sort((a, b) => { // Sort by most recent dataInicio first
+        const dateA = a.dataInicio instanceof Date ? a.dataInicio : parseISO(a.dataInicio as string);
+        const dateB = b.dataInicio instanceof Date ? b.dataInicio : parseISO(b.dataInicio as string);
+        if (!isValid(dateA)) return 1;
+        if (!isValid(dateB)) return -1;
+        return dateB.getTime() - dateA.getTime();
+    });
+};
+
+
 export const fetchLicitacaoDetails = async (id: string): Promise<LicitacaoDetails | null> => {
   console.log(`Fetching details for licitação ID: ${id}`);
   await new Promise(resolve => setTimeout(resolve, 400));

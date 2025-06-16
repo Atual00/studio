@@ -4,15 +4,20 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea'; // Changed from Input to Textarea
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Send, Loader2, AlertCircle, ArrowLeft, Users, User as UserIcon } from 'lucide-react';
+import { Send, Loader2, AlertCircle, ArrowLeft, Users, User as UserIcon, AtSign } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { fetchMessages, sendMessage, formatMessageTimestamp, type ChatMessage } from '@/services/chatService';
 import { fetchUsers, type User as AppUser } from '@/services/userService';
+import { fetchActiveLicitacoes, type LicitacaoListItem } from '@/services/licitacaoService';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
-import { useChatWidget } from '@/context/ChatWidgetContext'; // Import the context hook
+import { useChatWidget } from '@/context/ChatWidgetContext'; 
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import ChatMessageRenderer from '@/components/chat/ChatMessageRenderer'; // Import the new renderer
+
 
 // Consistent Room ID generation
 const generateRoomId = (userId1: string, userId2: string): string => {
@@ -25,13 +30,12 @@ export default function ChatPage() {
   const { 
     selectedUserForWidget, 
     setSelectedUserForWidget, 
-    isPanelOpen, 
-    setIsPanelOpen,
-    setIsFloatingButtonMinimized // To ensure button isn't minimized if user navigates here
+    setIsFloatingButtonMinimized,
+    setHasNewChatActivity, // For clearing general notification
+    removeUnreadRoom // If implementing per-room unread
   } = useChatWidget();
 
   const [allUsers, setAllUsers] = useState<AppUser[]>([]);
-  // currentRoomId and messages will be derived from selectedUserForWidget
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
   const [newMessage, setNewMessage] = useState('');
@@ -41,12 +45,22 @@ export default function ChatPage() {
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatInputRef = useRef<HTMLTextAreaElement>(null);
+
+
+  // For @mention functionality
+  const [showLicitacaoMentionPopover, setShowLicitacaoMentionPopover] = useState(false);
+  const [licitacaoMentionQuery, setLicitacaoMentionQuery] = useState('');
+  const [activeLicitacoesForMention, setActiveLicitacoesForMention] = useState<LicitacaoListItem[]>([]);
+  const [mentionPopoverTarget, setMentionPopoverTarget] = useState<HTMLTextAreaElement | null>(null);
+  const [loadingMentions, setLoadingMentions] = useState(false);
+  const [atPosition, setAtPosition] = useState<number | null>(null);
+
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, []);
 
-  // Fetch all users (excluding current user)
   useEffect(() => {
     if (isAuthenticated && currentUser) {
       setIsLoadingUsers(true);
@@ -60,14 +74,11 @@ export default function ChatPage() {
         })
         .finally(() => setIsLoadingUsers(false));
         
-      // Ensure floating button isn't minimized when on main chat page
       setIsFloatingButtonMinimized(false);
-      // If a user is selected in the widget, keep the panel open when navigating here.
-      // if (selectedUserForWidget && !isPanelOpen) setIsPanelOpen(true); // Optional: auto-open widget if user selected
+      setHasNewChatActivity(false); // Clear general notification when main chat page is active
     }
-  }, [isAuthenticated, currentUser, setIsFloatingButtonMinimized]);
+  }, [isAuthenticated, currentUser, setIsFloatingButtonMinimized, setHasNewChatActivity]);
 
-  // Fetch messages when selectedUserForWidget changes (from context)
   useEffect(() => {
     if (selectedUserForWidget && currentUser) {
       const roomId = generateRoomId(currentUser.id, selectedUserForWidget.id);
@@ -77,6 +88,7 @@ export default function ChatPage() {
       fetchMessages(roomId)
         .then(fetchedMessages => {
           setMessages(fetchedMessages);
+           if (typeof removeUnreadRoom === 'function') removeUnreadRoom(roomId); // Clear per-room unread
         })
         .catch(err => {
           console.error(`Error fetching messages for room ${roomId}:`, err);
@@ -84,12 +96,11 @@ export default function ChatPage() {
         })
         .finally(() => setIsLoadingMessages(false));
     } else {
-      setMessages([]); // Clear messages if no user is selected in context
+      setMessages([]); 
       setCurrentRoomId(null);
     }
-  }, [selectedUserForWidget, currentUser]);
+  }, [selectedUserForWidget, currentUser, removeUnreadRoom]);
 
-  // Scroll to bottom when new messages arrive
   useEffect(() => {
     if (messages.length > 0) {
         scrollToBottom();
@@ -98,9 +109,8 @@ export default function ChatPage() {
 
   const handleSelectUser = (userToChatWith: AppUser) => {
     if (!currentUser) return;
-    setSelectedUserForWidget(userToChatWith); // Update context
-    // Message fetching is handled by the useEffect watching selectedUserForWidget
-    setError(null); // Clear local error
+    setSelectedUserForWidget(userToChatWith); 
+    setError(null); 
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -130,10 +140,83 @@ export default function ChatPage() {
   };
 
   const handleGoBackToUserList = () => {
-    setSelectedUserForWidget(null); // Update context
-    // currentRoomId and messages will be cleared by useEffect watching selectedUserForWidget
+    setSelectedUserForWidget(null); 
     setError(null);
   };
+
+  // --- @mention Licitacao Functions ---
+  const handleChatInputChange = async (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const text = e.target.value;
+    setNewMessage(text);
+
+    const cursorPos = e.target.selectionStart;
+    const textBeforeCursor = text.substring(0, cursorPos);
+    const atMatch = textBeforeCursor.match(/@(\S*)$/); // Match @ followed by non-space chars
+
+    if (atMatch) {
+      setAtPosition(cursorPos - atMatch[0].length); // Store position of @
+      const query = atMatch[1]; // Text after @
+      setLicitacaoMentionQuery(query);
+      setShowLicitacaoMentionPopover(true);
+      setMentionPopoverTarget(e.target);
+      if (!loadingMentions && activeLicitacoesForMention.length === 0) { // Fetch only if not already loading or populated
+        setLoadingMentions(true);
+        try {
+            const licitacoes = await fetchActiveLicitacoes();
+            setActiveLicitacoesForMention(licitacoes);
+        } catch (mentionError) {
+            console.error("Error fetching licitacoes for mention:", mentionError);
+            // Optionally set an error state for the popover
+        } finally {
+            setLoadingMentions(false);
+        }
+      }
+    } else {
+      setShowLicitacaoMentionPopover(false);
+      setAtPosition(null);
+    }
+  };
+
+  const handleSelectLicitacaoMention = (licitacao: LicitacaoListItem) => {
+    const mentionText = `@[${licitacao.numeroLicitacao} - ${licitacao.clienteNome}](/licitacoes/${licitacao.id}) `; // Added space
+    
+    if (chatInputRef.current && atPosition !== null) {
+        const currentText = newMessage;
+        // Replace the typed @query with the full mention
+        // Find where the @ started
+        let startReplaceIndex = -1;
+        for(let i = atPosition; i >= 0; i--) {
+            if(currentText[i] === '@') {
+                startReplaceIndex = i;
+                break;
+            }
+        }
+
+        if (startReplaceIndex !== -1) {
+            const textBefore = currentText.substring(0, startReplaceIndex);
+            const textAfter = currentText.substring(chatInputRef.current.selectionStart); // Text after current cursor or @query
+            
+            const finalMessage = textBefore + mentionText + textAfter;
+            setNewMessage(finalMessage);
+
+            // Set cursor position after the inserted mention
+            const newCursorPos = (textBefore + mentionText).length;
+            setTimeout(() => { // Timeout to allow state to update before setting cursor
+                chatInputRef.current?.focus();
+                chatInputRef.current?.setSelectionRange(newCursorPos, newCursorPos);
+            }, 0);
+        }
+    }
+    setShowLicitacaoMentionPopover(false);
+    setLicitacaoMentionQuery('');
+    setActiveLicitacoesForMention([]); // Clear to re-fetch next time if needed
+    setAtPosition(null);
+  };
+
+  const filteredLicitacoesForPopover = activeLicitacoesForMention.filter(lic =>
+    `${lic.numeroLicitacao} ${lic.clienteNome}`.toLowerCase().includes(licitacaoMentionQuery.toLowerCase())
+  );
+
 
   if (authLoading) {
     return (
@@ -158,7 +241,7 @@ export default function ChatPage() {
     );
   }
 
-  // User List View (if selectedUserForWidget from context is null)
+  // User List View
   if (!selectedUserForWidget) {
     return (
       <Card className="shadow-lg rounded-lg overflow-hidden h-full flex flex-col">
@@ -173,7 +256,7 @@ export default function ChatPage() {
                 <Loader2 className="h-6 w-6 animate-spin text-primary" />
                 <p className="ml-2 text-muted-foreground">Carregando usuários...</p>
               </div>
-            ) : error && allUsers.length === 0 ? ( // Error for user loading
+            ) : error && allUsers.length === 0 ? ( 
                  <Alert variant="destructive">
                     <AlertCircle className="h-4 w-4" />
                     <AlertTitle>Erro ao Carregar Usuários</AlertTitle>
@@ -209,7 +292,7 @@ export default function ChatPage() {
     );
   }
 
-  // Chat View with Selected User (selectedUserForWidget from context is not null)
+  // Chat View with Selected User
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)] md:h-[calc(100vh-6rem)]">
       <Card className="flex-1 flex flex-col shadow-lg rounded-lg overflow-hidden">
@@ -233,9 +316,8 @@ export default function ChatPage() {
             {isLoadingMessages ? (
                 <div className="flex justify-center items-center py-10">
                     <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                    <p className="ml-2 text-muted-foreground">Carregando mensagens...</p>
                 </div>
-            ) : error && messages.length === 0 ? ( // Error for message loading
+            ) : error && messages.length === 0 ? (
                 <Alert variant="destructive">
                     <AlertCircle className="h-4 w-4" />
                     <AlertTitle>Erro ao Carregar Mensagens</AlertTitle>
@@ -254,7 +336,7 @@ export default function ChatPage() {
                     className={`flex items-end gap-2 ${isCurrentUserMessage ? 'justify-end' : 'justify-start'}`}
                     >
                     {!isCurrentUserMessage && (
-                        <Avatar className="h-8 w-8 shrink-0">
+                        <Avatar className="h-8 w-8 shrink-0 self-start">
                         <AvatarFallback>{msg.senderName?.substring(0, 1).toUpperCase() || 'U'}</AvatarFallback>
                         </Avatar>
                     )}
@@ -268,14 +350,14 @@ export default function ChatPage() {
                         {!isCurrentUserMessage && (
                             <p className="text-xs font-semibold mb-0.5 opacity-80">{msg.senderName}</p>
                         )}
-                        <p className="whitespace-pre-wrap">{msg.text}</p>
+                        <ChatMessageRenderer text={msg.text} />
                         <p className={`text-xs mt-1 opacity-70 ${isCurrentUserMessage ? 'text-right' : 'text-left'}`}>
                         {formatMessageTimestamp(msg.timestamp)}
                         </p>
                     </div>
                     {isCurrentUserMessage && (
-                        <Avatar className="h-8 w-8 shrink-0">
-                        <AvatarFallback>{currentUser.fullName?.substring(0, 1).toUpperCase() || currentUser.username.substring(0,1).toUpperCase() || 'V'}</AvatarFallback>
+                        <Avatar className="h-8 w-8 shrink-0 self-start">
+                           <AvatarFallback>{currentUser.fullName?.substring(0, 1).toUpperCase() || currentUser.username.substring(0,1).toUpperCase() || 'V'}</AvatarFallback>
                         </Avatar>
                     )}
                     </div>
@@ -287,27 +369,69 @@ export default function ChatPage() {
         </CardContent>
 
         <CardFooter className="p-4 border-t">
-          {error && !isLoadingMessages && ( // Show error here if it occurred during send or a general message load error persists
+          {error && !isLoadingMessages && ( 
             <Alert variant="destructive" className="mb-2">
               <AlertCircle className="h-4 w-4" />
               <AlertTitle>Erro</AlertTitle>
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
-          <form onSubmit={handleSendMessage} className="flex w-full items-center space-x-2">
-            <Input
-              type="text"
-              placeholder="Digite sua mensagem..."
-              value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
-              disabled={isSending || isLoadingMessages}
-              className="flex-1"
-            />
-            <Button type="submit" disabled={isSending || isLoadingMessages || !newMessage.trim()}>
-              {isSending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-              Enviar
-            </Button>
-          </form>
+           <Popover open={showLicitacaoMentionPopover} onOpenChange={setShowLicitacaoMentionPopover}>
+            <PopoverTrigger asChild>
+                {/* This is a dummy trigger, the popover is controlled programmatically */}
+                <span ref={setMentionPopoverTarget as any} />
+            </PopoverTrigger>
+            <form onSubmit={handleSendMessage} className="flex w-full items-center space-x-2 relative">
+                <Textarea
+                ref={chatInputRef}
+                placeholder="Digite sua mensagem ou @ para mencionar uma licitação..."
+                value={newMessage}
+                onChange={handleChatInputChange}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !showLicitacaoMentionPopover) { handleSendMessage(e as any); } }}
+                disabled={isSending || isLoadingMessages}
+                className="flex-1 min-h-[40px] max-h-[120px]"
+                />
+                <Button type="submit" disabled={isSending || isLoadingMessages || !newMessage.trim() || showLicitacaoMentionPopover}>
+                {isSending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+                Enviar
+                </Button>
+                 <PopoverContent 
+                    className="w-[300px] p-0" 
+                    side="top" 
+                    align="start"
+                    style={{ 
+                        position: 'absolute', 
+                        bottom: '100%', /* Position above the textarea */
+                        marginBottom: '8px', /* Small gap */
+                        // The actual popover positioning will be managed by Radix, 
+                        // this is more for conceptual placement within the form
+                    }}
+                    hidden={!showLicitacaoMentionPopover}
+                    onInteractOutside={() => setShowLicitacaoMentionPopover(false)}
+                 >
+                    {loadingMentions ? (
+                        <div className="p-4 text-center"><Loader2 className="h-5 w-5 animate-spin mx-auto" /></div>
+                    ) : filteredLicitacoesForPopover.length > 0 ? (
+                        <ScrollArea className="max-h-48">
+                            <div className="p-1">
+                            {filteredLicitacoesForPopover.map(lic => (
+                                <Button
+                                key={lic.id}
+                                variant="ghost"
+                                className="w-full justify-start text-left h-auto py-1.5 px-2 text-sm"
+                                onClick={() => handleSelectLicitacaoMention(lic)}
+                                >
+                                {lic.numeroLicitacao} - {lic.clienteNome}
+                                </Button>
+                            ))}
+                            </div>
+                        </ScrollArea>
+                    ) : (
+                        <p className="p-4 text-sm text-muted-foreground text-center">Nenhuma licitação ativa encontrada{licitacaoMentionQuery ? ` para "@${licitacaoMentionQuery}"` : ''}.</p>
+                    )}
+                </PopoverContent>
+            </form>
+            </Popover>
         </CardFooter>
       </Card>
     </div>
