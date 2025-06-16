@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation'; // Added useSearchParams
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import LicitacaoForm, { type LicitacaoFormValues } from '@/components/licitacoes/licitacao-form';
 import { addLicitacao, type LicitacaoDetails } from '@/services/licitacaoService';
@@ -13,7 +13,7 @@ import { Loader2, AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import Link from 'next/link';
 import jsPDF from 'jspdf';
-import { format, parseISO, isValid } from 'date-fns'; // Added parseISO, isValid
+import { format, parseISO, isValid, addDays } from 'date-fns'; 
 import { ptBR } from 'date-fns/locale';
 import { useAuth } from '@/context/AuthContext';
 
@@ -72,12 +72,12 @@ const generateConfirmationPDF = (
   let currentY = headerY + 7;
   const lineHeight = 7;
   const fieldX = margin;
-  const valueX = 60; // Adjusted for potentially longer labels
+  const valueX = 60; 
 
   const addDetail = (label: string, value: string | number | undefined | null) => {
       if (value !== undefined && value !== null) {
          doc.text(`${label}:`, fieldX, currentY);
-         doc.text(String(value), valueX, currentY, { maxWidth: 196 - valueX - margin }); // Add maxWidth for long values
+         doc.text(String(value), valueX, currentY, { maxWidth: 196 - valueX - margin }); 
          currentY += lineHeight;
       }
   }
@@ -102,11 +102,27 @@ const generateConfirmationPDF = (
   addDetail('Data Início', safeFormatDate(licitacao.dataInicio, true));
   addDetail('Meta Análise', safeFormatDate(licitacao.dataMetaAnalise));
   addDetail('Valor Cobrado (Assessoria)', (licitacao.valorCobrado ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
-  // Valor Total (Licitação) REMOVED
   if(licitacao.propostaItensPdfNome){
     addDetail('PDF Itens Proposta', licitacao.propostaItensPdfNome);
   }
   addDetail('Status Inicial', 'Aguardando Análise');
+  if (licitacao.observacoes) { // Add observacoes to PDF
+    currentY += 2; // Extra space before observacoes
+    doc.setFont(undefined, 'bold');
+    doc.text("Observações:", fieldX, currentY);
+    currentY += lineHeight;
+    doc.setFont(undefined, 'normal');
+    const obsLines = doc.splitTextToSize(licitacao.observacoes, 196 - fieldX - margin);
+    obsLines.forEach((line: string) => {
+        if (currentY + lineHeight > doc.internal.pageSize.getHeight() - margin) { // Check page break
+            doc.addPage();
+            currentY = margin; // Reset Y for new page
+        }
+        doc.text(line, fieldX, currentY);
+        currentY += lineHeight;
+    });
+  }
+
 
   currentY += lineHeight;
 
@@ -139,6 +155,7 @@ const generateConfirmationPDF = (
 
 export default function NovaLicitacaoPage() {
   const router = useRouter();
+  const searchParams = useSearchParams(); // Hook to get query parameters
   const { toast } = useToast();
   const { user: currentUser } = useAuth();
   const [clients, setClients] = useState<ClientListItem[]>([]);
@@ -146,6 +163,7 @@ export default function NovaLicitacaoPage() {
   const [loadingData, setLoadingData] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorLoadingData, setErrorLoadingData] = useState<string | null>(null);
+  const [initialFormValues, setInitialFormValues] = useState<Partial<LicitacaoFormValues> | undefined>(undefined);
 
    useEffect(() => {
     const loadRequiredData = async () => {
@@ -158,6 +176,36 @@ export default function NovaLicitacaoPage() {
         ]);
         setClients(clientData || []);
         setConfiguracoes(configData);
+
+        // Pre-fill form from query parameters
+        const numeroLicitacao = searchParams.get('numeroLicitacao');
+        const orgaoComprador = searchParams.get('orgaoComprador');
+        const modalidade = searchParams.get('modalidade');
+        const objetoCompra = searchParams.get('objetoCompra');
+        const dataPublicacao = searchParams.get('dataPublicacao');
+        const linkSistemaOrigem = searchParams.get('linkSistemaOrigem');
+
+        const prefilledValues: Partial<LicitacaoFormValues> = {};
+        if (numeroLicitacao) prefilledValues.numeroLicitacao = numeroLicitacao;
+        if (orgaoComprador) prefilledValues.orgaoComprador = orgaoComprador;
+        if (modalidade) prefilledValues.modalidade = modalidade;
+        
+        let obs = '';
+        if (objetoCompra) obs += `Objeto da Compra (PNCP): ${objetoCompra}\n\n`;
+        if (linkSistemaOrigem) obs += `Link Sistema Origem (PNCP): ${linkSistemaOrigem}\n`;
+        if (obs) prefilledValues.observacoes = obs.trim();
+
+        if (dataPublicacao) {
+          try {
+            const parsedDate = parseISO(dataPublicacao);
+            if (isValid(parsedDate)) {
+              prefilledValues.dataInicio = parsedDate; // User should adjust time
+              prefilledValues.dataMetaAnalise = addDays(parsedDate, 2); // Default meta date
+            }
+          } catch (e) { console.warn("Could not parse dataPublicacao from query params:", dataPublicacao); }
+        }
+        setInitialFormValues(prefilledValues);
+
       } catch (err) {
         console.error("Erro ao carregar dados para nova licitação:", err);
         const errorMsg = `Falha ao carregar dados necessários (Clientes ou Configurações). ${err instanceof Error ? err.message : ''}`;
@@ -168,7 +216,7 @@ export default function NovaLicitacaoPage() {
       }
     };
     loadRequiredData();
-  }, [toast]);
+  }, [toast, searchParams]);
 
 
   const handleFormSubmit = async (data: LicitacaoFormValues) => {
@@ -236,7 +284,12 @@ export default function NovaLicitacaoPage() {
                 </AlertDescription>
               </Alert>
             ) : (
-            <LicitacaoForm clients={clients} onSubmit={handleFormSubmit} isSubmitting={isSubmitting} />
+            <LicitacaoForm 
+                clients={clients} 
+                onSubmit={handleFormSubmit} 
+                isSubmitting={isSubmitting}
+                initialData={initialFormValues} // Pass pre-filled values
+            />
           )}
         </CardContent>
       </Card>

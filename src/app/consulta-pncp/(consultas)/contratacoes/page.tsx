@@ -19,7 +19,7 @@ import { cn } from '@/lib/utils';
 import ResultsDisplay from '@/components/consulta-legado/common/ResultsDisplay'; // Re-using for display
 import { filterLicitacoesWithAI, type FilterLicitacoesInput, type FilterLicitacoesOutput } from '@/ai/flows/filter-licitacoes-flow';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { zodResolver } from '@hookform/resolvers/zod'; // Added this import
+import { zodResolver } from '@hookform/resolvers/zod';
 
 const modalidadesPNCP = [
   { value: 1, label: 'Leilão - Eletrônico' },
@@ -49,15 +49,6 @@ const ufsBrasil = [
     { value: 'SP', label: 'São Paulo' }, { value: 'SE', label: 'Sergipe' }, { value: 'TO', label: 'Tocantins' }
 ];
 
-const regioesBrasil = [
-    { value: 'NORTE', label: 'Norte' },
-    { value: 'NORDESTE', label: 'Nordeste' },
-    { value: 'CENTRO_OESTE', label: 'Centro-Oeste' },
-    { value: 'SUDESTE', label: 'Sudeste' },
-    { value: 'SUL', label: 'Sul' },
-];
-
-
 const formSchema = z.object({
   dataInicial: z.date({ required_error: 'Data de Início é obrigatória.' }),
   dataFinal: z.date({ required_error: 'Data de Fim é obrigatória.' }),
@@ -70,8 +61,8 @@ const formSchema = z.object({
   uf: z.string().optional().transform(val => val === 'todos' || !val ? undefined : val),
   termoBusca: z.string().optional(),
   // AI Filters
-  aiRegiao: z.string().optional().transform(val => val === 'todas' || !val ? undefined : val),
-  aiTipoLicitacao: z.string().optional().transform(val => val === 'todos' || !val ? undefined : val),
+  aiRegiao: z.string().optional(), // Changed from Select to Input - no transform needed
+  aiTipoLicitacao: z.string().optional(), // Changed from Select to Input - no transform needed
 }).refine(data => data.dataFinal >= data.dataInicial, {
   message: "Data final deve ser maior ou igual à data inicial.",
   path: ["dataFinal"],
@@ -85,42 +76,45 @@ export default function ConsultarContratacoesPncpPage() {
     dataFinal: new Date(),
     codigoModalidadeContratacao: 6, // Default to Pregão Eletrônico
     pagina: 1,
-    tamanhoPagina: 50, // Default 50, max 500
+    tamanhoPagina: 50,
     uf: undefined,
     termoBusca: '',
-    aiRegiao: undefined,
-    aiTipoLicitacao: undefined,
+    aiRegiao: '', // Default to empty string for Input
+    aiTipoLicitacao: '', // Default to empty string for Input
   };
 
   const [apiRawData, setApiRawData] = useState<any>(null);
   const [processedDataForDisplay, setProcessedDataForDisplay] = useState<any>(null);
   const [isFilteringWithAI, setIsFilteringWithAI] = useState(false);
   const [aiFilterError, setAiFilterError] = useState<string | null>(null);
-  const [currentPage, setCurrentPage] = useState(1); // For pagination management
+  const [currentPage, setCurrentPage] = useState(1);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues,
   });
 
-  // This effect triggers AI filtering when raw API data changes and AI filters are active
   useEffect(() => {
     const performAiFiltering = async () => {
       if (!apiRawData || !apiRawData.data || apiRawData.data.length === 0) {
-        setProcessedDataForDisplay(apiRawData); // Pass through raw data if no AI filtering needed or no data
+        setProcessedDataForDisplay(apiRawData);
         return;
       }
 
       const { aiRegiao, aiTipoLicitacao } = form.getValues();
-      if (!aiRegiao && !aiTipoLicitacao) {
-        setProcessedDataForDisplay(apiRawData); // No AI filters selected
+      // Check if filters are non-empty strings
+      const hasAiRegiaoFilter = typeof aiRegiao === 'string' && aiRegiao.trim() !== '';
+      const hasAiTipoLicitacaoFilter = typeof aiTipoLicitacao === 'string' && aiTipoLicitacao.trim() !== '';
+
+      if (!hasAiRegiaoFilter && !hasAiTipoLicitacaoFilter) {
+        setProcessedDataForDisplay(apiRawData);
         return;
       }
 
       setIsFilteringWithAI(true);
       setAiFilterError(null);
       try {
-        const licitacoesToFilter = apiRawData.data.map((item: any) => ({ // Map to a simpler structure for AI
+        const licitacoesToFilter = apiRawData.data.map((item: any) => ({
           numeroControlePNCP: item.numeroControlePNCP,
           objetoCompra: item.objetoCompra,
           modalidadeContratacaoNome: item.modalidadeContratacaoNome,
@@ -134,22 +128,21 @@ export default function ConsultarContratacoesPncpPage() {
 
         const input: FilterLicitacoesInput = {
           licitacoes: licitacoesToFilter,
-          ...(aiRegiao && { regiao: aiRegiao }),
-          ...(aiTipoLicitacao && { tipoLicitacao: aiTipoLicitacao }),
+          ...(hasAiRegiaoFilter && { regiao: aiRegiao?.trim() }),
+          ...(hasAiTipoLicitacaoFilter && { tipoLicitacao: aiTipoLicitacao?.trim() }),
         };
         const result: FilterLicitacoesOutput = await filterLicitacoesWithAI(input);
         
-        // Reconstruct the data structure for ResultsDisplay, keeping original pagination info
         setProcessedDataForDisplay({
-            ...apiRawData, // Keep original pagination, totalRegistros etc.
-            data: result.filteredLicitacoes, // Replace data with filtered list
-            totalRegistrosFiltradosAI: result.filteredLicitacoes.length, // Add new info
+            ...apiRawData,
+            data: result.filteredLicitacoes,
+            totalRegistrosFiltradosAI: result.filteredLicitacoes.length,
         });
 
       } catch (err) {
         console.error("Error during AI filtering:", err);
         setAiFilterError(err instanceof Error ? err.message : "Erro desconhecido no filtro IA.");
-        setProcessedDataForDisplay(apiRawData); // Show raw data on AI error
+        setProcessedDataForDisplay(apiRawData);
       } finally {
         setIsFilteringWithAI(false);
       }
@@ -172,8 +165,20 @@ export default function ConsultarContratacoesPncpPage() {
       <div className="mt-6 pt-4 border-t">
         <h4 className="text-md font-semibold mb-2 flex items-center"><Filter className="h-5 w-5 mr-2 text-primary"/>Filtros Adicionais (IA)</h4>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <FormField control={currentForm.control} name="aiRegiao" render={({ field }) => ( <FormItem> <FormLabel>Filtrar por Região (IA)</FormLabel> <Select onValueChange={field.onChange} value={field.value || 'todas'}> <FormControl><SelectTrigger><SelectValue placeholder="Todas as Regiões" /></SelectTrigger></FormControl> <SelectContent> <SelectItem value="todas">Todas as Regiões</SelectItem> {regioesBrasil.map(reg => ( <SelectItem key={reg.value} value={reg.value}> {reg.label} </SelectItem> ))} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
-            <FormField control={currentForm.control} name="aiTipoLicitacao" render={({ field }) => ( <FormItem> <FormLabel>Filtrar por Tipo de Licitação (IA)</FormLabel> <Select onValueChange={field.onChange} value={field.value || 'todos'}> <FormControl><SelectTrigger><SelectValue placeholder="Todos os Tipos" /></SelectTrigger></FormControl> <SelectContent> <SelectItem value="todos">Todos os Tipos</SelectItem> {modalidadesPNCP.map(mod => ( <SelectItem key={mod.value} value={mod.label}> {mod.label} </SelectItem> ))} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
+            <FormField control={currentForm.control} name="aiRegiao" render={({ field }) => ( 
+              <FormItem> 
+                <FormLabel>Filtrar por Região Descritiva (IA)</FormLabel> 
+                <FormControl><Input placeholder="Ex: Oeste do Paraná, Sul de Minas" {...field} value={field.value ?? ''} /></FormControl> 
+                <FormMessage /> 
+              </FormItem> 
+            )}/>
+            <FormField control={currentForm.control} name="aiTipoLicitacao" render={({ field }) => ( 
+              <FormItem> 
+                <FormLabel>Filtrar por Tipo/Objeto Descritivo (IA)</FormLabel> 
+                <FormControl><Input placeholder="Ex: reforma, obra, serviços de limpeza" {...field} value={field.value ?? ''} /></FormControl> 
+                <FormMessage /> 
+              </FormItem> 
+            )}/>
         </div>
          <p className="text-xs text-muted-foreground mt-2">Os filtros IA são aplicados sobre os resultados da busca principal. Pode levar alguns segundos adicionais.</p>
       </div>
@@ -185,23 +190,18 @@ export default function ConsultarContratacoesPncpPage() {
         dataInicial: values.dataInicial,
         dataFinal: values.dataFinal,
         codigoModalidadeContratacao: values.codigoModalidadeContratacao,
-        pagina: pageToFetch, // Use pageToFetch for pagination
+        pagina: pageToFetch,
         tamanhoPagina: values.tamanhoPagina,
         uf: values.uf,
         termoBusca: values.termoBusca,
      };
-     // This function now just fetches, AI filtering is handled by useEffect
      const rawResult = await consultarContratacoesPNCP(params);
-     setApiRawData(rawResult); // Store raw data to trigger AI filtering effect
-     // For ApiConsultaForm, we immediately return the raw data.
-     // The display will update once AI filtering (if any) completes.
+     setApiRawData(rawResult); 
      return rawResult;
   }
 
-  // Callback for ApiConsultaForm to update the current page state here
   const handleApiFormPageChange = (newPage: number) => {
     setCurrentPage(newPage);
-    // The fetch will be triggered by ApiConsultaForm's internal logic
   };
 
 
@@ -211,11 +211,11 @@ export default function ConsultarContratacoesPncpPage() {
         formSchema={formSchema}
         defaultValues={defaultValues}
         renderFormFields={renderFormFields}
-        fetchDataFunction={(values) => handleFetchData(values, currentPage)} // Pass current page
-        onPageChange={handleApiFormPageChange} // Allow ApiConsultaForm to update page
+        fetchDataFunction={(values) => handleFetchData(values, currentPage)} 
+        onPageChange={handleApiFormPageChange} 
         formTitle="Consultar Contratações por Data de Publicação (PNCP)"
         formDescription="Busque contratações publicadas no PNCP. Filtros IA são aplicados após a busca inicial."
-        externalData={processedDataForDisplay} // Pass processed data for display
+        externalData={processedDataForDisplay} 
       />
       {isFilteringWithAI && (
         <div className="mt-4 flex items-center justify-center text-primary">
@@ -229,7 +229,6 @@ export default function ConsultarContratacoesPncpPage() {
           <AlertDescription>{aiFilterError}</AlertDescription>
         </Alert>
       )}
-       {/* ResultsDisplay is now handled inside ApiConsultaForm using externalData */}
     </FormProvider>
   );
 }

@@ -27,8 +27,8 @@ export type LicitacaoSummary = z.infer<typeof LicitacaoSummarySchema>;
 
 const FilterLicitacoesInputSchema = z.object({
   licitacoes: z.array(LicitacaoSummarySchema).describe('An array of licitação summary objects to be filtered.'),
-  regiao: z.string().optional().describe('The Brazilian region to filter by (e.g., "Nordeste", "Sul", "Sudeste", "Norte", "Centro-Oeste").'),
-  tipoLicitacao: z.string().optional().describe('The specific bid type to filter by (e.g., "Pregão Eletrônico", "Concorrência"). Corresponds to modalidadeContratacaoNome.'),
+  regiao: z.string().optional().describe('The descriptive region to filter by (e.g., "Oeste do Paraná", "Nordeste", "Sul de Minas Gerais"). The AI will interpret this based on UF and Municipio.'),
+  tipoLicitacao: z.string().optional().describe('The descriptive bid type or object to filter by (e.g., "reforma", "obra", "serviços de limpeza"). The AI will search this in "objetoCompra".'),
 });
 export type FilterLicitacoesInput = z.infer<typeof FilterLicitacoesInputSchema>;
 
@@ -41,37 +41,36 @@ export async function filterLicitacoesWithAI(input: FilterLicitacoesInput): Prom
   return filterLicitacoesFlow(input);
 }
 
-const regionToUfMap = {
-  NORTE: ['AC', 'AP', 'AM', 'PA', 'RO', 'RR', 'TO'],
-  NORDESTE: ['AL', 'BA', 'CE', 'MA', 'PB', 'PE', 'PI', 'RN', 'SE'],
-  CENTRO_OESTE: ['DF', 'GO', 'MT', 'MS'],
-  SUDESTE: ['ES', 'MG', 'RJ', 'SP'],
-  SUL: ['PR', 'RS', 'SC'],
-};
-
 const filterLicitacoesPrompt = ai.definePrompt({
   name: 'filterLicitacoesPrompt',
   input: { schema: FilterLicitacoesInputSchema },
   output: { schema: FilterLicitacoesOutputSchema },
   prompt: `Você é um assistente especializado em filtrar listas de licitações públicas brasileiras.
-Sua tarefa é analisar a lista de licitações fornecida e retornar APENAS aquelas que atendem aos critérios de filtro especificados pelo usuário: região e/ou tipo de licitação.
+Sua tarefa é analisar a lista de licitações fornecida e retornar APENAS aquelas que atendem aos critérios de filtro especificados pelo usuário: região descritiva e/ou tipo/objeto descritivo da licitação.
 
-**Critérios de Mapeamento:**
-- **Região:** Para filtrar por região, use o campo 'uf' de cada licitação. Mapeie o UF para a região correspondente:
-    - Norte: AC, AP, AM, PA, RO, RR, TO
-    - Nordeste: AL, BA, CE, MA, PB, PE, PI, RN, SE
-    - Centro-Oeste: DF, GO, MT, MS
-    - Sudeste: ES, MG, RJ, SP
-    - Sul: PR, RS, SC
-    Se o campo 'uf' estiver ausente ou não corresponder a nenhuma região, a licitação não deve ser incluída se um filtro de região estiver ativo.
-- **Tipo de Licitação:** Para filtrar por tipo, compare o valor do filtro com o campo 'modalidadeContratacaoNome' da licitação. A correspondência deve ser exata (case-insensitive).
+**Critérios de Mapeamento e Filtragem:**
+
+- **Região Descritiva:** Se um filtro de 'regiao' for fornecido (ex: "Oeste do Paraná", "Sul de Minas Gerais", "Nordeste", "Todo o estado de São Paulo"):
+    - Analise o campo 'uf' e 'municipioNome' de cada licitação.
+    - Tente inferir se a licitação pertence à região descrita. Para regiões amplas como "Nordeste", use o mapeamento de UFs padrão:
+        - Norte: AC, AP, AM, PA, RO, RR, TO
+        - Nordeste: AL, BA, CE, MA, PB, PE, PI, RN, SE
+        - Centro-Oeste: DF, GO, MT, MS
+        - Sudeste: ES, MG, RJ, SP
+        - Sul: PR, RS, SC
+    - Para regiões mais específicas (ex: "Oeste do Paraná"), use bom senso e o contexto do 'municipioNome' e 'uf' para determinar se a licitação se encaixa.
+    - Se o campo 'uf' ou 'municipioNome' estiver ausente, a licitação provavelmente não corresponderá a um filtro de região específico, a menos que seja uma região muito ampla (ex: "Brasil").
+
+- **Tipo/Objeto Descritivo da Licitação:** Se um filtro de 'tipoLicitacao' for fornecido (ex: "reforma de escola", "compra de computadores", "serviços de limpeza"):
+    - Analise o campo 'objetoCompra' de cada licitação.
+    - Verifique se o 'objetoCompra' contém o termo fornecido em 'tipoLicitacao' ou palavras-chave semanticamente relacionadas. A correspondência não precisa ser exata, mas o tema deve ser o mesmo.
 
 **Instruções:**
-1.  Se um filtro de 'regiao' for fornecido, inclua apenas licitações cujo 'uf' pertença à região especificada.
-2.  Se um filtro de 'tipoLicitacao' for fornecido, inclua apenas licitações cujo 'modalidadeContratacaoNome' corresponda (ignorando maiúsculas/minúsculas) ao tipo especificado.
+1.  Se um filtro de 'regiao' for fornecido, inclua apenas licitações que pertençam à região descrita.
+2.  Se um filtro de 'tipoLicitacao' for fornecido, inclua apenas licitações cujo 'objetoCompra' seja compatível com o tipo/objeto descrito.
 3.  Se AMBOS os filtros ('regiao' e 'tipoLicitacao') forem fornecidos, a licitação DEVE atender a AMBOS os critérios para ser incluída.
 4.  Se NENHUM filtro for fornecido ('regiao' e 'tipoLicitacao' estão ausentes ou vazios), retorne TODAS as licitações da lista de entrada.
-5.  Se um campo relevante (como 'uf' para filtro de região ou 'modalidadeContratacaoNome' para filtro de tipo) estiver ausente na licitação, ela não deve corresponder a esse filtro específico.
+5.  Se um campo relevante para o filtro (como 'uf'/'municipioNome' para região ou 'objetoCompra' para tipo) estiver ausente na licitação, ela não deve corresponder a esse filtro específico.
 
 **Lista de Licitações para Filtrar:**
 \`\`\`json
@@ -80,7 +79,7 @@ Sua tarefa é analisar a lista de licitações fornecida e retornar APENAS aquel
 
 **Filtros Solicitados:**
 - Região Desejada: {{#if regiao}}'{{regiao}}'{{else}}Nenhuma{{/if}}
-- Tipo de Licitação Desejado: {{#if tipoLicitacao}}'{{tipoLicitacao}}'{{else}}Nenhum{{/if}}
+- Tipo/Objeto de Licitação Desejado: {{#if tipoLicitacao}}'{{tipoLicitacao}}'{{else}}Nenhum{{/if}}
 
 Retorne um objeto JSON contendo APENAS a chave 'filteredLicitacoes', que deve ser um array com as licitações que passaram pelos filtros. Se nenhuma licitação atender aos critérios, retorne um array vazio para 'filteredLicitacoes'.
 Não inclua nenhuma explicação ou texto adicional na sua resposta, apenas o JSON.

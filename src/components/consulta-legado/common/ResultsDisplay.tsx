@@ -2,10 +2,11 @@
 'use client';
 
 import React from 'react';
+import { useRouter } from 'next/navigation'; // Import useRouter
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ChevronLeft, ChevronRight, ExternalLink, Info } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ExternalLink, Info, Send } from 'lucide-react'; // Added Send icon
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { format, parseISO, isValid } from 'date-fns';
@@ -16,17 +17,18 @@ interface LicitacaoResultItem {
   numeroControlePNCP: string;
   objetoCompra: string;
   modalidadeContratacaoNome?: string;
-  orgaoEntidadeNome?: string; // Was orgaoEntidade.nomeRazaoSocial
+  orgaoEntidadeNome?: string;
   unidadeOrgao?: {
     municipioNome?: string;
     uf?: string;
   };
   valorTotalEstimado?: number;
   dataPublicacaoPncp?: string;
-  linkSistemaOrigem?: string; // Added for direct link
-  // Add other fields you might want to display from the AI's simplified LicitacaoSummary
-  municipioNome?: string; // If AI flow flattens this
-  uf?: string; // If AI flow flattens this
+  linkSistemaOrigem?: string;
+  municipioNome?: string; 
+  uf?: string; 
+  // Potentially other fields from PNCP like 'identificadorCompra'
+  identificadorCompra?: string; 
 }
 
 interface ResultsDisplayProps {
@@ -51,6 +53,8 @@ const formatDateForDisplay = (dateString: string | undefined | null): string => 
 };
 
 export default function ResultsDisplay({ data, currentPage, onPageChange }: ResultsDisplayProps) {
+  const router = useRouter(); // Initialize router
+
   if (data instanceof Error) {
     return (
       <Card className="mt-6">
@@ -74,7 +78,7 @@ export default function ResultsDisplay({ data, currentPage, onPageChange }: Resu
   const totalRegistros = data?.totalRegistros ?? 0;
   const totalPaginas = data?.totalPaginas ?? 0;
   const paginaAtualApi = data?.numeroPagina ?? currentPage;
-  const totalRegistrosFiltradosAI = data?.totalRegistrosFiltradosAI; // For AI filtered count
+  const totalRegistrosFiltradosAI = data?.totalRegistrosFiltradosAI;
 
   const hasPrevPage = paginaAtualApi > 1;
   const hasNextPage = paginaAtualApi < totalPaginas;
@@ -113,6 +117,18 @@ export default function ResultsDisplay({ data, currentPage, onPageChange }: Resu
     );
   }
 
+  const handleAnalisarLicitacao = (item: LicitacaoResultItem) => {
+    const queryParams = new URLSearchParams();
+    if (item.numeroControlePNCP) queryParams.append('numeroLicitacao', item.numeroControlePNCP); // Using PNCP control number as "numeroLicitacao"
+    if (item.orgaoEntidadeNome) queryParams.append('orgaoComprador', item.orgaoEntidadeNome);
+    if (item.modalidadeContratacaoNome) queryParams.append('modalidade', item.modalidadeContratacaoNome);
+    if (item.objetoCompra) queryParams.append('objetoCompra', item.objetoCompra);
+    if (item.dataPublicacaoPncp) queryParams.append('dataPublicacao', item.dataPublicacaoPncp);
+    if (item.linkSistemaOrigem) queryParams.append('linkSistemaOrigem', item.linkSistemaOrigem);
+    
+    router.push(`/licitacoes/nova?${queryParams.toString()}`);
+  };
+
 
   return (
     <Card className="mt-6">
@@ -135,7 +151,8 @@ export default function ResultsDisplay({ data, currentPage, onPageChange }: Resu
                 <TableHead>Órgão/UF</TableHead>
                 <TableHead>Publicação</TableHead>
                 <TableHead className="text-right">Valor Estimado</TableHead>
-                <TableHead>Link</TableHead>
+                <TableHead>Link Externo</TableHead>
+                <TableHead className="text-right">Ações</TableHead> 
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -153,11 +170,16 @@ export default function ResultsDisplay({ data, currentPage, onPageChange }: Resu
                   <TableCell>
                     {item.linkSistemaOrigem ? (
                       <Button variant="ghost" size="sm" asChild>
-                        <a href={item.linkSistemaOrigem} target="_blank" rel="noopener noreferrer">
+                        <a href={item.linkSistemaOrigem} target="_blank" rel="noopener noreferrer" title="Abrir no sistema de origem">
                           <ExternalLink className="h-4 w-4" />
                         </a>
                       </Button>
                     ) : 'N/A'}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button variant="outline" size="sm" onClick={() => handleAnalisarLicitacao(item)} title="Enviar para Análise">
+                      <Send className="mr-1 h-3 w-3" /> Analisar
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}
