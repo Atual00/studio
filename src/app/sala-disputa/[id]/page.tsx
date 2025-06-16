@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge'; 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger, DialogClose } from '@/components/ui/dialog';
-import { Loader2, Play, StopCircle, AlertCircle, Check, X, Percent, FileText, Info, MessageSquare, Send, PlusCircle, Trash2, Edit as EditIcon } from 'lucide-react';
+import { Loader2, Play, StopCircle, AlertCircle, Check, X, Percent, FileText, Info, MessageSquare, Send, PlusCircle, Trash2, Edit as EditIcon, ArrowRightCircle } from 'lucide-react'; // Added ArrowRightCircle
 import { useToast } from '@/hooks/use-toast';
 import { fetchLicitacaoDetails, updateLicitacao, type LicitacaoDetails, type DisputaConfig, type DisputaLog, formatElapsedTime, statusMap, generateAtaSessaoPDF, type DisputaMensagem, type PropostaItem, generatePropostaFinalPDF } from '@/services/licitacaoService';
 import { fetchConfiguracoes, type ConfiguracoesFormValues } from '@/services/configuracoesService';
@@ -74,6 +74,7 @@ export default function DisputaIndividualPage() {
   const [editingItem, setEditingItem] = useState<PropostaItem | null>(null);
   const [currentItemData, setCurrentItemData] = useState<Partial<PropostaItem>>({ lote: '', descricao: '', unidade: '', quantidade: 0 });
   const [isSavingItems, setIsSavingItems] = useState(false);
+  const [isMovingToQualification, setIsMovingToQualification] = useState(false); // New state
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -369,6 +370,7 @@ export default function DisputaIndividualPage() {
         status: 'DISPUTA_CONCLUIDA',
         disputaLog: disputaLogUpdate,
         observacoesPropostaFinal: finalProposalObservations,
+        valorPrimeiroColocado: clienteVenceu ? grandTotalFinalProposal : licitacao.valorPrimeiroColocado, // Store our final proposal value if we won
       });
       if (success) {
         const updatedLic = {...licitacao, status: 'DISPUTA_CONCLUIDA', disputaLog: disputaLogUpdate, observacoesPropostaFinal: finalProposalObservations };
@@ -419,6 +421,25 @@ export default function DisputaIndividualPage() {
         toast({ title: "Erro", description: `Não foi possível adicionar a mensagem. ${err instanceof Error ? err.message : ''}`, variant: "destructive"});
     } finally {
         setIsSubmittingMessage(false);
+    }
+  };
+
+  const handleMoveToQualification = async () => {
+    if (!licitacao || licitacao.status !== 'DISPUTA_CONCLUIDA') return;
+    setIsMovingToQualification(true);
+    try {
+      const success = await updateLicitacao(idLicitacao, { status: 'EM_HABILITACAO' });
+      if (success) {
+        setLicitacao(prev => prev ? { ...prev, status: 'EM_HABILITACAO' } : null);
+        toast({ title: "Sucesso", description: "Licitação movida para a fase de Habilitação." });
+        router.push(`/licitacoes/${idLicitacao}`); // Navigate to details page where Habilitação can be managed
+      } else {
+        throw new Error("Falha ao mover para habilitação.");
+      }
+    } catch (err) {
+      toast({ title: "Erro", description: `Não foi possível mover para habilitação. ${err instanceof Error ? err.message : ''}`, variant: "destructive" });
+    } finally {
+      setIsMovingToQualification(false);
     }
   };
 
@@ -628,6 +649,10 @@ export default function DisputaIndividualPage() {
                     </Button>
                      <Button variant="outline" onClick={() => generateAtaSessaoPDF(licitacao, configuracoes, currentUser)}>
                         <FileText className="mr-2 h-4 w-4" /> Gerar Ata da Sessão (PDF)
+                    </Button>
+                     <Button onClick={handleMoveToQualification} disabled={isMovingToQualification}>
+                        {isMovingToQualification ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowRightCircle className="mr-2 h-4 w-4" />}
+                        Mover para Habilitação
                     </Button>
                  </div>
             </CardContent>

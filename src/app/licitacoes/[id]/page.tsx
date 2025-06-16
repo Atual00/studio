@@ -114,10 +114,10 @@ export default function LicitacaoDetalhesPage() {
   const [isValidating, setIsValidating] = useState(false);
   const [bidCriteria, setBidCriteria] = useState<string>('');
 
-  const [valorPrimeiroColocadoInput, setValorPrimeiroColocadoInput] = useState<string>('');
-  const [isSavingBidResult, setIsSavingBidResult] = useState(false);
+  // Removed valorPrimeiroColocadoInput and isSavingBidResult states
 
   // Habilitação States
+  const [ataHabilitacaoConteudo, setAtaHabilitacaoConteudo] = useState<string>(''); // New state
   const [dataResultadoHabilitacao, setDataResultadoHabilitacao] = useState<Date | undefined>(undefined);
   const [justificativaInabilitacao, setJustificativaInabilitacao] = useState<string>('');
   const [isEmRecursoHabilitacao, setIsEmRecursoHabilitacao] = useState<boolean>(false);
@@ -151,11 +151,7 @@ export default function LicitacaoDetalhesPage() {
             setLicitacao(data);
             setChecklist(data.checklist || {});
             setCurrentStatus(data.status);
-            setValorPrimeiroColocadoInput(
-              data.valorPrimeiroColocado !== undefined && data.valorPrimeiroColocado !== null
-                ? formatCurrency(data.valorPrimeiroColocado)
-                : ''
-            );
+            // Removed valorPrimeiroColocadoInput initialization
 
              if(data.clienteId) {
                  const clientData = await fetchClientDetails(data.clienteId);
@@ -169,7 +165,7 @@ export default function LicitacaoDetalhesPage() {
             }
 
             // Populate Habilitação state from loaded licitacao data
-            // Correctly assign Date objects or undefined from the service layer
+            setAtaHabilitacaoConteudo(data.ataHabilitacaoConteudo || ''); // Added
             setDataResultadoHabilitacao(data.dataResultadoHabilitacao instanceof Date ? data.dataResultadoHabilitacao : undefined);
             setJustificativaInabilitacao(data.justificativaInabilitacao || '');
             setIsEmRecursoHabilitacao(data.isEmRecursoHabilitacao || false);
@@ -380,59 +376,7 @@ export default function LicitacaoDetalhesPage() {
       return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   };
 
-  const parseCurrency = (value: string): number | undefined => {
-      if (!value) return undefined;
-      if (value.trim() === '0' || value.trim() === 'R$ 0,00' || value.replace(/[^0-9,]/g, '') === '0') return 0;
-      const cleaned = value.replace(/[R$\s.]/g, '').replace(',', '.');
-      const num = parseFloat(cleaned);
-      return isNaN(num) ? undefined : num;
-  };
-
-   const handleSaveBidResult = async () => {
-       const valorNum = parseCurrency(valorPrimeiroColocadoInput);
-      if (!licitacao || isSavingBidResult || valorNum === undefined || valorNum < 0) {
-          toast({ title: "Atenção", description: "Insira um valor válido (incluindo zero) para o primeiro colocado.", variant: "destructive" });
-          return;
-      }
-      setIsSavingBidResult(true);
-      setError(null);
-      try {
-        const success = await updateLicitacao(licitacao.id, { valorPrimeiroColocado: valorNum });
-        if (success) {
-            setLicitacao(prev => prev ? { ...prev, valorPrimeiroColocado: valorNum } : null);
-            toast({ title: "Sucesso", description: "Valor do primeiro colocado salvo." });
-        } else {
-            throw new Error("Falha ao salvar valor no backend.");
-        }
-      } catch (err) {
-         setError(`Falha ao salvar o valor. ${err instanceof Error ? err.message : ''}`);
-         toast({ title: "Erro", description: `Falha ao salvar o valor. ${err instanceof Error ? err.message : ''}`, variant: "destructive" });
-      } finally {
-        setIsSavingBidResult(false);
-     }
-   };
-
-   const calculateBidDifference = () => {
-      if (!licitacao || licitacao.valorPrimeiroColocado === undefined || licitacao.valorPrimeiroColocado === null || licitacao.valorCobrado === undefined || licitacao.valorCobrado === null || licitacao.valorCobrado < 0) {
-          return null;
-      }
-      const valorProprio = licitacao.valorCobrado;
-      const valorPrimeiro = licitacao.valorPrimeiroColocado;
-      if (valorPrimeiro < 0) {
-         return { absolute: formatCurrency(valorProprio - valorPrimeiro), percentage: 'Inválido (1º < 0)' };
-      }
-      if (valorPrimeiro === 0) {
-          return { absolute: formatCurrency(valorProprio - valorPrimeiro), percentage: 'N/A (1º foi R$ 0)' };
-      }
-      const difference = valorProprio - valorPrimeiro;
-      const percentageDifference = (difference / valorPrimeiro) * 100;
-      return {
-          absolute: formatCurrency(difference),
-          percentage: percentageDifference.toFixed(2) + '%'
-      };
-   };
-
-   const bidDifference = calculateBidDifference();
+  // Removed parseCurrency, handleSaveBidResult, calculateBidDifference, and bidDifference
 
    const handleDelete = async () => {
        if (!licitacao) return;
@@ -460,6 +404,7 @@ export default function LicitacaoDetalhesPage() {
         setError(null);
         try {
             const dataToUpdate: Partial<LicitacaoDetails> = {
+                ataHabilitacaoConteudo, // Added
                 dataResultadoHabilitacao,
                 justificativaInabilitacao,
                 isEmRecursoHabilitacao,
@@ -749,67 +694,27 @@ export default function LicitacaoDetalhesPage() {
                 </CardFooter>
             </Card>
 
-            {/* Resultado da Disputa Card */}
-            {['AGUARDANDO_DISPUTA', 'EM_DISPUTA', 'DISPUTA_CONCLUIDA', 'EM_HABILITACAO', 'HABILITADO', 'INABILITADO', 'RECURSO_HABILITACAO', 'CONTRARRAZOES_HABILITACAO','AGUARDANDO_RECURSO', 'EM_PRAZO_CONTRARRAZAO', 'EM_HOMOLOGACAO', 'PROCESSO_HOMOLOGADO'].includes(currentStatus) && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Resultado da Disputa</CardTitle>
-                  <CardDescription>Registre o valor do primeiro colocado (se aplicável) para análise.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-end gap-4">
-                    <div className="flex-1">
-                      <Label htmlFor="valor-primeiro">Valor Ofertado pelo 1º Colocado</Label>
-                       <Input
-                        id="valor-primeiro"
-                        placeholder="R$ 0,00"
-                        type="text"
-                        value={valorPrimeiroColocadoInput}
-                        onChange={(e) => {
-                             const rawValue = e.target.value;
-                             setValorPrimeiroColocadoInput(rawValue);
-                         }}
-                         onBlur={(e) => {
-                             const parsedValue = parseCurrency(e.target.value);
-                             setValorPrimeiroColocadoInput(formatCurrency(parsedValue));
-                         }}
-                        disabled={isSavingBidResult}
-                        className={parseCurrency(valorPrimeiroColocadoInput) === undefined && valorPrimeiroColocadoInput.trim() !== '' ? 'border-red-500' : ''}
-                        inputMode="decimal"
-                      />
-                      {parseCurrency(valorPrimeiroColocadoInput) === undefined && valorPrimeiroColocadoInput.trim() !== '' && <p className="text-xs text-destructive mt-1">Valor inválido.</p>}
-                    </div>
-                    <Button onClick={handleSaveBidResult} disabled={isSavingBidResult || parseCurrency(valorPrimeiroColocadoInput) === undefined}>
-                       {isSavingBidResult ? <Loader2 className="h-4 w-4 animate-spin"/> : 'Salvar'}
-                    </Button>
-                  </div>
-                   {bidDifference && (
-                     <Alert variant={licitacao.valorCobrado !== undefined && licitacao.valorPrimeiroColocado !== undefined && licitacao.valorCobrado <= licitacao.valorPrimeiroColocado ? 'success' : 'warning'} className="text-sm">
-                         {licitacao.valorCobrado !== undefined && licitacao.valorPrimeiroColocado !== undefined && licitacao.valorCobrado <= licitacao.valorPrimeiroColocado ? <CheckCircle className="h-4 w-4" /> : <HelpCircle className="h-4 w-4"/> }
-                       <AlertTitle>Análise de Lance</AlertTitle>
-                       <AlertDescription>
-                         {licitacao.valorPrimeiroColocado === licitacao.valorCobrado
-                            ? `Seu lance (${formatCurrency(licitacao.valorCobrado)}) foi igual ao do primeiro colocado.`
-                            : (licitacao.valorCobrado !== undefined && licitacao.valorPrimeiroColocado !== undefined && licitacao.valorCobrado < licitacao.valorPrimeiroColocado)
-                            ? `Seu lance (${formatCurrency(licitacao.valorCobrado)}) foi ${bidDifference.absolute} (${bidDifference.percentage}) abaixo do primeiro colocado (${formatCurrency(licitacao.valorPrimeiroColocado)}).`
-                             : (licitacao.valorCobrado !== undefined && licitacao.valorPrimeiroColocado !== undefined && licitacao.valorCobrado > licitacao.valorPrimeiroColocado)
-                            ? `Seu lance (${formatCurrency(licitacao.valorCobrado)}) foi ${bidDifference.absolute} (${bidDifference.percentage}) acima do primeiro colocado (${formatCurrency(licitacao.valorPrimeiroColocado)}).`
-                             : 'Valores indisponíveis para análise.'}
-                       </AlertDescription>
-                     </Alert>
-                   )}
-                </CardContent>
-              </Card>
-            )}
-
             {/* Fase de Habilitação e Recursos Card */}
-            {['DISPUTA_CONCLUIDA', 'EM_HABILITACAO', 'HABILITADO', 'INABILITADO', 'RECURSO_HABILITACAO', 'CONTRARRAZOES_HABILITACAO', 'AGUARDANDO_RECURSO', 'EM_PRAZO_CONTRARRAZAO', 'EM_HOMOLOGACAO', 'PROCESSO_HOMOLOGADO'].includes(currentStatus) && (
+            {['DISPUTA_CONCLUIDA', 'EM_HABILITACAO', 'HABILITADO', 'INABILITADO', 'RECURSO_HABILITACAO', 'CONTRARRAZOES_HABILITACAO','AGUARDANDO_RECURSO', 'EM_PRAZO_CONTRARRAZAO', 'EM_HOMOLOGACAO', 'PROCESSO_HOMOLOGADO', 'EM_RECURSO_GERAL', 'EM_CONTRARRAZAO_GERAL'].includes(currentStatus) && (
                 <Card>
                     <CardHeader>
                         <CardTitle>Fase de Habilitação e Recursos</CardTitle>
                         <CardDescription>Gerencie o resultado da habilitação e os processos de recurso.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
+                        {/* Ata de Habilitação */}
+                        <div className="space-y-2">
+                            <Label htmlFor="ataHabilitacaoConteudo">Conteúdo para Ata de Habilitação</Label>
+                            <Textarea
+                                id="ataHabilitacaoConteudo"
+                                value={ataHabilitacaoConteudo}
+                                onChange={(e) => setAtaHabilitacaoConteudo(e.target.value)}
+                                placeholder="Registre aqui os pontos principais, decisões, e informações relevantes para a Ata de Habilitação..."
+                                className="min-h-[120px]"
+                                disabled={isSavingHabilitacao}
+                            />
+                        </div>
+                        <Separator />
                         {/* Resultado Habilitação */}
                         <div className="space-y-2">
                             <Label htmlFor="dataResultadoHabilitacao">Data do Resultado da Habilitação</Label>
@@ -823,7 +728,7 @@ export default function LicitacaoDetalhesPage() {
                                 <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={dataResultadoHabilitacao} onSelect={setDataResultadoHabilitacao} initialFocus disabled={isSavingHabilitacao}/></PopoverContent>
                             </Popover>
                         </div>
-                        {currentStatus === 'INABILITADO' && (
+                        {currentStatus === 'INABILITADO' && ( // Show only if status is Inabilitado
                              <div className="space-y-2">
                                 <Label htmlFor="justificativaInabilitacao">Justificativa (Inabilitação)</Label>
                                 <Textarea id="justificativaInabilitacao" value={justificativaInabilitacao} onChange={(e) => setJustificativaInabilitacao(e.target.value)} placeholder="Motivos da inabilitação..." disabled={isSavingHabilitacao} />

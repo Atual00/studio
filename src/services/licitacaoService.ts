@@ -55,6 +55,7 @@ const getLicitacoesFromStorage = (): LicitacaoDetails[] => {
             valorFinalPropostaCliente: typeof item.disputaLog.valorFinalPropostaCliente === 'number' ? item.disputaLog.valorFinalPropostaCliente : undefined,
          } : { mensagens: [], itensPropostaFinalCliente: [] },
          // Habilitação fields
+         ataHabilitacaoConteudo: item.ataHabilitacaoConteudo || undefined, // Added
          dataResultadoHabilitacao: parseDate(item.dataResultadoHabilitacao),
          justificativaInabilitacao: item.justificativaInabilitacao,
          isEmRecursoHabilitacao: item.isEmRecursoHabilitacao,
@@ -107,6 +108,7 @@ const saveLicitacoesToStorage = (licitacoes: LicitacaoDetails[]): void => {
                 valorFinalPropostaCliente: item.disputaLog.valorFinalPropostaCliente,
             } : undefined,
             // Habilitação fields
+            ataHabilitacaoConteudo: item.ataHabilitacaoConteudo, // Added
             dataResultadoHabilitacao: parseDateForStorage(item.dataResultadoHabilitacao),
             justificativaInabilitacao: item.justificativaInabilitacao,
             isEmRecursoHabilitacao: item.isEmRecursoHabilitacao,
@@ -234,6 +236,7 @@ export interface LicitacaoDetails extends LicitacaoFormValues {
   valorTotalLicitacao?: number;
 
   // Habilitação Fields
+  ataHabilitacaoConteudo?: string; // Added for Qualification Meeting Minutes
   dataResultadoHabilitacao?: Date | string;
   justificativaInabilitacao?: string;
   isEmRecursoHabilitacao?: boolean;
@@ -267,12 +270,14 @@ export const statusMap: {[key: string]: {label: string; color: string; icon: Rea
   INABILITADO: {label: 'Inabilitado', color: 'destructive', icon: UserX},
   RECURSO_HABILITACAO: {label: 'Recurso (Habilitação)', color: 'warning', icon: ShieldQuestion},
   CONTRARRAZOES_HABILITACAO: {label: 'Contrarrazões (Habilitação)', color: 'warning', icon: FileQuestion},
-  AGUARDANDO_RECURSO: {label: 'Aguardando Recurso (Geral)', color: 'outline', icon: HelpCircle},
-  EM_PRAZO_CONTRARRAZAO: {label: 'Prazo Contrarrazão (Geral)', color: 'outline', icon: CalendarCheck},
+  AGUARDANDO_RECURSO: {label: 'Aguardando Recurso (Geral)', color: 'outline', icon: HelpCircle}, // Could be for qualification or other appeal
+  EM_PRAZO_CONTRARRAZAO: {label: 'Prazo Contrarrazão (Geral)', color: 'outline', icon: CalendarCheck}, // Could be for qualification or other counter-appeal
+  EM_RECURSO_GERAL: {label: 'Em Recurso (Geral)', color: 'warning', icon: ShieldQuestion},
+  EM_CONTRARRAZAO_GERAL: {label: 'Em Contrarrazão (Geral)', color: 'warning', icon: FileQuestion},
   EM_HOMOLOGACAO: {label: 'Em Homologação', color: 'default', icon: Target},
   PROCESSO_HOMOLOGADO: {label: 'Processo Homologado', color: 'success', icon: CheckCircle},
   PROCESSO_ENCERRADO: {label: 'Processo Encerrado', color: 'secondary', icon: XCircle},
-  RECURSO_IMPUGNACAO: {label: 'Recurso/Impugnação (Geral)', color: 'warning', icon: HelpCircle},
+  // RECURSO_IMPUGNACAO: {label: 'Recurso/Impugnação (Geral)', color: 'warning', icon: HelpCircle}, // This seems redundant with EM_RECURSO_GERAL
 };
 
 
@@ -405,6 +410,7 @@ export const fetchLicitacaoDetails = async (id: string): Promise<LicitacaoDetail
             valorFinalPropostaCliente: licitacao.disputaLog.valorFinalPropostaCliente,
           } : { mensagens: [], itensPropostaFinalCliente: [] },
           // Habilitação fields
+          ataHabilitacaoConteudo: licitacao.ataHabilitacaoConteudo,
           dataResultadoHabilitacao: parseDate(licitacao.dataResultadoHabilitacao),
           justificativaInabilitacao: licitacao.justificativaInabilitacao,
           isEmRecursoHabilitacao: licitacao.isEmRecursoHabilitacao,
@@ -461,6 +467,7 @@ export const addLicitacao = async (
     disputaConfig: {},
     disputaLog: { mensagens: [], itensPropostaFinalCliente: [] },
      // Initialize Habilitação fields
+    ataHabilitacaoConteudo: undefined,
     dataResultadoHabilitacao: undefined,
     justificativaInabilitacao: undefined,
     isEmRecursoHabilitacao: false,
@@ -546,6 +553,7 @@ export const updateLicitacao = async (id: string, data: Partial<LicitacaoDetails
           valorFinalPropostaCliente: data.disputaLog.valorFinalPropostaCliente !== undefined ? Number(data.disputaLog.valorFinalPropostaCliente) : existingLicitacao.disputaLog?.valorFinalPropostaCliente,
       } : existingLicitacao.disputaLog,
       // Habilitação fields merge
+      ataHabilitacaoConteudo: data.hasOwnProperty('ataHabilitacaoConteudo') ? data.ataHabilitacaoConteudo : existingLicitacao.ataHabilitacaoConteudo,
       dataResultadoHabilitacao: data.hasOwnProperty('dataResultadoHabilitacao') ? parseUpdateDate(data.dataResultadoHabilitacao) : existingLicitacao.dataResultadoHabilitacao,
       justificativaInabilitacao: data.hasOwnProperty('justificativaInabilitacao') ? data.justificativaInabilitacao : existingLicitacao.justificativaInabilitacao,
       isEmRecursoHabilitacao: data.hasOwnProperty('isEmRecursoHabilitacao') ? data.isEmRecursoHabilitacao : existingLicitacao.isEmRecursoHabilitacao,
