@@ -169,18 +169,19 @@ export default function LicitacaoDetalhesPage() {
             }
 
             // Populate Habilitação state from loaded licitacao data
-            setDataResultadoHabilitacao(data.dataResultadoHabilitacao ? parseISO(data.dataResultadoHabilitacao as string) : undefined);
+            // Correctly assign Date objects or undefined from the service layer
+            setDataResultadoHabilitacao(data.dataResultadoHabilitacao instanceof Date ? data.dataResultadoHabilitacao : undefined);
             setJustificativaInabilitacao(data.justificativaInabilitacao || '');
             setIsEmRecursoHabilitacao(data.isEmRecursoHabilitacao || false);
-            setDataInicioRecursoHabilitacao(data.dataInicioRecursoHabilitacao ? parseISO(data.dataInicioRecursoHabilitacao as string) : undefined);
-            setPrazoFinalRecursoHabilitacao(data.prazoFinalRecursoHabilitacao ? parseISO(data.prazoFinalRecursoHabilitacao as string) : undefined);
+            setDataInicioRecursoHabilitacao(data.dataInicioRecursoHabilitacao instanceof Date ? data.dataInicioRecursoHabilitacao : undefined);
+            setPrazoFinalRecursoHabilitacao(data.prazoFinalRecursoHabilitacao instanceof Date ? data.prazoFinalRecursoHabilitacao : undefined);
             setTextoRecursoHabilitacao(data.textoRecursoHabilitacao || '');
             setIsEmContrarrazoesHabilitacao(data.isEmContrarrazoesHabilitacao || false);
-            setDataInicioContrarrazoesHabilitacao(data.dataInicioContrarrazoesHabilitacao ? parseISO(data.dataInicioContrarrazoesHabilitacao as string) : undefined);
-            setPrazoFinalContrarrazoesHabilitacao(data.prazoFinalContrarrazoesHabilitacao ? parseISO(data.prazoFinalContrarrazoesHabilitacao as string) : undefined);
+            setDataInicioContrarrazoesHabilitacao(data.dataInicioContrarrazoesHabilitacao instanceof Date ? data.dataInicioContrarrazoesHabilitacao : undefined);
+            setPrazoFinalContrarrazoesHabilitacao(data.prazoFinalContrarrazoesHabilitacao instanceof Date ? data.prazoFinalContrarrazoesHabilitacao : undefined);
             setTextoContrarrazoesHabilitacao(data.textoContrarrazoesHabilitacao || '');
             setDecisaoFinalRecursoHabilitacao(data.decisaoFinalRecursoHabilitacao || undefined);
-            setDataDecisaoFinalRecursoHabilitacao(data.dataDecisaoFinalRecursoHabilitacao ? parseISO(data.dataDecisaoFinalRecursoHabilitacao as string) : undefined);
+            setDataDecisaoFinalRecursoHabilitacao(data.dataDecisaoFinalRecursoHabilitacao instanceof Date ? data.dataDecisaoFinalRecursoHabilitacao : undefined);
             setObsDecisaoFinalRecursoHabilitacao(data.obsDecisaoFinalRecursoHabilitacao || '');
 
 
