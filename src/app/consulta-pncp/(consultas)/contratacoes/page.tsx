@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils';
 import ResultsDisplay from '@/components/consulta-legado/common/ResultsDisplay'; // Re-using for display
 import { filterLicitacoesWithAI, type FilterLicitacoesInput, type FilterLicitacoesOutput } from '@/ai/flows/filter-licitacoes-flow';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { zodResolver } from '@hookform/resolvers/zod'; // Added this import
 
 const modalidadesPNCP = [
   { value: 1, label: 'Leilão - Eletrônico' },
