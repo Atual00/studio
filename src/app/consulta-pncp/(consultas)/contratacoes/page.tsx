@@ -16,8 +16,9 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { CalendarIcon, Loader2, Filter } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import ResultsDisplay from '@/components/consulta-legado/common/ResultsDisplay'; // Re-using for display
-import { filterLicitacoesWithAI, type FilterLicitacoesInput, type FilterLicitacoesOutput } from '@/ai/flows/filter-licitacoes-flow';
+// ResultsDisplay is used by ApiConsultaForm internally
+// import ResultsDisplay from '@/components/consulta-legado/common/ResultsDisplay'; 
+import { filterLicitacoesWithAI, type FilterLicitacoesInput, type FilterLicitacoesOutput, type LicitacaoSummary } from '@/ai/flows/filter-licitacoes-flow';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { zodResolver } from '@hookform/resolvers/zod';
 
@@ -83,79 +84,16 @@ export default function ConsultarContratacoesPncpPage() {
     aiTipoLicitacao: '', 
   };
 
-  const [apiRawData, setApiRawData] = useState<any>(null);
+  // State to hold the data that will be displayed (could be raw API data or AI-filtered data)
   const [processedDataForDisplay, setProcessedDataForDisplay] = useState<any>(null);
   const [isFilteringWithAI, setIsFilteringWithAI] = useState(false);
   const [aiFilterError, setAiFilterError] = useState<string | null>(null);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(1); // Keep track of the page for the API call
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues,
   });
-
-  // Watch AI filter input values to trigger re-filtering
-  const watchedAiRegiao = form.watch('aiRegiao');
-  const watchedAiTipoLicitacao = form.watch('aiTipoLicitacao');
-
-  useEffect(() => {
-    const performAiFiltering = async () => {
-      if (!apiRawData || !apiRawData.data || apiRawData.data.length === 0) {
-        setProcessedDataForDisplay(apiRawData);
-        return;
-      }
-
-      // Use watched values for checking if filters are active
-      const hasAiRegiaoFilter = typeof watchedAiRegiao === 'string' && watchedAiRegiao.trim() !== '';
-      const hasAiTipoLicitacaoFilter = typeof watchedAiTipoLicitacao === 'string' && watchedAiTipoLicitacao.trim() !== '';
-
-      if (!hasAiRegiaoFilter && !hasAiTipoLicitacaoFilter) {
-        setProcessedDataForDisplay(apiRawData); // Set to raw if no AI filters are active
-        return;
-      }
-
-      setIsFilteringWithAI(true);
-      setAiFilterError(null);
-      try {
-        const licitacoesToFilter = apiRawData.data.map((item: any) => ({
-          numeroControlePNCP: item.numeroControlePNCP,
-          objetoCompra: item.objetoCompra,
-          modalidadeContratacaoNome: item.modalidadeContratacaoNome,
-          uf: item.unidadeOrgao?.uf,
-          municipioNome: item.unidadeOrgao?.municipioNome,
-          valorTotalEstimado: item.valorTotalEstimado,
-          dataPublicacaoPncp: item.dataPublicacaoPncp,
-          linkSistemaOrigem: item.linkSistemaOrigem,
-          orgaoEntidadeNome: item.orgaoEntidade?.nomeRazaoSocial,
-        }));
-
-        const input: FilterLicitacoesInput = {
-          licitacoes: licitacoesToFilter,
-          // Pass watched values to the AI flow
-          ...(hasAiRegiaoFilter && { regiao: watchedAiRegiao?.trim() }),
-          ...(hasAiTipoLicitacaoFilter && { tipoLicitacao: watchedAiTipoLicitacao?.trim() }),
-        };
-        
-        const result: FilterLicitacoesOutput = await filterLicitacoesWithAI(input);
-        
-        setProcessedDataForDisplay({
-            ...apiRawData, // Keep original pagination info
-            data: result.filteredLicitacoes,
-            totalRegistrosFiltradosAI: result.filteredLicitacoes.length, // Add count of AI filtered items
-        });
-
-      } catch (err) {
-        console.error("Error during AI filtering:", err);
-        const errorMessage = err instanceof Error ? err.message : "Erro desconhecido no filtro IA.";
-        setAiFilterError(errorMessage);
-        setProcessedDataForDisplay(apiRawData); // Fallback to raw data on AI error
-      } finally {
-        setIsFilteringWithAI(false);
-      }
-    };
-
-    performAiFiltering();
-  }, [apiRawData, watchedAiRegiao, watchedAiTipoLicitacao]); // Add watched values to dependency array
 
 
   const renderFormFields = (currentForm: ReturnType<typeof useForm<FormValues>>) => (
@@ -191,20 +129,67 @@ export default function ConsultarContratacoesPncpPage() {
     </>
   );
 
-  const handleFetchData = async (values: FormValues, pageToFetch: number): Promise<any> => {
+  const handleFetchData = async (formValues: FormValues, pageToFetch: number): Promise<any> => {
      const params: ConsultarContratacoesPNCPParams = {
-        dataInicial: values.dataInicial,
-        dataFinal: values.dataFinal,
-        codigoModalidadeContratacao: values.codigoModalidadeContratacao,
+        dataInicial: formValues.dataInicial,
+        dataFinal: formValues.dataFinal,
+        codigoModalidadeContratacao: formValues.codigoModalidadeContratacao,
         pagina: pageToFetch,
-        tamanhoPagina: values.tamanhoPagina,
-        uf: values.uf,
-        termoBusca: values.termoBusca,
+        tamanhoPagina: formValues.tamanhoPagina,
+        uf: formValues.uf,
+        termoBusca: formValues.termoBusca,
      };
-     const rawResult = await consultarContratacoesPNCP(params);
-     setApiRawData(rawResult); // This will trigger the useEffect for AI filtering
-     // We no longer directly setProcessedDataForDisplay here, AI effect will handle it.
-     return rawResult; // Return raw result, ApiConsultaForm might use it for pagination based on API directly
+     let rawResult = await consultarContratacoesPNCP(params);
+     let finalDataToDisplay = rawResult;
+
+     const { aiRegiao, aiTipoLicitacao } = formValues; // Get AI filters from current form values
+
+     if ((aiRegiao && aiRegiao.trim() !== '') || (aiTipoLicitacao && aiTipoLicitacao.trim() !== '')) {
+        if (rawResult && rawResult.data && rawResult.data.length > 0) {
+            setIsFilteringWithAI(true);
+            setAiFilterError(null);
+            try {
+                const licitacoesToFilter: LicitacaoSummary[] = rawResult.data.map((item: any) => ({
+                    numeroControlePNCP: item.numeroControlePNCP,
+                    objetoCompra: item.objetoCompra,
+                    modalidadeContratacaoNome: item.modalidadeContratacaoNome,
+                    uf: item.unidadeOrgao?.uf,
+                    municipioNome: item.unidadeOrgao?.municipioNome,
+                    valorTotalEstimado: item.valorTotalEstimado,
+                    dataPublicacaoPncp: item.dataPublicacaoPncp,
+                    linkSistemaOrigem: item.linkSistemaOrigem,
+                    orgaoEntidadeNome: item.orgaoEntidade?.nomeRazaoSocial,
+                }));
+
+                const input: FilterLicitacoesInput = {
+                    licitacoes: licitacoesToFilter,
+                    ...(aiRegiao && aiRegiao.trim() !== '' && { regiao: aiRegiao.trim() }),
+                    ...(aiTipoLicitacao && aiTipoLicitacao.trim() !== '' && { tipoLicitacao: aiTipoLicitacao.trim() }),
+                };
+                
+                const aiFilteredResult: FilterLicitacoesOutput = await filterLicitacoesWithAI(input);
+                
+                finalDataToDisplay = {
+                    ...rawResult, // Keep original pagination info
+                    data: aiFilteredResult.filteredLicitacoes,
+                    totalRegistrosFiltradosAI: aiFilteredResult.filteredLicitacoes.length,
+                };
+            } catch (err) {
+                console.error("Error during AI filtering:", err);
+                const errorMessage = err instanceof Error ? err.message : "Erro desconhecido no filtro IA.";
+                setAiFilterError(errorMessage);
+                // Fallback to raw data, finalDataToDisplay is already rawResult
+            } finally {
+                setIsFilteringWithAI(false);
+            }
+        } else {
+             // No raw data to filter with AI, or AI filters not active
+            console.log("No raw data for AI filtering or AI filters not active.");
+        }
+     }
+     
+     setProcessedDataForDisplay(finalDataToDisplay);
+     return finalDataToDisplay; // Return the (potentially AI-filtered) data
   }
 
   const handleApiFormPageChange = (newPage: number) => {
@@ -222,7 +207,7 @@ export default function ConsultarContratacoesPncpPage() {
         onPageChange={handleApiFormPageChange} 
         formTitle="Consultar Contratações por Data de Publicação (PNCP)"
         formDescription="Busque contratações publicadas no PNCP. Filtros IA são aplicados após a busca inicial."
-        externalData={processedDataForDisplay} 
+        externalData={processedDataForDisplay} // Pass the processed data to ApiConsultaForm
       />
       {isFilteringWithAI && (
         <div className="mt-4 flex items-center justify-center text-primary">
@@ -232,6 +217,7 @@ export default function ConsultarContratacoesPncpPage() {
       )}
       {aiFilterError && (
         <Alert variant="destructive" className="mt-4">
+          <AlertCircle className="h-4 w-4"/>
           <AlertTitle>Erro no Filtro IA</AlertTitle>
           <AlertDescription>{aiFilterError}</AlertDescription>
         </Alert>
@@ -239,5 +225,4 @@ export default function ConsultarContratacoesPncpPage() {
     </FormProvider>
   );
 }
-
     
