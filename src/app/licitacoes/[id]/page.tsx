@@ -42,7 +42,13 @@ import {
     Trash2,
     CalendarCheck,
     Clock,
-    FileText // Added FileText
+    FileText,
+    FileArchive,
+    UserCheck,
+    UserX,
+    ShieldQuestion,
+    FileQuestion,
+    CalendarIcon as CalendarDateIcon, // Renamed to avoid conflict with Calendar component
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -58,9 +64,14 @@ import {
 import {validateBidDocuments, type ValidateBidDocumentsOutput } from '@/ai/flows/document-validator';
 import { filesToValidateInput } from '@/lib/file-utils';
 import {useToast} from '@/hooks/use-toast';
-import { fetchLicitacaoDetails, updateLicitacao, deleteLicitacao, type LicitacaoDetails, statusMap, requiredDocuments } from '@/services/licitacaoService';
+import { fetchLicitacaoDetails, updateLicitacao, deleteLicitacao, type LicitacaoDetails, statusMap, requiredDocuments, generateAtaSessaoPDF, generatePropostaFinalPDF } from '@/services/licitacaoService';
 import { type ClientDetails } from '@/components/clientes/client-form';
 import { fetchClientDetails } from '@/services/clientService';
+import { fetchConfiguracoes, type ConfiguracoesFormValues } from '@/services/configuracoesService';
+import { useAuth } from '@/context/AuthContext';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { cn } from '@/lib/utils';
 
 const getBadgeVariant = (color: string | undefined): 'default' | 'secondary' | 'destructive' | 'outline' | 'success' | 'warning' | 'info' | 'accent' => {
   switch (color) {
@@ -82,9 +93,12 @@ export default function LicitacaoDetalhesPage() {
   const router = useRouter();
   const id = params.id as string;
   const {toast} = useToast();
+  const { user: currentUser } = useAuth();
+
 
   const [licitacao, setLicitacao] = useState<LicitacaoDetails | null>(null);
   const [clientDetails, setClientDetails] = useState<ClientDetails | null>(null);
+  const [configuracoes, setConfiguracoes] = useState<ConfiguracoesFormValues | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [checklist, setChecklist] = useState<{ [key: string]: boolean }>({});
@@ -103,13 +117,36 @@ export default function LicitacaoDetalhesPage() {
   const [valorPrimeiroColocadoInput, setValorPrimeiroColocadoInput] = useState<string>('');
   const [isSavingBidResult, setIsSavingBidResult] = useState(false);
 
+  // Habilitação States
+  const [dataResultadoHabilitacao, setDataResultadoHabilitacao] = useState<Date | undefined>(undefined);
+  const [justificativaInabilitacao, setJustificativaInabilitacao] = useState<string>('');
+  const [isEmRecursoHabilitacao, setIsEmRecursoHabilitacao] = useState<boolean>(false);
+  const [dataInicioRecursoHabilitacao, setDataInicioRecursoHabilitacao] = useState<Date | undefined>(undefined);
+  const [prazoFinalRecursoHabilitacao, setPrazoFinalRecursoHabilitacao] = useState<Date | undefined>(undefined);
+  const [textoRecursoHabilitacao, setTextoRecursoHabilitacao] = useState<string>('');
+  const [isEmContrarrazoesHabilitacao, setIsEmContrarrazoesHabilitacao] = useState<boolean>(false);
+  const [dataInicioContrarrazoesHabilitacao, setDataInicioContrarrazoesHabilitacao] = useState<Date | undefined>(undefined);
+  const [prazoFinalContrarrazoesHabilitacao, setPrazoFinalContrarrazoesHabilitacao] = useState<Date | undefined>(undefined);
+  const [textoContrarrazoesHabilitacao, setTextoContrarrazoesHabilitacao] = useState<string>('');
+  const [decisaoFinalRecursoHabilitacao, setDecisaoFinalRecursoHabilitacao] = useState<'PROVIDO' | 'IMPROVIDO' | 'CONVERTIDO_EM_DILIGENCIA' | 'PENDENTE_JULGAMENTO' | undefined>(undefined);
+  const [dataDecisaoFinalRecursoHabilitacao, setDataDecisaoFinalRecursoHabilitacao] = useState<Date | undefined>(undefined);
+  const [obsDecisaoFinalRecursoHabilitacao, setObsDecisaoFinalRecursoHabilitacao] = useState<string>('');
+  const [isSavingHabilitacao, setIsSavingHabilitacao] = useState(false);
+
+
   useEffect(() => {
     if (id) {
       const loadData = async () => {
         setLoading(true);
         setError(null);
         try {
-          const data = await fetchLicitacaoDetails(id);
+          const [data, configData] = await Promise.all([
+            fetchLicitacaoDetails(id),
+            fetchConfiguracoes()
+          ]);
+
+          setConfiguracoes(configData);
+
           if (data) {
             setLicitacao(data);
             setChecklist(data.checklist || {});
@@ -130,6 +167,22 @@ export default function LicitacaoDetalhesPage() {
             } else {
                  setBidCriteria('Defina os critérios e documentos exigidos pelo edital aqui.');
             }
+
+            // Populate Habilitação state from loaded licitacao data
+            setDataResultadoHabilitacao(data.dataResultadoHabilitacao ? parseISO(data.dataResultadoHabilitacao as string) : undefined);
+            setJustificativaInabilitacao(data.justificativaInabilitacao || '');
+            setIsEmRecursoHabilitacao(data.isEmRecursoHabilitacao || false);
+            setDataInicioRecursoHabilitacao(data.dataInicioRecursoHabilitacao ? parseISO(data.dataInicioRecursoHabilitacao as string) : undefined);
+            setPrazoFinalRecursoHabilitacao(data.prazoFinalRecursoHabilitacao ? parseISO(data.prazoFinalRecursoHabilitacao as string) : undefined);
+            setTextoRecursoHabilitacao(data.textoRecursoHabilitacao || '');
+            setIsEmContrarrazoesHabilitacao(data.isEmContrarrazoesHabilitacao || false);
+            setDataInicioContrarrazoesHabilitacao(data.dataInicioContrarrazoesHabilitacao ? parseISO(data.dataInicioContrarrazoesHabilitacao as string) : undefined);
+            setPrazoFinalContrarrazoesHabilitacao(data.prazoFinalContrarrazoesHabilitacao ? parseISO(data.prazoFinalContrarrazoesHabilitacao as string) : undefined);
+            setTextoContrarrazoesHabilitacao(data.textoContrarrazoesHabilitacao || '');
+            setDecisaoFinalRecursoHabilitacao(data.decisaoFinalRecursoHabilitacao || undefined);
+            setDataDecisaoFinalRecursoHabilitacao(data.dataDecisaoFinalRecursoHabilitacao ? parseISO(data.dataDecisaoFinalRecursoHabilitacao as string) : undefined);
+            setObsDecisaoFinalRecursoHabilitacao(data.obsDecisaoFinalRecursoHabilitacao || '');
+
 
           } else {
             setError('Licitação não encontrada.');
@@ -199,7 +252,7 @@ export default function LicitacaoDetalhesPage() {
          id: `c${Date.now()}`,
          texto: newComment.trim(),
          data: new Date().toISOString(),
-         autor: 'Usuário Atual'
+         autor: currentUser?.fullName || currentUser?.username || 'Usuário Atual'
      };
      const updatedComments = [...(licitacao.comentarios || []), commentData];
      const originalComments = licitacao.comentarios;
@@ -400,6 +453,42 @@ export default function LicitacaoDetalhesPage() {
        }
    };
 
+   const handleSaveHabilitacaoDetails = async () => {
+        if (!licitacao) return;
+        setIsSavingHabilitacao(true);
+        setError(null);
+        try {
+            const dataToUpdate: Partial<LicitacaoDetails> = {
+                dataResultadoHabilitacao,
+                justificativaInabilitacao,
+                isEmRecursoHabilitacao,
+                dataInicioRecursoHabilitacao,
+                prazoFinalRecursoHabilitacao,
+                textoRecursoHabilitacao,
+                isEmContrarrazoesHabilitacao,
+                dataInicioContrarrazoesHabilitacao,
+                prazoFinalContrarrazoesHabilitacao,
+                textoContrarrazoesHabilitacao,
+                decisaoFinalRecursoHabilitacao,
+                dataDecisaoFinalRecursoHabilitacao,
+                obsDecisaoFinalRecursoHabilitacao,
+            };
+            const success = await updateLicitacao(licitacao.id, dataToUpdate);
+            if (success) {
+                setLicitacao(prev => prev ? { ...prev, ...dataToUpdate } : null);
+                toast({ title: "Sucesso", description: "Detalhes da fase de habilitação salvos." });
+            } else {
+                throw new Error("Falha ao salvar detalhes da habilitação no backend.");
+            }
+        } catch (err) {
+            setError(`Falha ao salvar detalhes da habilitação. ${err instanceof Error ? err.message : ''}`);
+            toast({ title: "Erro", description: `Falha ao salvar detalhes da habilitação. ${err instanceof Error ? err.message : ''}`, variant: "destructive" });
+        } finally {
+            setIsSavingHabilitacao(false);
+        }
+    };
+
+
   if (loading) {
     return <div className="flex justify-center items-center h-64"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   }
@@ -507,6 +596,16 @@ export default function LicitacaoDetalhesPage() {
                         </AlertDialogFooter>
                     </AlertDialogContent>
                 </AlertDialog>
+                {licitacao.disputaLog?.finalizadaEm && (
+                     <Button variant="outline" size="sm" onClick={() => generateAtaSessaoPDF(licitacao, configuracoes, currentUser)} disabled={!configuracoes}>
+                         <FileText className="mr-2 h-4 w-4"/> Gerar Ata da Disputa
+                     </Button>
+                 )}
+                 {licitacao.disputaLog?.itensPropostaFinalCliente && licitacao.disputaLog.itensPropostaFinalCliente.length > 0 && (
+                     <Button variant="outline" size="sm" onClick={async () => await generatePropostaFinalPDF(licitacao, configuracoes, currentUser)} disabled={!configuracoes}>
+                         <FileText className="mr-2 h-4 w-4"/> Gerar Proposta Final
+                     </Button>
+                 )}
              </div>
        </div>
 
@@ -526,7 +625,6 @@ export default function LicitacaoDetalhesPage() {
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-sm">
                    <div><span className="font-medium">Protocolo:</span> {licitacao.id}</div>
-                   {/* valorTotalLicitacao REMOVED */}
                    <div><span className="font-medium">Valor Cobrado (Assessoria):</span> {formatCurrency(licitacao.valorCobrado)}</div>
                    <div className="flex items-center gap-1"><Clock className="h-3.5 w-3.5 text-muted-foreground"/> <span className="font-medium">Início Disputa:</span> {formatDate(licitacao.dataInicio, true)}</div>
                    <div className="flex items-center gap-1"><CalendarCheck className="h-3.5 w-3.5 text-muted-foreground"/> <span className="font-medium">Meta Análise:</span> {formatDate(licitacao.dataMetaAnalise)}</div>
@@ -650,7 +748,8 @@ export default function LicitacaoDetalhesPage() {
                 </CardFooter>
             </Card>
 
-            {['AGUARDANDO_DISPUTA', 'EM_HOMOLOGACAO', 'AGUARDANDO_RECURSO', 'EM_PRAZO_CONTRARRAZAO', 'PROCESSO_HOMOLOGADO'].includes(currentStatus) && (
+            {/* Resultado da Disputa Card */}
+            {['AGUARDANDO_DISPUTA', 'EM_DISPUTA', 'DISPUTA_CONCLUIDA', 'EM_HABILITACAO', 'HABILITADO', 'INABILITADO', 'RECURSO_HABILITACAO', 'CONTRARRAZOES_HABILITACAO','AGUARDANDO_RECURSO', 'EM_PRAZO_CONTRARRAZAO', 'EM_HOMOLOGACAO', 'PROCESSO_HOMOLOGADO'].includes(currentStatus) && (
               <Card>
                 <CardHeader>
                   <CardTitle>Resultado da Disputa</CardTitle>
@@ -701,6 +800,101 @@ export default function LicitacaoDetalhesPage() {
                 </CardContent>
               </Card>
             )}
+
+            {/* Fase de Habilitação e Recursos Card */}
+            {['DISPUTA_CONCLUIDA', 'EM_HABILITACAO', 'HABILITADO', 'INABILITADO', 'RECURSO_HABILITACAO', 'CONTRARRAZOES_HABILITACAO', 'AGUARDANDO_RECURSO', 'EM_PRAZO_CONTRARRAZAO', 'EM_HOMOLOGACAO', 'PROCESSO_HOMOLOGADO'].includes(currentStatus) && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Fase de Habilitação e Recursos</CardTitle>
+                        <CardDescription>Gerencie o resultado da habilitação e os processos de recurso.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        {/* Resultado Habilitação */}
+                        <div className="space-y-2">
+                            <Label htmlFor="dataResultadoHabilitacao">Data do Resultado da Habilitação</Label>
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !dataResultadoHabilitacao && "text-muted-foreground")} disabled={isSavingHabilitacao}>
+                                        <CalendarDateIcon className="mr-2 h-4 w-4" />
+                                        {dataResultadoHabilitacao ? format(dataResultadoHabilitacao, "dd/MM/yyyy", { locale: ptBR }) : <span>Selecione a data</span>}
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={dataResultadoHabilitacao} onSelect={setDataResultadoHabilitacao} initialFocus disabled={isSavingHabilitacao}/></PopoverContent>
+                            </Popover>
+                        </div>
+                        {currentStatus === 'INABILITADO' && (
+                             <div className="space-y-2">
+                                <Label htmlFor="justificativaInabilitacao">Justificativa (Inabilitação)</Label>
+                                <Textarea id="justificativaInabilitacao" value={justificativaInabilitacao} onChange={(e) => setJustificativaInabilitacao(e.target.value)} placeholder="Motivos da inabilitação..." disabled={isSavingHabilitacao} />
+                            </div>
+                        )}
+
+                        <Separator />
+                        {/* Recurso */}
+                        <div className="space-y-2">
+                           <div className="flex items-center space-x-2">
+                                <Checkbox id="isEmRecursoHabilitacao" checked={isEmRecursoHabilitacao} onCheckedChange={(checked) => setIsEmRecursoHabilitacao(Boolean(checked))} disabled={isSavingHabilitacao} />
+                                <Label htmlFor="isEmRecursoHabilitacao">Houve Recurso para Habilitação?</Label>
+                           </div>
+                            {isEmRecursoHabilitacao && (
+                                <div className="ml-6 space-y-3 p-3 border-l-2 border-primary/50">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div><Label htmlFor="dataInicioRecursoHabilitacao">Data Início Recurso</Label><Popover><PopoverTrigger asChild><Button variant="outline" className={cn("w-full justify-start text-left font-normal mt-1", !dataInicioRecursoHabilitacao && "text-muted-foreground")} disabled={isSavingHabilitacao}><CalendarDateIcon className="mr-2 h-4 w-4" />{dataInicioRecursoHabilitacao ? format(dataInicioRecursoHabilitacao, "dd/MM/yyyy") : <span>Selecione</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="single" selected={dataInicioRecursoHabilitacao} onSelect={setDataInicioRecursoHabilitacao} disabled={isSavingHabilitacao}/></PopoverContent></Popover></div>
+                                        <div><Label htmlFor="prazoFinalRecursoHabilitacao">Prazo Final Recurso</Label><Popover><PopoverTrigger asChild><Button variant="outline" className={cn("w-full justify-start text-left font-normal mt-1", !prazoFinalRecursoHabilitacao && "text-muted-foreground")} disabled={isSavingHabilitacao}><CalendarDateIcon className="mr-2 h-4 w-4" />{prazoFinalRecursoHabilitacao ? format(prazoFinalRecursoHabilitacao, "dd/MM/yyyy") : <span>Selecione</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="single" selected={prazoFinalRecursoHabilitacao} onSelect={setPrazoFinalRecursoHabilitacao} disabled={isSavingHabilitacao}/></PopoverContent></Popover></div>
+                                    </div>
+                                    <div><Label htmlFor="textoRecursoHabilitacao">Texto/Resumo do Recurso</Label><Textarea id="textoRecursoHabilitacao" value={textoRecursoHabilitacao} onChange={(e) => setTextoRecursoHabilitacao(e.target.value)} placeholder="Principais pontos do recurso interposto..." disabled={isSavingHabilitacao} /></div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Contrarrazões */}
+                         {isEmRecursoHabilitacao && ( // Only show if there was a Recurso
+                            <div className="space-y-2 mt-2">
+                                <div className="flex items-center space-x-2">
+                                    <Checkbox id="isEmContrarrazoesHabilitacao" checked={isEmContrarrazoesHabilitacao} onCheckedChange={(checked) => setIsEmContrarrazoesHabilitacao(Boolean(checked))} disabled={isSavingHabilitacao} />
+                                    <Label htmlFor="isEmContrarrazoesHabilitacao">Houve Contrarrazões?</Label>
+                                </div>
+                                {isEmContrarrazoesHabilitacao && (
+                                    <div className="ml-6 space-y-3 p-3 border-l-2 border-accent/50">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div><Label htmlFor="dataInicioContrarrazoesHabilitacao">Data Início Contrarrazões</Label><Popover><PopoverTrigger asChild><Button variant="outline" className={cn("w-full justify-start text-left font-normal mt-1", !dataInicioContrarrazoesHabilitacao && "text-muted-foreground")} disabled={isSavingHabilitacao}><CalendarDateIcon className="mr-2 h-4 w-4" />{dataInicioContrarrazoesHabilitacao ? format(dataInicioContrarrazoesHabilitacao, "dd/MM/yyyy") : <span>Selecione</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="single" selected={dataInicioContrarrazoesHabilitacao} onSelect={setDataInicioContrarrazoesHabilitacao} disabled={isSavingHabilitacao}/></PopoverContent></Popover></div>
+                                            <div><Label htmlFor="prazoFinalContrarrazoesHabilitacao">Prazo Final Contrarrazões</Label><Popover><PopoverTrigger asChild><Button variant="outline" className={cn("w-full justify-start text-left font-normal mt-1", !prazoFinalContrarrazoesHabilitacao && "text-muted-foreground")} disabled={isSavingHabilitacao}><CalendarDateIcon className="mr-2 h-4 w-4" />{prazoFinalContrarrazoesHabilitacao ? format(prazoFinalContrarrazoesHabilitacao, "dd/MM/yyyy") : <span>Selecione</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="single" selected={prazoFinalContrarrazoesHabilitacao} onSelect={setPrazoFinalContrarrazoesHabilitacao} disabled={isSavingHabilitacao}/></PopoverContent></Popover></div>
+                                        </div>
+                                        <div><Label htmlFor="textoContrarrazoesHabilitacao">Texto/Resumo das Contrarrazões</Label><Textarea id="textoContrarrazoesHabilitacao" value={textoContrarrazoesHabilitacao} onChange={(e) => setTextoContrarrazoesHabilitacao(e.target.value)} placeholder="Principais pontos das contrarrazões apresentadas..." disabled={isSavingHabilitacao} /></div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                         {isEmRecursoHabilitacao && ( // Only show if there was a Recurso
+                            <div className="space-y-2 mt-4 pt-3 border-t">
+                                 <Label htmlFor="decisaoFinalRecursoHabilitacao">Decisão Final do Recurso</Label>
+                                 <Select value={decisaoFinalRecursoHabilitacao || ''} onValueChange={(value) => setDecisaoFinalRecursoHabilitacao(value as any)} disabled={isSavingHabilitacao}>
+                                    <SelectTrigger><SelectValue placeholder="Selecione a decisão..." /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="PENDENTE_JULGAMENTO">Pendente de Julgamento</SelectItem>
+                                        <SelectItem value="PROVIDO">Provido</SelectItem>
+                                        <SelectItem value="IMPROVIDO">Improvido</SelectItem>
+                                        <SelectItem value="CONVERTIDO_EM_DILIGENCIA">Convertido em Diligência</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                {decisaoFinalRecursoHabilitacao && decisaoFinalRecursoHabilitacao !== 'PENDENTE_JULGAMENTO' && (
+                                    <>
+                                        <div className="mt-2"><Label htmlFor="dataDecisaoFinalRecursoHabilitacao">Data da Decisão Final</Label><Popover><PopoverTrigger asChild><Button variant="outline" className={cn("w-full justify-start text-left font-normal mt-1", !dataDecisaoFinalRecursoHabilitacao && "text-muted-foreground")} disabled={isSavingHabilitacao}><CalendarDateIcon className="mr-2 h-4 w-4" />{dataDecisaoFinalRecursoHabilitacao ? format(dataDecisaoFinalRecursoHabilitacao, "dd/MM/yyyy") : <span>Selecione</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="single" selected={dataDecisaoFinalRecursoHabilitacao} onSelect={setDataDecisaoFinalRecursoHabilitacao} disabled={isSavingHabilitacao}/></PopoverContent></Popover></div>
+                                        <div className="mt-2"><Label htmlFor="obsDecisaoFinalRecursoHabilitacao">Observações da Decisão</Label><Textarea id="obsDecisaoFinalRecursoHabilitacao" value={obsDecisaoFinalRecursoHabilitacao} onChange={(e) => setObsDecisaoFinalRecursoHabilitacao(e.target.value)} placeholder="Detalhes da decisão..." disabled={isSavingHabilitacao} /></div>
+                                    </>
+                                )}
+                            </div>
+                        )}
+
+                    </CardContent>
+                    <CardFooter>
+                        <Button onClick={handleSaveHabilitacaoDetails} disabled={isSavingHabilitacao}>
+                            {isSavingHabilitacao ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            Salvar Dados Habilitação/Recurso
+                        </Button>
+                    </CardFooter>
+                </Card>
+            )}
          </div>
 
          <div className="lg:col-span-1 space-y-6">
@@ -742,3 +936,4 @@ export default function LicitacaoDetalhesPage() {
     </div>
   );
 }
+

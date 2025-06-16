@@ -2,7 +2,7 @@
 'use client';
 
 import type { LicitacaoFormValues } from '@/components/licitacoes/licitacao-form';
-import { CalendarCheck, CheckCircle, Clock, FileWarning, HelpCircle, Loader2, Send, Target, XCircle, Gavel, Handshake, PlayCircle, Flag, MessageSquare, FileArchive, UserCheck, UserX, ShieldQuestion } from 'lucide-react'; // Added icons for Habilitação
+import { CalendarCheck, CheckCircle, Clock, FileWarning, HelpCircle, Loader2, Send, Target, XCircle, Gavel, Handshake, PlayCircle, Flag, MessageSquare, FileArchive, UserCheck, UserX, ShieldQuestion, FileQuestion } from 'lucide-react'; // Added icons for Habilitação
 import { parseISO, isValid, addMonths, setDate, differenceInSeconds, format as formatDateFns } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { type User } from './userService';
@@ -262,16 +262,17 @@ export const statusMap: {[key: string]: {label: string; color: string; icon: Rea
   AGUARDANDO_DISPUTA: {label: 'Aguardando Disputa', color: 'accent', icon: PlayCircle},
   EM_DISPUTA: {label: 'Em Disputa', color: 'destructive', icon: Gavel},
   DISPUTA_CONCLUIDA: {label: 'Disputa Concluída', color: 'default', icon: Flag},
-  EM_HABILITACAO: {label: 'Em Habilitação', color: 'info', icon: FileArchive}, // New
-  HABILITADO: {label: 'Habilitado', color: 'success', icon: UserCheck}, // New
-  INABILITADO: {label: 'Inabilitado', color: 'destructive', icon: UserX}, // New
-  RECURSO_HABILITACAO: {label: 'Recurso (Habilitação)', color: 'warning', icon: ShieldQuestion}, // New (generic for appeal phase)
-  AGUARDANDO_RECURSO: {label: 'Aguardando Recurso', color: 'outline', icon: HelpCircle}, // Can be used post-habilitacao
-  EM_PRAZO_CONTRARRAZAO: {label: 'Prazo Contrarrazão', color: 'outline', icon: CalendarCheck}, // Can be used post-habilitacao
+  EM_HABILITACAO: {label: 'Em Habilitação', color: 'info', icon: FileArchive},
+  HABILITADO: {label: 'Habilitado', color: 'success', icon: UserCheck},
+  INABILITADO: {label: 'Inabilitado', color: 'destructive', icon: UserX},
+  RECURSO_HABILITACAO: {label: 'Recurso (Habilitação)', color: 'warning', icon: ShieldQuestion},
+  CONTRARRAZOES_HABILITACAO: {label: 'Contrarrazões (Habilitação)', color: 'warning', icon: FileQuestion},
+  AGUARDANDO_RECURSO: {label: 'Aguardando Recurso (Geral)', color: 'outline', icon: HelpCircle},
+  EM_PRAZO_CONTRARRAZAO: {label: 'Prazo Contrarrazão (Geral)', color: 'outline', icon: CalendarCheck},
   EM_HOMOLOGACAO: {label: 'Em Homologação', color: 'default', icon: Target},
   PROCESSO_HOMOLOGADO: {label: 'Processo Homologado', color: 'success', icon: CheckCircle},
   PROCESSO_ENCERRADO: {label: 'Processo Encerrado', color: 'secondary', icon: XCircle},
-  RECURSO_IMPUGNACAO: {label: 'Recurso/Impugnação (Geral)', color: 'warning', icon: HelpCircle}, // General appeal before dispute
+  RECURSO_IMPUGNACAO: {label: 'Recurso/Impugnação (Geral)', color: 'warning', icon: HelpCircle},
 };
 
 
@@ -431,6 +432,20 @@ export const addLicitacao = async (
     } : undefined,
     disputaConfig: {},
     disputaLog: { mensagens: [], itensPropostaFinalCliente: [] },
+     // Initialize Habilitação fields
+    dataResultadoHabilitacao: undefined,
+    justificativaInabilitacao: undefined,
+    isEmRecursoHabilitacao: false,
+    dataInicioRecursoHabilitacao: undefined,
+    prazoFinalRecursoHabilitacao: undefined,
+    textoRecursoHabilitacao: undefined,
+    isEmContrarrazoesHabilitacao: false,
+    dataInicioContrarrazoesHabilitacao: undefined,
+    prazoFinalContrarrazoesHabilitacao: undefined,
+    textoContrarrazoesHabilitacao: undefined,
+    decisaoFinalRecursoHabilitacao: undefined,
+    dataDecisaoFinalRecursoHabilitacao: undefined,
+    obsDecisaoFinalRecursoHabilitacao: undefined,
   };
 
   const updatedLicitacoes = [...licitacoes, newLicitacao];
@@ -503,18 +518,18 @@ export const updateLicitacao = async (id: string, data: Partial<LicitacaoDetails
           valorFinalPropostaCliente: data.disputaLog.valorFinalPropostaCliente !== undefined ? Number(data.disputaLog.valorFinalPropostaCliente) : existingLicitacao.disputaLog?.valorFinalPropostaCliente,
       } : existingLicitacao.disputaLog,
       // Habilitação fields merge
-      dataResultadoHabilitacao: data.dataResultadoHabilitacao !== undefined ? parseUpdateDate(data.dataResultadoHabilitacao) : existingLicitacao.dataResultadoHabilitacao,
+      dataResultadoHabilitacao: data.hasOwnProperty('dataResultadoHabilitacao') ? parseUpdateDate(data.dataResultadoHabilitacao) : existingLicitacao.dataResultadoHabilitacao,
       justificativaInabilitacao: data.hasOwnProperty('justificativaInabilitacao') ? data.justificativaInabilitacao : existingLicitacao.justificativaInabilitacao,
       isEmRecursoHabilitacao: data.hasOwnProperty('isEmRecursoHabilitacao') ? data.isEmRecursoHabilitacao : existingLicitacao.isEmRecursoHabilitacao,
-      dataInicioRecursoHabilitacao: data.dataInicioRecursoHabilitacao !== undefined ? parseUpdateDate(data.dataInicioRecursoHabilitacao) : existingLicitacao.dataInicioRecursoHabilitacao,
-      prazoFinalRecursoHabilitacao: data.prazoFinalRecursoHabilitacao !== undefined ? parseUpdateDate(data.prazoFinalRecursoHabilitacao) : existingLicitacao.prazoFinalRecursoHabilitacao,
+      dataInicioRecursoHabilitacao: data.hasOwnProperty('dataInicioRecursoHabilitacao') ? parseUpdateDate(data.dataInicioRecursoHabilitacao) : existingLicitacao.dataInicioRecursoHabilitacao,
+      prazoFinalRecursoHabilitacao: data.hasOwnProperty('prazoFinalRecursoHabilitacao') ? parseUpdateDate(data.prazoFinalRecursoHabilitacao) : existingLicitacao.prazoFinalRecursoHabilitacao,
       textoRecursoHabilitacao: data.hasOwnProperty('textoRecursoHabilitacao') ? data.textoRecursoHabilitacao : existingLicitacao.textoRecursoHabilitacao,
       isEmContrarrazoesHabilitacao: data.hasOwnProperty('isEmContrarrazoesHabilitacao') ? data.isEmContrarrazoesHabilitacao : existingLicitacao.isEmContrarrazoesHabilitacao,
-      dataInicioContrarrazoesHabilitacao: data.dataInicioContrarrazoesHabilitacao !== undefined ? parseUpdateDate(data.dataInicioContrarrazoesHabilitacao) : existingLicitacao.dataInicioContrarrazoesHabilitacao,
-      prazoFinalContrarrazoesHabilitacao: data.prazoFinalContrarrazoesHabilitacao !== undefined ? parseUpdateDate(data.prazoFinalContrarrazoesHabilitacao) : existingLicitacao.prazoFinalContrarrazoesHabilitacao,
+      dataInicioContrarrazoesHabilitacao: data.hasOwnProperty('dataInicioContrarrazoesHabilitacao') ? parseUpdateDate(data.dataInicioContrarrazoesHabilitacao) : existingLicitacao.dataInicioContrarrazoesHabilitacao,
+      prazoFinalContrarrazoesHabilitacao: data.hasOwnProperty('prazoFinalContrarrazoesHabilitacao') ? parseUpdateDate(data.prazoFinalContrarrazoesHabilitacao) : existingLicitacao.prazoFinalContrarrazoesHabilitacao,
       textoContrarrazoesHabilitacao: data.hasOwnProperty('textoContrarrazoesHabilitacao') ? data.textoContrarrazoesHabilitacao : existingLicitacao.textoContrarrazoesHabilitacao,
       decisaoFinalRecursoHabilitacao: data.decisaoFinalRecursoHabilitacao || existingLicitacao.decisaoFinalRecursoHabilitacao,
-      dataDecisaoFinalRecursoHabilitacao: data.dataDecisaoFinalRecursoHabilitacao !== undefined ? parseUpdateDate(data.dataDecisaoFinalRecursoHabilitacao) : existingLicitacao.dataDecisaoFinalRecursoHabilitacao,
+      dataDecisaoFinalRecursoHabilitacao: data.hasOwnProperty('dataDecisaoFinalRecursoHabilitacao') ? parseUpdateDate(data.dataDecisaoFinalRecursoHabilitacao) : existingLicitacao.dataDecisaoFinalRecursoHabilitacao,
       obsDecisaoFinalRecursoHabilitacao: data.hasOwnProperty('obsDecisaoFinalRecursoHabilitacao') ? data.obsDecisaoFinalRecursoHabilitacao : existingLicitacao.obsDecisaoFinalRecursoHabilitacao,
   };
 
@@ -741,6 +756,33 @@ export const fetchAcordoDetalhes = async (acordoId: string): Promise<AcordoDetal
     return agreements.find(a => a.id === acordoId) || null;
 };
 
+// --- PDF Generation Helpers ---
+
+const MARGIN = 14;
+const LINE_HEIGHT = 5; // Approx line height for 10-11pt font
+
+const addTextAndPaginate = (
+    doc: jsPDF,
+    text: string,
+    x: number,
+    y: number,
+    options: any, // jsPDF text options
+    pageContentHeight: number,
+    drawPageHeader: () => number // Function to draw header and return new yPos
+): number => {
+    const textLines = doc.splitTextToSize(text, (options?.maxWidth || (doc.internal.pageSize.getWidth() - MARGIN * 2)));
+    let currentY = y;
+    textLines.forEach((line: string) => {
+        if (currentY + LINE_HEIGHT > pageContentHeight) {
+            doc.addPage();
+            currentY = drawPageHeader();
+        }
+        doc.text(line, x, currentY, options);
+        currentY += LINE_HEIGHT;
+    });
+    return currentY;
+};
+
 
 export const generateAtaSessaoPDF = (
     lic: LicitacaoDetails,
@@ -751,135 +793,118 @@ export const generateAtaSessaoPDF = (
       const hoje = formatDateFns(new Date(), "dd/MM/yyyy HH:mm", { locale: ptBR });
       const logoUrl = config?.logoUrl;
       const logoDim = 25;
-      const margin = 14;
       const pageHeight = doc.internal.pageSize.getHeight();
       const pageWidth = doc.internal.pageSize.getWidth();
-      const lineHeight = 5;
-      let yPos = margin + 5;
-      let initialYAfterHeader = 0;
+      const contentHeight = pageHeight - MARGIN * 2;
+      let yPos = MARGIN + 5;
 
-      const drawPageHeader = () => {
-          yPos = margin + 5;
+      const drawHeader = (): number => {
+          let currentY = MARGIN + 5;
           if (logoUrl) {
             try {
               const img = new Image();
               img.src = logoUrl;
               const imageType = logoUrl.startsWith("data:image/jpeg") ? "JPEG" : "PNG";
               if (imageType === "PNG" || imageType === "JPEG") {
-                doc.addImage(img, imageType, margin, yPos - 5, logoDim, logoDim);
-                yPos = margin + logoDim;
+                doc.addImage(img, imageType, MARGIN, currentY - 5, logoDim, logoDim);
+                currentY = MARGIN + logoDim;
               }
             } catch (e) { console.error("Error adding logo:", e); }
           }
-          initialYAfterHeader = yPos; // Capture yPos after potential logo
           doc.setFontSize(16);
-          doc.text("ATA DA SESSÃO DE DISPUTA", pageWidth / 2, initialYAfterHeader, { align: 'center' });
-          yPos = initialYAfterHeader + 10;
+          doc.text("ATA DA SESSÃO DE DISPUTA", pageWidth / 2, currentY, { align: 'center' });
+          currentY += 10;
 
           if (config) {
             doc.setFontSize(11);
-            doc.text(`Assessoria: ${config.nomeFantasia || config.razaoSocial} (CNPJ: ${config.cnpj})`, margin, yPos);
-            yPos += 6;
+            doc.text(`Assessoria: ${config.nomeFantasia || config.razaoSocial} (CNPJ: ${config.cnpj})`, MARGIN, currentY);
+            currentY += 6;
           }
           doc.setFontSize(10);
-          doc.text(`Data da Geração: ${hoje}`, margin, yPos);
-          yPos += 8;
-          doc.setLineWidth(0.1); doc.line(margin, yPos, pageWidth - margin, yPos); yPos += 8;
-          initialYAfterHeader = yPos; // Update yPos to be below the drawn header for content start
+          doc.text(`Data da Geração: ${hoje}`, MARGIN, currentY);
+          currentY += 8;
+          doc.setLineWidth(0.1); doc.line(MARGIN, currentY, pageWidth - MARGIN, currentY); currentY += 8;
+          return currentY;
       };
 
-      const addDetail = (label: string, value: string | undefined | null) => {
-        if (value === undefined || value === null) return;
+      yPos = drawHeader();
+
+      const addDetailLine = (label: string, value: string | undefined | null) => {
+        if (value === undefined || value === null) value = 'N/A';
         const text = `${label}: ${value}`;
-        const lines = doc.splitTextToSize(text, pageWidth - margin * 2);
-        lines.forEach((line: string) => {
-            if (yPos + lineHeight > pageHeight - margin - 5) {
-                doc.addPage();
-                drawPageHeader();
-            }
-            doc.text(line, margin, yPos);
-            yPos += lineHeight;
-        });
+        yPos = addTextAndPaginate(doc, text, MARGIN, yPos, {maxWidth: pageWidth - MARGIN * 2}, contentHeight, drawHeader);
       };
-
-      drawPageHeader();
 
       doc.setFontSize(12); doc.setFont(undefined, 'bold');
-      addDetail("Dados da Licitação", ""); // Use addDetail for consistent spacing and page breaks
+      addDetailLine("Dados da Licitação", "");
       doc.setFont(undefined, 'normal'); doc.setFontSize(11);
 
-      addDetail("Protocolo", lic.id);
-      addDetail("Cliente", lic.clienteNome);
-      addDetail("Número Lic.", lic.numeroLicitacao);
-      addDetail("Órgão", lic.orgaoComprador);
-      addDetail("Modalidade", lic.modalidade);
-      addDetail("Plataforma", lic.plataforma);
-      addDetail("Valor Referência Edital", (lic.valorReferenciaEdital || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
+      addDetailLine("Protocolo", lic.id);
+      addDetailLine("Cliente", lic.clienteNome);
+      addDetailLine("Número Lic.", lic.numeroLicitacao);
+      addDetailLine("Órgão", lic.orgaoComprador);
+      addDetailLine("Modalidade", lic.modalidade);
+      addDetailLine("Plataforma", lic.plataforma);
+      addDetailLine("Valor Referência Edital", (lic.valorReferenciaEdital || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
       yPos += 4;
 
       doc.setFontSize(12); doc.setFont(undefined, 'bold');
-      addDetail("Configuração da Disputa (Limite Cliente)", "");
+      addDetailLine("Configuração da Disputa (Limite Cliente)", "");
       doc.setFont(undefined, 'normal'); doc.setFontSize(11);
       if (lic.disputaConfig?.limiteTipo === 'valor') {
-          addDetail("Tipo de Limite", "Valor Absoluto");
-          addDetail("Valor Limite Definido", (lic.disputaConfig.limiteValor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
+          addDetailLine("Tipo de Limite", "Valor Absoluto");
+          addDetailLine("Valor Limite Definido", (lic.disputaConfig.limiteValor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
       } else if (lic.disputaConfig?.limiteTipo === 'percentual') {
-          addDetail("Tipo de Limite", "Percentual");
-          addDetail("Percentual Definido", `${lic.disputaConfig.limiteValor || 0}%`);
-          addDetail("Valor Calculado (Pode Chegar Até)", (lic.disputaConfig.valorCalculadoAteOndePodeChegar || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
+          addDetailLine("Tipo de Limite", "Percentual");
+          addDetailLine("Percentual Definido", `${lic.disputaConfig.limiteValor || 0}%`);
+          addDetailLine("Valor Calculado (Pode Chegar Até)", (lic.disputaConfig.valorCalculadoAteOndePodeChegar || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
       } else {
-          addDetail("Limite Cliente", "Não definido ou não aplicável.");
+          addDetailLine("Limite Cliente", "Não definido ou não aplicável.");
       }
       yPos += 4;
 
       doc.setFontSize(12); doc.setFont(undefined, 'bold');
-      addDetail("Registro da Disputa", "");
+      addDetailLine("Registro da Disputa", "");
       doc.setFont(undefined, 'normal'); doc.setFontSize(11);
       const formatDateLogAta = (date: Date | string | undefined) => date ? formatDateFns(date instanceof Date ? date : parseISO(date as string), "dd/MM/yyyy HH:mm:ss", {locale: ptBR}) : 'N/A';
-      addDetail("Início da Disputa", formatDateLogAta(lic.disputaLog?.iniciadaEm));
-      addDetail("Fim da Disputa", formatDateLogAta(lic.disputaLog?.finalizadaEm));
-      addDetail("Duração Total", lic.disputaLog?.duracao || 'N/A');
+      addDetailLine("Início da Disputa", formatDateLogAta(lic.disputaLog?.iniciadaEm));
+      addDetailLine("Fim da Disputa", formatDateLogAta(lic.disputaLog?.finalizadaEm));
+      addDetailLine("Duração Total", lic.disputaLog?.duracao || 'N/A');
       yPos += 4;
 
       if (lic.disputaLog?.mensagens && lic.disputaLog.mensagens.length > 0) {
         doc.setFontSize(12); doc.setFont(undefined, 'bold');
-        addDetail("Ocorrências da Sessão","");
+        addDetailLine("Ocorrências da Sessão","");
         doc.setFont(undefined, 'normal'); doc.setFontSize(10);
         lic.disputaLog.mensagens.forEach(msg => {
             const timestampStr = msg.timestamp ? formatDateFns(typeof msg.timestamp === 'string' ? parseISO(msg.timestamp) : msg.timestamp, "HH:mm:ss", {locale: ptBR}) : 'N/A';
             const textContent = `[${timestampStr}] ${msg.autor || 'Sistema'}: ${msg.texto}`;
-            const textLines = doc.splitTextToSize(textContent, pageWidth - (margin * 2));
-            textLines.forEach((line: string) => {
-                if (yPos + lineHeight > pageHeight - margin - 5) {
-                    doc.addPage(); drawPageHeader();
-                }
-                doc.text(line, margin, yPos);
-                yPos += lineHeight;
-            });
+            yPos = addTextAndPaginate(doc, textContent, MARGIN, yPos, {maxWidth: pageWidth - MARGIN * 2}, contentHeight, drawHeader);
         });
         yPos += 4;
       }
 
       doc.setFontSize(12); doc.setFont(undefined, 'bold');
-      addDetail("Resultado da Disputa","");
+      addDetailLine("Resultado da Disputa","");
       doc.setFont(undefined, 'normal'); doc.setFontSize(11);
       if (lic.disputaLog?.clienteVenceu) {
-          addDetail("Resultado", "Cliente Venceu a Licitação");
+          addDetailLine("Resultado", "Cliente Venceu a Licitação");
           if (lic.disputaLog.valorFinalPropostaCliente !== undefined) {
-             addDetail("Valor Final da Proposta do Cliente", lic.disputaLog.valorFinalPropostaCliente.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
+             addDetailLine("Valor Final da Proposta do Cliente", lic.disputaLog.valorFinalPropostaCliente.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
           }
       } else {
-          addDetail("Resultado", "Cliente Não Venceu");
-          addDetail("Posição Final do Cliente", lic.disputaLog?.posicaoCliente?.toString() || "Não informada");
+          addDetailLine("Resultado", "Cliente Não Venceu");
+          addDetailLine("Posição Final do Cliente", lic.disputaLog?.posicaoCliente?.toString() || "Não informada");
            if (lic.disputaLog?.valorFinalPropostaCliente !== undefined) {
-             addDetail("Valor Final da Proposta do Cliente", lic.disputaLog.valorFinalPropostaCliente.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
+             addDetailLine("Valor Final da Proposta do Cliente", lic.disputaLog.valorFinalPropostaCliente.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
           }
       }
       yPos += 10;
 
-      if (yPos + lineHeight * 2 > pageHeight - margin - 5) { doc.addPage(); drawPageHeader(); }
-      doc.text(`Sessão conduzida por: ${user?.fullName || user?.username || 'Usuário do Sistema'}`, margin, yPos); yPos +=6;
-      if (user?.cpf) { doc.text(`CPF do Operador: ${user.cpf}`, margin, yPos); }
+      yPos = addTextAndPaginate(doc, `Sessão conduzida por: ${user?.fullName || user?.username || 'Usuário do Sistema'}`, MARGIN, yPos, {}, contentHeight, drawHeader);
+      if (user?.cpf) {
+         yPos = addTextAndPaginate(doc, `CPF do Operador: ${user.cpf}`, MARGIN, yPos, {}, contentHeight, drawHeader);
+      }
 
       doc.save(`Ata_Disputa_${lic.numeroLicitacao.replace(/[^\w]/g, '_')}.pdf`);
   };
@@ -898,68 +923,49 @@ export const generatePropostaFinalPDF = async (
 
     const doc = new jsPDF();
     const hoje = formatDateFns(new Date(), "dd/MM/yyyy", { locale: ptBR });
-    const margin = 14;
     const pageHeight = doc.internal.pageSize.getHeight();
     const pageWidth = doc.internal.pageSize.getWidth();
-    const lineHeight = 5;
-    let yPos = margin + 5;
-    let initialYAfterHeader = 0;
+    const contentHeight = pageHeight - MARGIN * 2;
+    let yPos = MARGIN + 5;
 
-    const drawClientHeader = () => {
-        yPos = margin + 5;
+    const drawClientHeaderPDF = (): number => {
+        let currentY = MARGIN + 5;
         if (clientDetails) {
             doc.setFontSize(12);
             doc.setFont(undefined, 'bold');
-            doc.text(clientDetails.razaoSocial, margin, yPos); yPos +=6;
+            doc.text(clientDetails.razaoSocial, MARGIN, currentY); currentY +=6;
             doc.setFont(undefined, 'normal');
             doc.setFontSize(9);
-            doc.text(`CNPJ: ${clientDetails.cnpj}`, margin, yPos); yPos +=4;
-            doc.text(`Email: ${clientDetails.email} | Tel: ${clientDetails.telefone}`, margin, yPos); yPos +=4;
-            doc.text(`${clientDetails.enderecoRua}, ${clientDetails.enderecoNumero}${clientDetails.enderecoComplemento ? ' - '+clientDetails.enderecoComplemento : ''} - ${clientDetails.enderecoBairro}`, margin, yPos); yPos +=4;
-            doc.text(`${clientDetails.enderecoCidade} - CEP: ${clientDetails.enderecoCep}`, margin, yPos);
+            doc.text(`CNPJ: ${clientDetails.cnpj}`, MARGIN, currentY); currentY +=4;
+            doc.text(`Email: ${clientDetails.email} | Tel: ${clientDetails.telefone}`, MARGIN, currentY); currentY +=4;
+            doc.text(`${clientDetails.enderecoRua}, ${clientDetails.enderecoNumero}${clientDetails.enderecoComplemento ? ' - '+clientDetails.enderecoComplemento : ''} - ${clientDetails.enderecoBairro}`, MARGIN, currentY); currentY +=4;
+            doc.text(`${clientDetails.enderecoCidade} - CEP: ${clientDetails.enderecoCep}`, MARGIN, currentY);
         } else {
             doc.setFontSize(12);
             doc.setFont(undefined, 'bold');
-            doc.text(lic.clienteNome, margin, yPos); yPos +=6;
+            doc.text(lic.clienteNome, MARGIN, currentY); currentY +=6;
             doc.setFontSize(9);
-            doc.text(`(Detalhes do cliente não puderam ser carregados)`, margin, yPos); yPos +=4;
+            doc.text(`(Detalhes do cliente não puderam ser carregados)`, MARGIN, currentY); currentY +=4;
         }
-        initialYAfterHeader = yPos + 8;
-        yPos = initialYAfterHeader;
+        return currentY + 8;
     };
     
-    const addTextWithPageCheck = (text: string, x: number, currentY: number, options?: any): number => {
-        const textLines = doc.splitTextToSize(text, (options?.maxWidth || (pageWidth - margin * 2)));
-        let newY = currentY;
-        textLines.forEach((line: string) => {
-            if (newY + lineHeight > pageHeight - margin - 5) {
-                doc.addPage();
-                drawClientHeader();
-                newY = initialYAfterHeader; // yPos is reset by drawClientHeader
-            }
-            doc.text(line, x, newY, options);
-            newY += lineHeight;
-        });
-        return newY;
-    };
-
-
-    drawClientHeader();
+    yPos = drawClientHeaderPDF();
 
     doc.setFontSize(16);
     doc.setFont(undefined, 'bold');
-    yPos = addTextWithPageCheck("PROPOSTA COMERCIAL", pageWidth / 2, yPos, { align: 'center' });
+    yPos = addTextAndPaginate(doc, "PROPOSTA COMERCIAL", pageWidth / 2, yPos, { align: 'center' }, contentHeight, drawClientHeaderPDF);
     yPos += 5;
 
     doc.setFontSize(11);
     doc.setFont(undefined, 'normal');
-    yPos = addTextWithPageCheck(`Licitação Nº: ${lic.numeroLicitacao}`, margin, yPos);
-    doc.text(`Data: ${hoje}`, pageWidth - margin, yPos - lineHeight, {align: 'right'}); // Draw date on same effective line
-    yPos = addTextWithPageCheck(`Órgão Licitante: ${lic.orgaoComprador}`, margin, yPos);
+    yPos = addTextAndPaginate(doc, `Licitação Nº: ${lic.numeroLicitacao}`, MARGIN, yPos, {}, contentHeight, drawClientHeaderPDF);
+    doc.text(`Data: ${hoje}`, pageWidth - MARGIN, yPos - LINE_HEIGHT, {align: 'right'});
+    yPos = addTextAndPaginate(doc, `Órgão Licitante: ${lic.orgaoComprador}`, MARGIN, yPos, {}, contentHeight, drawClientHeaderPDF);
     yPos += 5;
 
-    yPos = addTextWithPageCheck("Prezados Senhores,", margin, yPos);
-    yPos = addTextWithPageCheck("Apresentamos nossa proposta para o fornecimento dos itens abaixo, conforme condições do edital:", margin, yPos);
+    yPos = addTextAndPaginate(doc, "Prezados Senhores,", MARGIN, yPos, {}, contentHeight, drawClientHeaderPDF);
+    yPos = addTextAndPaginate(doc, "Apresentamos nossa proposta para o fornecimento dos itens abaixo, conforme condições do edital:", MARGIN, yPos, {}, contentHeight, drawClientHeaderPDF);
     yPos += 5;
 
 
@@ -978,35 +984,33 @@ export const generatePropostaFinalPDF = async (
         ]),
         theme: 'grid',
         headStyles: { fillColor: [220, 220, 220], textColor: [0,0,0], fontStyle: 'bold' },
-        columnStyles: tableColumnStyles, margin: { left: margin, right: margin },
+        columnStyles: tableColumnStyles, margin: { left: MARGIN, right: MARGIN },
         didDrawPage: (data) => {
-             if (data.pageNumber > 1) { drawClientHeader(); }
-             yPos = data.cursor?.y || initialYAfterHeader;
+             if (data.pageNumber > 1) { yPos = drawClientHeaderPDF(); }
+             else { yPos = data.cursor?.y || yPos; }
         }
     });
     yPos = (doc as any).lastAutoTable.finalY + 10;
 
-    if (yPos + lineHeight * 2 > pageHeight - margin - 5) { doc.addPage(); drawClientHeader(); yPos = initialYAfterHeader; }
     doc.setFontSize(12); doc.setFont(undefined, 'bold');
     const totalProposta = (lic.disputaLog.valorFinalPropostaCliente || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-    yPos = addTextWithPageCheck(`VALOR TOTAL DA PROPOSTA: ${totalProposta}`, pageWidth - margin, yPos, { align: 'right' });
+    yPos = addTextAndPaginate(doc, `VALOR TOTAL DA PROPOSTA: ${totalProposta}`, pageWidth - MARGIN, yPos, { align: 'right' }, contentHeight, drawClientHeaderPDF);
     yPos += 5;
 
     if (lic.observacoesPropostaFinal) {
-        if (yPos + lineHeight * 2 > pageHeight - margin - 5) { doc.addPage(); drawClientHeader(); yPos = initialYAfterHeader;}
         doc.setFontSize(11); doc.setFont(undefined, 'bold');
-        yPos = addTextWithPageCheck("Observações Adicionais:", margin, yPos);
+        yPos = addTextAndPaginate(doc, "Observações Adicionais:", MARGIN, yPos, {}, contentHeight, drawClientHeaderPDF);
         doc.setFont(undefined, 'normal'); doc.setFontSize(10);
-        yPos = addTextWithPageCheck(lic.observacoesPropostaFinal, margin, yPos, {maxWidth: pageWidth - margin * 2});
+        yPos = addTextAndPaginate(doc, lic.observacoesPropostaFinal, MARGIN, yPos, {maxWidth: pageWidth - MARGIN * 2}, contentHeight, drawClientHeaderPDF);
         yPos += 5;
     }
-
-    if (yPos > pageHeight - margin - 30) { doc.addPage(); drawClientHeader(); yPos = initialYAfterHeader; }
+    
+    if (yPos > pageHeight - MARGIN - 30) { doc.addPage(); yPos = drawClientHeaderPDF(); }
     doc.setFontSize(10);
-    yPos = addTextWithPageCheck("________________________________________", margin, yPos);
-    yPos = addTextWithPageCheck(lic.clienteNome, margin, yPos);
+    yPos = addTextAndPaginate(doc, "________________________________________", MARGIN, yPos, {}, contentHeight, drawClientHeaderPDF);
+    yPos = addTextAndPaginate(doc, lic.clienteNome, MARGIN, yPos, {}, contentHeight, drawClientHeaderPDF);
     if(clientDetails?.cnpj) {
-        addTextWithPageCheck(`CNPJ: ${clientDetails.cnpj}`, margin, yPos);
+        addTextAndPaginate(doc, `CNPJ: ${clientDetails.cnpj}`, MARGIN, yPos, {}, contentHeight, drawClientHeaderPDF);
     }
     doc.save(`Proposta_Final_${lic.numeroLicitacao.replace(/[^\w]/g, '_')}.pdf`);
   };
@@ -1035,17 +1039,15 @@ export const generateAcordoPDF = (
 ) => {
     if (!config) { console.error("Configurações não carregadas."); return; }
     const doc = new jsPDF();
-    const margin = 14;
     const pageHeight = doc.internal.pageSize.getHeight();
     const pageWidth = doc.internal.pageSize.getWidth();
-    const lineHeight = 5;
-    let yPos = margin + 5;
-    let initialYAfterHeader = 0;
+    const contentHeight = pageHeight - MARGIN * 2;
+    let yPos = MARGIN + 5;
 
     const cliente = debitosOriginais.length > 0 ? debitosOriginais[0] : { clienteNome: 'N/A', clienteCnpj: 'N/A' };
 
-    const drawPageHeaderAcordo = () => {
-        yPos = margin + 5;
+    const drawAcordoHeader = (): number => {
+        let currentY = MARGIN + 5;
         const logoUrl = config?.logoUrl;
         const logoDim = 25;
         if (logoUrl) {
@@ -1053,44 +1055,30 @@ export const generateAcordoPDF = (
                 const img = new Image(); img.src = logoUrl;
                 const imageType = logoUrl.startsWith("data:image/jpeg") ? "JPEG" : "PNG";
                 if (imageType === "PNG" || imageType === "JPEG") {
-                    doc.addImage(img, imageType, margin, yPos - 3, logoDim, logoDim);
-                    yPos = margin + logoDim;
+                    doc.addImage(img, imageType, MARGIN, currentY - 3, logoDim, logoDim);
+                    currentY = MARGIN + logoDim;
                 }
             } catch (e) { console.error("Error adding logo:", e); }
         }
-        initialYAfterHeader = yPos;
-        doc.setFontSize(14); doc.text(config.nomeFantasia || config.razaoSocial, margin + (logoUrl ? logoDim + 3 : 0), initialYAfterHeader - (logoUrl ? logoDim/2 - 2 : -5) );
-        doc.setFontSize(10); doc.text(`CNPJ: ${config.cnpj}`, margin + (logoUrl ? logoDim + 3 : 0), initialYAfterHeader - (logoUrl ? logoDim/2 - 7 : 0) );
-        yPos = Math.max(yPos, margin + logoDim + 5); initialYAfterHeader = yPos;
+        doc.setFontSize(14); doc.text(config.nomeFantasia || config.razaoSocial, MARGIN + (logoUrl ? logoDim + 3 : 0), currentY - (logoUrl ? logoDim/2 - 2 : -5) );
+        doc.setFontSize(10); doc.text(`CNPJ: ${config.cnpj}`, MARGIN + (logoUrl ? logoDim + 3 : 0), currentY - (logoUrl ? logoDim/2 - 7 : 0) );
+        currentY = Math.max(currentY, MARGIN + logoDim + 5);
 
         doc.setFontSize(16); doc.setFont(undefined, 'bold');
-        doc.text("TERMO DE ACORDO DE DÍVIDA", pageWidth / 2, yPos, { align: 'center' }); yPos += 8;
+        doc.text("TERMO DE ACORDO DE DÍVIDA", pageWidth / 2, currentY, { align: 'center' }); currentY += 8;
         doc.setFontSize(10); doc.setFont(undefined, 'normal');
-        doc.text(`Acordo ID: ${acordoData.id}`, margin, yPos); yPos += 5;
-        doc.text(`Data do Acordo: ${formatDateFns(typeof acordoData.dataCriacao === 'string' ? parseISO(acordoData.dataCriacao) : acordoData.dataCriacao, "dd/MM/yyyy", {locale: ptBR})}`, margin, yPos); yPos += 8;
-        initialYAfterHeader = yPos;
+        doc.text(`Acordo ID: ${acordoData.id}`, MARGIN, currentY); currentY += 5;
+        doc.text(`Data do Acordo: ${formatDateFns(typeof acordoData.dataCriacao === 'string' ? parseISO(acordoData.dataCriacao) : acordoData.dataCriacao, "dd/MM/yyyy", {locale: ptBR})}`, MARGIN, currentY); currentY += 8;
+        return currentY;
     };
     
-    const addTextWithPageCheck = (text: string, x: number, currentY: number, options?: any): number => {
-        const textLines = doc.splitTextToSize(text, (options?.maxWidth || (pageWidth - margin * 2)));
-        let newY = currentY;
-        textLines.forEach((line: string) => {
-            if (newY + lineHeight > pageHeight - margin - 5) {
-                doc.addPage(); drawPageHeaderAcordo(); newY = initialYAfterHeader;
-            }
-            doc.text(line, x, newY, options);
-            newY += lineHeight;
-        });
-        return newY;
-    };
+    yPos = drawAcordoHeader();
 
-    drawPageHeaderAcordo();
-
-    yPos = addTextWithPageCheck(`Entre: ${config.razaoSocial} (CNPJ: ${config.cnpj}), doravante denominada CREDORA,`, margin, yPos);
-    yPos = addTextWithPageCheck(`E: ${cliente.clienteNome} (CNPJ: ${cliente.clienteCnpj || 'N/A'}), doravante denominado(a) DEVEDOR(A),`, margin, yPos);
-    yPos += lineHeight;
-    yPos = addTextWithPageCheck("Fica estabelecido o presente acordo para quitação dos débitos listados abaixo:", margin, yPos);
-    yPos += lineHeight;
+    yPos = addTextAndPaginate(doc, `Entre: ${config.razaoSocial} (CNPJ: ${config.cnpj}), doravante denominada CREDORA,`, MARGIN, yPos, {}, contentHeight, drawAcordoHeader);
+    yPos = addTextAndPaginate(doc, `E: ${cliente.clienteNome} (CNPJ: ${cliente.clienteCnpj || 'N/A'}), doravante denominado(a) DEVEDOR(A),`, MARGIN, yPos, {}, contentHeight, drawAcordoHeader);
+    yPos += LINE_HEIGHT;
+    yPos = addTextAndPaginate(doc, "Fica estabelecido o presente acordo para quitação dos débitos listados abaixo:", MARGIN, yPos, {}, contentHeight, drawAcordoHeader);
+    yPos += LINE_HEIGHT;
 
     const totalOriginal = acordoData.debitosOriginais.reduce((sum, d) => sum + d.valor, 0);
     const totalJuros = acordoData.debitosOriginais.reduce((sum, d) => sum + (d.jurosCalculado || 0), 0);
@@ -1104,23 +1092,23 @@ export const generateAcordoPDF = (
             (d.jurosCalculado || 0).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'}),
             (d.valor + (d.jurosCalculado || 0)).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'}),
         ]),
-        theme: 'grid', headStyles: { fillColor: [26, 35, 126] }, margin: { left: margin, right: margin },
-        didDrawPage: data => { if(data.pageNumber > 1) drawPageHeaderAcordo(); yPos = data.cursor?.y || initialYAfterHeader; }
+        theme: 'grid', headStyles: { fillColor: [26, 35, 126] }, margin: { left: MARGIN, right: MARGIN },
+        didDrawPage: data => { if(data.pageNumber > 1) yPos = drawAcordoHeader(); else yPos = data.cursor?.y || yPos; }
     });
     yPos = (doc as any).lastAutoTable.finalY + 8;
 
-    yPos = addTextWithPageCheck(`Soma dos Valores Originais: ${totalOriginal.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}`, margin, yPos);
-    yPos = addTextWithPageCheck(`Soma dos Juros Aplicados: ${totalJuros.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}`, margin, yPos);
+    yPos = addTextAndPaginate(doc, `Soma dos Valores Originais: ${totalOriginal.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}`, MARGIN, yPos, {}, contentHeight, drawAcordoHeader);
+    yPos = addTextAndPaginate(doc, `Soma dos Juros Aplicados: ${totalJuros.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}`, MARGIN, yPos, {}, contentHeight, drawAcordoHeader);
     if (acordoData.descontoConcedido > 0) {
-        yPos = addTextWithPageCheck(`Desconto Concedido: ${(acordoData.descontoConcedido).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}`, margin, yPos);
+        yPos = addTextAndPaginate(doc, `Desconto Concedido: ${(acordoData.descontoConcedido).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}`, MARGIN, yPos, {}, contentHeight, drawAcordoHeader);
     }
     doc.setFont(undefined, 'bold');
-    yPos = addTextWithPageCheck(`Valor Final do Acordo: ${acordoData.valorFinalAcordo.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}`, margin, yPos);
+    yPos = addTextAndPaginate(doc, `Valor Final do Acordo: ${acordoData.valorFinalAcordo.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}`, MARGIN, yPos, {}, contentHeight, drawAcordoHeader);
     doc.setFont(undefined, 'normal');
-    yPos += lineHeight;
+    yPos += LINE_HEIGHT;
 
-    yPos = addTextWithPageCheck(`O valor final será pago em ${acordoData.numeroParcelas} parcela(s), conforme detalhamento abaixo:`, margin, yPos);
-    yPos += lineHeight;
+    yPos = addTextAndPaginate(doc, `O valor final será pago em ${acordoData.numeroParcelas} parcela(s), conforme detalhamento abaixo:`, MARGIN, yPos, {}, contentHeight, drawAcordoHeader);
+    yPos += LINE_HEIGHT;
 
     autoTable(doc, {
         startY: yPos,
@@ -1130,23 +1118,22 @@ export const generateAcordoPDF = (
             formatDateFns(typeof p.dataVencimento === 'string' ? parseISO(p.dataVencimento) : p.dataVencimento, "dd/MM/yyyy", {locale: ptBR}),
             p.valor.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'}),
         ]),
-        theme: 'grid', headStyles: { fillColor: [50, 100, 150] }, margin: { left: margin, right: margin },
-        didDrawPage: data => { if(data.pageNumber > 1) drawPageHeaderAcordo(); yPos = data.cursor?.y || initialYAfterHeader; }
+        theme: 'grid', headStyles: { fillColor: [50, 100, 150] }, margin: { left: MARGIN, right: MARGIN },
+        didDrawPage: data => { if(data.pageNumber > 1) yPos = drawAcordoHeader(); else yPos = data.cursor?.y || yPos;}
     });
     yPos = (doc as any).lastAutoTable.finalY + 8;
 
     if(acordoData.observacoes) {
-        yPos = addTextWithPageCheck(`Observações do Acordo: ${acordoData.observacoes}`, margin, yPos, {maxWidth: pageWidth - margin * 2});
+        yPos = addTextAndPaginate(doc, `Observações do Acordo: ${acordoData.observacoes}`, MARGIN, yPos, {maxWidth: pageWidth - MARGIN * 2}, contentHeight, drawAcordoHeader);
     }
-    yPos = addTextWithPageCheck("O não pagamento de qualquer parcela na data aprazada implicará no vencimento antecipado das demais e na aplicação das medidas cabíveis para cobrança do saldo devedor.", margin, yPos, {maxWidth: pageWidth - margin*2});
+    yPos = addTextAndPaginate(doc, "O não pagamento de qualquer parcela na data aprazada implicará no vencimento antecipado das demais e na aplicação das medidas cabíveis para cobrança do saldo devedor.", MARGIN, yPos, {maxWidth: pageWidth - MARGIN*2}, contentHeight, drawAcordoHeader);
     yPos += 15;
 
-    yPos = addTextWithPageCheck("_________________________                     _________________________", pageWidth/2, yPos, {align: 'center'});
-    yPos = addTextWithPageCheck(`${config.razaoSocial} (CREDORA)                                         ${cliente.clienteNome} (DEVEDOR(A))`, pageWidth/2, yPos, {align: 'center'});
+    yPos = addTextAndPaginate(doc, "_________________________                     _________________________", pageWidth/2, yPos, {align: 'center'}, contentHeight, drawAcordoHeader);
+    yPos = addTextAndPaginate(doc, `${config.razaoSocial} (CREDORA)                                         ${cliente.clienteNome} (DEVEDOR(A))`, pageWidth/2, yPos, {align: 'center'}, contentHeight, drawAcordoHeader);
 
-    doc.setLineWidth(0.1); doc.line(margin, pageHeight - 15, pageWidth - margin, pageHeight - 15);
+    doc.setLineWidth(0.1); doc.line(MARGIN, pageHeight - 15, pageWidth - MARGIN, pageHeight - 15);
     doc.setFontSize(8); doc.text(`${config.razaoSocial} - ${config.cnpj}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
 
     doc.save(`Termo_Acordo_${acordoData.id}_${cliente.clienteNome.replace(/[^\w]/g, '_')}.pdf`);
 };
-
