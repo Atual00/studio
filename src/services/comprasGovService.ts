@@ -134,7 +134,7 @@ async function fetchDirectPNCP<T>(
   const queryParams = new URLSearchParams();
   for (const key in params) {
     const value = params[key];
-    if (value !== undefined && value !== null) {
+    if (value !== undefined && value !== null && String(value).trim() !== '') { // Ensure value is not empty string
       queryParams.append(key, String(value));
     }
   }
@@ -168,18 +168,19 @@ async function fetchDirectPNCP<T>(
 
 // --- PNCP MODULE ENDPOINTS (Lei 14.133/2021) ---
 
-// 1. Consultar Contratações PNCP (Lei 14.133/2021)
 export interface ConsultarContratacoesPNCPParams {
   pagina?: number;
   tamanhoPagina?: number;
-  dataInicial: Date; // Date object from form
-  dataFinal: Date;   // Date object from form
+  dataInicial: Date;
+  dataFinal: Date;
   codigoModalidadeContratacao: number;
-  // Optional parameters from the guide that might be added to the form later
-  // unidadeOrgaoCodigoUnidade?: number; // Example of an optional param
+  uf?: string; // Optional: Unidade da Federação
+  termoBusca?: string; // Optional: General search term
+  // Outros filtros opcionais podem ser adicionados aqui conforme a API suportar
+  // e forem necessários no formulário. Ex:
+  // unidadeOrgaoCodigoUnidade?: number;
   // orgaoEntidadeCnpj?: string;
   // itemCategoriaIdPncp?: number;
-  // ... and others from spec if needed
 }
 
 export const consultarContratacoesPNCP = async (params: ConsultarContratacoesPNCPParams) => {
@@ -191,6 +192,12 @@ export const consultarContratacoesPNCP = async (params: ConsultarContratacoesPNC
   };
   if (params.tamanhoPagina) {
     apiParams.tamanhoPagina = params.tamanhoPagina;
+  }
+  if (params.uf) {
+    apiParams.uf = params.uf;
+  }
+  if (params.termoBusca) {
+    apiParams.termoBusca = params.termoBusca;
   }
   // Add other optional params here if they are implemented in the form
   // e.g., if (params.unidadeOrgaoCodigoUnidade) apiParams.unidadeOrgaoCodigoUnidade = params.unidadeOrgaoCodigoUnidade;

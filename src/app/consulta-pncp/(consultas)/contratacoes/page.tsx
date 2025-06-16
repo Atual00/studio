@@ -17,25 +17,27 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover
 import { CalendarIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-// Códigos de Modalidade (exemplos da Lei 14.133/2021 - PNCP)
-// Estes códigos são apenas exemplos. A API PNCP pode ter uma lista mais completa.
-// Veja a documentação oficial do PNCP para a lista completa de códigos de modalidade.
-// Exemplo de códigos conforme o manual, seção 10.1.4:
-// 1: CONCORRÊNCIA; 2: CONCURSO; 3: LEILÃO; 4: PREGÃO; 5: DIÁLOGO COMPETITIVO
-// 6: CREDENCIAMENTO; 7: PRÉ-QUALIFICAÇÃO; 8: SISTEMA DE REGISTRO DE PREÇOS
-// 9: CONTRATAÇÃO DIRETA (DISPENSA); 10: CONTRATAÇÃO DIRETA (INEXIGIBILIDADE)
-// Para o endpoint /v1/contratacoes/publicacao, o manual menciona código 6 para Pregão.
-// É importante verificar a documentação para o endpoint específico.
-// O guia do usuário menciona: "codigoModalidadeContratacao: O código numérico da modalidade que deseja pesquisar (ex: 6 para Pregão Eletrónico)."
 const modalidadesPNCP = [
   { value: 1, label: 'CONCORRÊNCIA' },
   { value: 2, label: 'CONCURSO' },
   { value: 3, label: 'LEILÃO' },
-  { value: 4, label: 'PREGÃO (Genérico)' }, // Pode ser diferente do Pregão Eletrônico para este endpoint
+  { value: 4, label: 'PREGÃO (Genérico)' },
   { value: 5, label: 'DIÁLOGO COMPETITIVO' },
-  { value: 6, label: 'PREGÃO ELETRÔNICO (Conforme guia)' }, // Usando o exemplo do guia.
-  // Adicionar outros códigos conforme necessário ou refinar com base na documentação do PNCP.
+  { value: 6, label: 'PREGÃO ELETRÔNICO (Conforme guia)' },
 ];
+
+const ufsBrasil = [
+    { value: 'AC', label: 'Acre' }, { value: 'AL', label: 'Alagoas' }, { value: 'AP', label: 'Amapá' },
+    { value: 'AM', label: 'Amazonas' }, { value: 'BA', label: 'Bahia' }, { value: 'CE', label: 'Ceará' },
+    { value: 'DF', label: 'Distrito Federal' }, { value: 'ES', label: 'Espírito Santo' }, { value: 'GO', label: 'Goiás' },
+    { value: 'MA', label: 'Maranhão' }, { value: 'MT', label: 'Mato Grosso' }, { value: 'MS', label: 'Mato Grosso do Sul' },
+    { value: 'MG', label: 'Minas Gerais' }, { value: 'PA', label: 'Pará' }, { value: 'PB', label: 'Paraíba' },
+    { value: 'PR', label: 'Paraná' }, { value: 'PE', label: 'Pernambuco' }, { value: 'PI', label: 'Piauí' },
+    { value: 'RJ', label: 'Rio de Janeiro' }, { value: 'RN', label: 'Rio Grande do Norte' }, { value: 'RS', label: 'Rio Grande do Sul' },
+    { value: 'RO', label: 'Rondônia' }, { value: 'RR', label: 'Roraima' }, { value: 'SC', label: 'Santa Catarina' },
+    { value: 'SP', label: 'São Paulo' }, { value: 'SE', label: 'Sergipe' }, { value: 'TO', label: 'Tocantins' }
+];
+
 
 const formSchema = z.object({
   dataInicial: z.date({ required_error: 'Data de Início é obrigatória.' }),
@@ -46,10 +48,8 @@ const formSchema = z.object({
   ),
   pagina: z.preprocess(val => Number(val) || 1, z.number().min(1).optional().default(1)),
   tamanhoPagina: z.preprocess(val => Number(val) || 10, z.number().min(1).max(500).optional().default(10)),
-  // Outros filtros opcionais podem ser adicionados aqui conforme a API suportar
-  // e forem necessários no formulário. Ex:
-  // unidadeOrgaoCodigoUnidade: z.preprocess(val => val ? Number(val) : undefined, z.number().optional()),
-  // orgaoEntidadeCnpj: z.string().optional().transform(val => val || undefined),
+  uf: z.string().optional().transform(val => val === 'todos' ? undefined : val), // 'todos' will be treated as undefined
+  termoBusca: z.string().optional(),
 }).refine(data => data.dataFinal >= data.dataInicial, {
   message: "Data final deve ser maior ou igual à data inicial.",
   path: ["dataFinal"],
@@ -61,9 +61,11 @@ export default function ConsultarContratacoesPncpPage() {
   const defaultValues: FormValues = {
     dataInicial: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
     dataFinal: new Date(),
-    codigoModalidadeContratacao: 6, // Default to Pregão Eletrônico as per guide example
+    codigoModalidadeContratacao: 6,
     pagina: 1,
     tamanhoPagina: 10,
+    uf: undefined,
+    termoBusca: '',
   };
 
   const renderForm = (form: ReturnType<typeof useForm<FormValues>>) => (
@@ -90,13 +92,42 @@ export default function ConsultarContratacoesPncpPage() {
           </FormItem>
         )}
       />
+      <FormField
+        control={form.control}
+        name="uf"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>UF (Estado)</FormLabel>
+            <Select onValueChange={field.onChange} value={field.value || 'todos'}>
+              <FormControl><SelectTrigger><SelectValue placeholder="Todos os Estados" /></SelectTrigger></FormControl>
+              <SelectContent>
+                <SelectItem value="todos">Todos os Estados</SelectItem>
+                {ufsBrasil.map(uf => (
+                  <SelectItem key={uf.value} value={uf.value}>
+                    {uf.label} ({uf.value})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+       <FormField
+        control={form.control}
+        name="termoBusca"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Termo de Busca (Objeto)</FormLabel>
+            <FormControl><Input placeholder="Ex: aquisição de computadores" {...field} value={field.value ?? ''} /></FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
       <FormField control={form.control} name="tamanhoPagina" render={({ field }) => (<FormItem><FormLabel>Resultados por Página</FormLabel><FormControl><Input type="number" min="1" max="500" placeholder="Padrão: 10" {...field} value={field.value ?? ''} onChange={e => field.onChange(parseInt(e.target.value,10) || 10)} /></FormControl><FormMessage /></FormItem>)} />
-      {/* Adicionar aqui outros campos de filtro opcionais se necessário */}
     </div>
   );
 
-  // A função fetchDataFunction agora espera ConsultarContratacoesPNCPParams
-  // que é o tipo de entrada para a função `consultarContratacoesPNCP` no serviço.
   const handleFetchData = async (values: FormValues): Promise<any> => {
      const params: ConsultarContratacoesPNCPParams = {
         dataInicial: values.dataInicial,
@@ -104,6 +135,8 @@ export default function ConsultarContratacoesPncpPage() {
         codigoModalidadeContratacao: values.codigoModalidadeContratacao,
         pagina: values.pagina,
         tamanhoPagina: values.tamanhoPagina,
+        uf: values.uf, // Pass uf
+        termoBusca: values.termoBusca, // Pass termoBusca
      };
      return consultarContratacoesPNCP(params);
   }
@@ -114,7 +147,7 @@ export default function ConsultarContratacoesPncpPage() {
       formSchema={formSchema}
       defaultValues={defaultValues}
       renderFormFields={renderForm}
-      fetchDataFunction={handleFetchData} // Passar a função adaptada
+      fetchDataFunction={handleFetchData}
       formTitle="Consultar Contratações por Data de Publicação (PNCP)"
       formDescription="Busque contratações publicadas no PNCP com base nos filtros abaixo. A API retorna dados no formato JSON."
     />
