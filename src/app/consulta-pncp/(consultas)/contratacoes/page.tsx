@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useForm, FormProvider } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -14,13 +15,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
-import { CalendarIcon, Loader2, Filter } from 'lucide-react';
+import { CalendarIcon, Loader2, Filter, AlertCircle as AlertCircleIcon } from 'lucide-react'; // Renamed AlertCircle to avoid conflict
 import { cn } from '@/lib/utils';
-// ResultsDisplay is used by ApiConsultaForm internally
-// import ResultsDisplay from '@/components/consulta-legado/common/ResultsDisplay'; 
 import { filterLicitacoesWithAI, type FilterLicitacoesInput, type FilterLicitacoesOutput, type LicitacaoSummary } from '@/ai/flows/filter-licitacoes-flow';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { zodResolver } from '@hookform/resolvers/zod';
 
 const modalidadesPNCP = [
   { value: 1, label: 'Leilão - Eletrônico' },
@@ -84,11 +82,10 @@ export default function ConsultarContratacoesPncpPage() {
     aiTipoLicitacao: '', 
   };
 
-  // State to hold the data that will be displayed (could be raw API data or AI-filtered data)
   const [processedDataForDisplay, setProcessedDataForDisplay] = useState<any>(null);
   const [isFilteringWithAI, setIsFilteringWithAI] = useState(false);
   const [aiFilterError, setAiFilterError] = useState<string | null>(null);
-  const [currentPage, setCurrentPage] = useState(1); // Keep track of the page for the API call
+  const [currentPage, setCurrentPage] = useState(1);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -139,30 +136,37 @@ export default function ConsultarContratacoesPncpPage() {
         uf: formValues.uf,
         termoBusca: formValues.termoBusca,
      };
-     let rawResult = await consultarContratacoesPNCP(params);
-     let finalDataToDisplay = rawResult;
+     const rawResult = await consultarContratacoesPNCP(params);
+     
+     let licitacoesMapeadas: LicitacaoSummary[] = [];
+     if (rawResult && rawResult.data && Array.isArray(rawResult.data)) {
+        licitacoesMapeadas = rawResult.data.map((item: any) => ({
+            numeroControlePNCP: item.numeroControlePNCP || 'N/A',
+            objetoCompra: item.objetoCompra || 'N/A',
+            modalidadeContratacaoNome: item.modalidadeContratacaoNome || null,
+            uf: item.unidadeOrgao?.uf || null,
+            municipioNome: item.unidadeOrgao?.municipioNome || null,
+            valorTotalEstimado: typeof item.valorTotalEstimado === 'number' ? item.valorTotalEstimado : null,
+            dataPublicacaoPncp: item.dataPublicacaoPncp || null,
+            linkSistemaOrigem: item.linkSistemaOrigem || null,
+            orgaoEntidadeNome: item.orgaoEntidade?.nomeRazaoSocial || null,
+        }));
+     }
 
-     const { aiRegiao, aiTipoLicitacao } = formValues; // Get AI filters from current form values
+     let finalDataToDisplay = {
+        ...rawResult,
+        data: licitacoesMapeadas, // Use mapped data by default
+     };
+
+     const { aiRegiao, aiTipoLicitacao } = formValues;
 
      if ((aiRegiao && aiRegiao.trim() !== '') || (aiTipoLicitacao && aiTipoLicitacao.trim() !== '')) {
-        if (rawResult && rawResult.data && rawResult.data.length > 0) {
+        if (licitacoesMapeadas.length > 0) {
             setIsFilteringWithAI(true);
             setAiFilterError(null);
             try {
-                const licitacoesToFilter: LicitacaoSummary[] = rawResult.data.map((item: any) => ({
-                    numeroControlePNCP: item.numeroControlePNCP,
-                    objetoCompra: item.objetoCompra,
-                    modalidadeContratacaoNome: item.modalidadeContratacaoNome,
-                    uf: item.unidadeOrgao?.uf,
-                    municipioNome: item.unidadeOrgao?.municipioNome,
-                    valorTotalEstimado: item.valorTotalEstimado,
-                    dataPublicacaoPncp: item.dataPublicacaoPncp,
-                    linkSistemaOrigem: item.linkSistemaOrigem,
-                    orgaoEntidadeNome: item.orgaoEntidade?.nomeRazaoSocial,
-                }));
-
                 const input: FilterLicitacoesInput = {
-                    licitacoes: licitacoesToFilter,
+                    licitacoes: licitacoesMapeadas, // Pass the already mapped data
                     ...(aiRegiao && aiRegiao.trim() !== '' && { regiao: aiRegiao.trim() }),
                     ...(aiTipoLicitacao && aiTipoLicitacao.trim() !== '' && { tipoLicitacao: aiTipoLicitacao.trim() }),
                 };
@@ -170,30 +174,32 @@ export default function ConsultarContratacoesPncpPage() {
                 const aiFilteredResult: FilterLicitacoesOutput = await filterLicitacoesWithAI(input);
                 
                 finalDataToDisplay = {
-                    ...rawResult, // Keep original pagination info
-                    data: aiFilteredResult.filteredLicitacoes,
+                    ...rawResult, // Keep original pagination from API call
+                    data: aiFilteredResult.filteredLicitacoes, // This is LicitacaoSummary[]
                     totalRegistrosFiltradosAI: aiFilteredResult.filteredLicitacoes.length,
                 };
             } catch (err) {
                 console.error("Error during AI filtering:", err);
                 const errorMessage = err instanceof Error ? err.message : "Erro desconhecido no filtro IA.";
                 setAiFilterError(errorMessage);
-                // Fallback to raw data, finalDataToDisplay is already rawResult
+                // Fallback to mapped data (without AI filtering) if AI fails
+                finalDataToDisplay = { ...rawResult, data: licitacoesMapeadas };
             } finally {
                 setIsFilteringWithAI(false);
             }
         } else {
-             // No raw data to filter with AI, or AI filters not active
-            console.log("No raw data for AI filtering or AI filters not active.");
+            console.log("No data for AI filtering or AI filters not active.");
+             finalDataToDisplay = { ...rawResult, data: licitacoesMapeadas };
         }
      }
      
      setProcessedDataForDisplay(finalDataToDisplay);
-     return finalDataToDisplay; // Return the (potentially AI-filtered) data
+     return finalDataToDisplay;
   }
 
   const handleApiFormPageChange = (newPage: number) => {
-    setCurrentPage(newPage); // Update local current page, which then feeds into fetchDataFunction
+    setCurrentPage(newPage); 
+    // The fetchDataFunction in ApiConsultaForm will be called with the new page
   };
 
 
@@ -203,11 +209,11 @@ export default function ConsultarContratacoesPncpPage() {
         formSchema={formSchema}
         defaultValues={defaultValues}
         renderFormFields={renderFormFields}
-        fetchDataFunction={(values) => handleFetchData(values, currentPage)} // Pass currentPage
+        fetchDataFunction={(values) => handleFetchData(values, currentPage)}
         onPageChange={handleApiFormPageChange} 
         formTitle="Consultar Contratações por Data de Publicação (PNCP)"
         formDescription="Busque contratações publicadas no PNCP. Filtros IA são aplicados após a busca inicial."
-        externalData={processedDataForDisplay} // Pass the processed data to ApiConsultaForm
+        externalData={processedDataForDisplay}
       />
       {isFilteringWithAI && (
         <div className="mt-4 flex items-center justify-center text-primary">
@@ -217,7 +223,7 @@ export default function ConsultarContratacoesPncpPage() {
       )}
       {aiFilterError && (
         <Alert variant="destructive" className="mt-4">
-          <AlertCircle className="h-4 w-4"/>
+          <AlertCircleIcon className="h-4 w-4"/>
           <AlertTitle>Erro no Filtro IA</AlertTitle>
           <AlertDescription>{aiFilterError}</AlertDescription>
         </Alert>

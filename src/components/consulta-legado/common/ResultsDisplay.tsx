@@ -2,37 +2,20 @@
 'use client';
 
 import React from 'react';
-import { useRouter } from 'next/navigation'; // Import useRouter
+import { useRouter } from 'next/navigation'; 
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ChevronLeft, ChevronRight, ExternalLink, Info, Send } from 'lucide-react'; // Added Send icon
+import { ChevronLeft, ChevronRight, ExternalLink, Info, Send } from 'lucide-react'; 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { format, parseISO, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-
-interface LicitacaoResultItem {
-  numeroControlePNCP: string;
-  objetoCompra: string;
-  modalidadeContratacaoNome?: string;
-  orgaoEntidadeNome?: string;
-  unidadeOrgao?: {
-    municipioNome?: string;
-    uf?: string;
-  };
-  valorTotalEstimado?: number;
-  dataPublicacaoPncp?: string;
-  linkSistemaOrigem?: string;
-  municipioNome?: string; 
-  uf?: string; 
-  // Potentially other fields from PNCP like 'identificadorCompra'
-  identificadorCompra?: string; 
-}
+import type { LicitacaoSummary } from '@/ai/flows/filter-licitacoes-flow'; // Import LicitacaoSummary type
 
 interface ResultsDisplayProps {
-  data: any;
+  data: any; // Can be raw API response or AI filtered data
   currentPage: number;
   onPageChange: (newPage: number) => void;
 }
@@ -53,7 +36,7 @@ const formatDateForDisplay = (dateString: string | undefined | null): string => 
 };
 
 export default function ResultsDisplay({ data, currentPage, onPageChange }: ResultsDisplayProps) {
-  const router = useRouter(); // Initialize router
+  const router = useRouter(); 
 
   if (data instanceof Error) {
     return (
@@ -74,7 +57,8 @@ export default function ResultsDisplay({ data, currentPage, onPageChange }: Resu
     );
   }
   
-  const itemsData: LicitacaoResultItem[] = data?.data ?? [];
+  // itemsData will always be LicitacaoSummary[] because of the mapping in contracoes/page.tsx
+  const itemsData: LicitacaoSummary[] = data?.data ?? []; 
   const totalRegistros = data?.totalRegistros ?? 0;
   const totalPaginas = data?.totalPaginas ?? 0;
   const paginaAtualApi = data?.numeroPagina ?? currentPage;
@@ -117,9 +101,9 @@ export default function ResultsDisplay({ data, currentPage, onPageChange }: Resu
     );
   }
 
-  const handleAnalisarLicitacao = (item: LicitacaoResultItem) => {
+  const handleAnalisarLicitacao = (item: LicitacaoSummary) => {
     const queryParams = new URLSearchParams();
-    if (item.numeroControlePNCP) queryParams.append('numeroLicitacao', item.numeroControlePNCP); // Using PNCP control number as "numeroLicitacao"
+    if (item.numeroControlePNCP) queryParams.append('numeroLicitacao', item.numeroControlePNCP);
     if (item.orgaoEntidadeNome) queryParams.append('orgaoComprador', item.orgaoEntidadeNome);
     if (item.modalidadeContratacaoNome) queryParams.append('modalidade', item.modalidadeContratacaoNome);
     if (item.objetoCompra) queryParams.append('objetoCompra', item.objetoCompra);
@@ -134,9 +118,9 @@ export default function ResultsDisplay({ data, currentPage, onPageChange }: Resu
     <Card className="mt-6">
       <CardHeader>
         <CardTitle>Resultados da Consulta</CardTitle>
-        {totalRegistrosFiltradosAI !== undefined && totalRegistrosFiltradosAI !== totalRegistros && (
+        {totalRegistrosFiltradosAI !== undefined && itemsData.length !== totalRegistros && (
             <p className="text-sm text-muted-foreground">
-                Mostrando {itemsData.length} de {totalRegistrosFiltradosAI} licitações após filtro IA (original: {totalRegistros} na API).
+                Mostrando {itemsData.length} de {totalRegistrosFiltradosAI} licitações após filtro IA (original da API: {totalRegistros}).
             </p>
         )}
       </CardHeader>
@@ -162,8 +146,8 @@ export default function ResultsDisplay({ data, currentPage, onPageChange }: Resu
                   <TableCell className="max-w-xs truncate" title={item.objetoCompra}>{item.objetoCompra}</TableCell>
                   <TableCell><Badge variant="secondary">{item.modalidadeContratacaoNome || 'N/A'}</Badge></TableCell>
                   <TableCell>
-                    {item.orgaoEntidadeNome || item.unidadeOrgao?.municipioNome || 'N/A'}
-                    {item.unidadeOrgao?.uf && ` (${item.unidadeOrgao.uf})`}
+                    {item.orgaoEntidadeNome || item.municipioNome || 'N/A'}
+                    {item.uf && ` (${item.uf})`}
                   </TableCell>
                   <TableCell>{formatDateForDisplay(item.dataPublicacaoPncp)}</TableCell>
                   <TableCell className="text-right">{formatCurrencyForDisplay(item.valorTotalEstimado)}</TableCell>
@@ -223,3 +207,4 @@ export default function ResultsDisplay({ data, currentPage, onPageChange }: Resu
     </Card>
   );
 }
+
