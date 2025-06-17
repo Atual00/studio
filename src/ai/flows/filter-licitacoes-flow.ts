@@ -15,13 +15,13 @@ import {z} from 'genkit';
 const LicitacaoSummarySchema = z.object({
   numeroControlePNCP: z.string().describe('Unique control number from PNCP.'),
   objetoCompra: z.string().describe('The object of the bid/purchase.'),
-  modalidadeContratacaoNome: z.string().optional().describe('Name of the bid modality (e.g., "Pregão Eletrônico").'),
-  uf: z.string().optional().describe('The state (Unidade Federativa, e.g., "SP", "RJ") where the bid is located.'),
-  municipioNome: z.string().optional().describe('The name of the municipality.'),
+  modalidadeContratacaoNome: z.string().nullable().optional().describe('Name of the bid modality (e.g., "Pregão Eletrônico").'),
+  uf: z.string().nullable().optional().describe('The state (Unidade Federativa, e.g., "SP", "RJ") where the bid is located.'),
+  municipioNome: z.string().nullable().optional().describe('The name of the municipality.'),
   valorTotalEstimado: z.number().optional().describe('Estimated total value of the bid.'),
   dataPublicacaoPncp: z.string().optional().describe('Publication date on PNCP (ISO format YYYY-MM-DD).'),
-  linkSistemaOrigem: z.string().optional().describe('Link to the original system.'),
-  orgaoEntidadeNome: z.string().optional().describe('Name of the purchasing body/entity.'),
+  linkSistemaOrigem: z.string().nullable().optional().describe('Link to the original system.'),
+  orgaoEntidadeNome: z.string().nullable().optional().describe('Name of the purchasing body/entity.'),
 });
 export type LicitacaoSummary = z.infer<typeof LicitacaoSummarySchema>;
 
@@ -59,18 +59,19 @@ Sua tarefa é analisar a lista de licitações fornecida e retornar APENAS aquel
         - Sudeste: ES, MG, RJ, SP
         - Sul: PR, RS, SC
     - Para regiões mais específicas (ex: "Oeste do Paraná"), use bom senso e o contexto do 'municipioNome' e 'uf' para determinar se a licitação se encaixa.
-    - Se o campo 'uf' ou 'municipioNome' estiver ausente, a licitação provavelmente não corresponderá a um filtro de região específico, a menos que seja uma região muito ampla (ex: "Brasil").
+    - Se o campo 'uf' ou 'municipioNome' estiver ausente ou nulo, a licitação provavelmente não corresponderá a um filtro de região específico, a menos que seja uma região muito ampla (ex: "Brasil").
 
 - **Tipo/Objeto Descritivo da Licitação:** Se um filtro de 'tipoLicitacao' for fornecido (ex: "reforma de escola", "compra de computadores", "serviços de limpeza"):
     - Analise o campo 'objetoCompra' de cada licitação.
     - Verifique se o 'objetoCompra' contém o termo fornecido em 'tipoLicitacao' ou palavras-chave semanticamente relacionadas. A correspondência não precisa ser exata, mas o tema deve ser o mesmo.
+    - Analise também 'modalidadeContratacaoNome' para inferir o tipo, se o 'tipoLicitacao' parecer corresponder a uma modalidade (ex: 'pregão', 'leilão').
 
 **Instruções:**
 1.  Se um filtro de 'regiao' for fornecido, inclua apenas licitações que pertençam à região descrita.
-2.  Se um filtro de 'tipoLicitacao' for fornecido, inclua apenas licitações cujo 'objetoCompra' seja compatível com o tipo/objeto descrito.
+2.  Se um filtro de 'tipoLicitacao' for fornecido, inclua apenas licitações cujo 'objetoCompra' ou 'modalidadeContratacaoNome' seja compatível com o tipo/objeto descrito.
 3.  Se AMBOS os filtros ('regiao' e 'tipoLicitacao') forem fornecidos, a licitação DEVE atender a AMBOS os critérios para ser incluída.
 4.  Se NENHUM filtro for fornecido ('regiao' e 'tipoLicitacao' estão ausentes ou vazios), retorne TODAS as licitações da lista de entrada.
-5.  Se um campo relevante para o filtro (como 'uf'/'municipioNome' para região ou 'objetoCompra' para tipo) estiver ausente na licitação, ela não deve corresponder a esse filtro específico.
+5.  Se um campo relevante para o filtro (como 'uf'/'municipioNome' para região ou 'objetoCompra' para tipo) estiver ausente ou nulo na licitação, ela não deve corresponder a esse filtro específico, a menos que o filtro seja genérico o suficiente para ainda se aplicar.
 
 **Lista de Licitações para Filtrar:**
 \`\`\`json
@@ -97,8 +98,13 @@ const filterLicitacoesFlow = ai.defineFlow(
     if (input.licitacoes.length === 0) {
         return { filteredLicitacoes: [] };
     }
-    if (!input.regiao && !input.tipoLicitacao) {
-        return { filteredLicitacoes: input.licitacoes }; // No filters, return all
+    // Only skip AI call if *both* AI-specific filters are absent or empty strings.
+    // An empty string for tipoLicitacao still implies "no specific type filter from AI",
+    // but the prompt logic handles "no filters provided" by returning all.
+    // This check is more about whether the AI's specific filtering logic is needed.
+    if ((!input.regiao || input.regiao.trim() === '') && (!input.tipoLicitacao || input.tipoLicitacao.trim() === '')) {
+        console.log("No AI-specific filters provided (regiao or tipoLicitacao), returning all input licitacoes.");
+        return { filteredLicitacoes: input.licitacoes };
     }
 
     try {
