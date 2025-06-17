@@ -18,8 +18,8 @@ const LicitacaoSummarySchema = z.object({
   modalidadeContratacaoNome: z.string().nullable().optional().describe('Name of the bid modality (e.g., "Pregão Eletrônico").'),
   uf: z.string().nullable().optional().describe('The state (Unidade Federativa, e.g., "SP", "RJ") where the bid is located.'),
   municipioNome: z.string().nullable().optional().describe('The name of the municipality.'),
-  valorTotalEstimado: z.number().optional().describe('Estimated total value of the bid.'),
-  dataPublicacaoPncp: z.string().optional().describe('Publication date on PNCP (ISO format YYYY-MM-DD).'),
+  valorTotalEstimado: z.number().nullable().optional().describe('Estimated total value of the bid.'),
+  dataPublicacaoPncp: z.string().nullable().optional().describe('Publication date on PNCP (ISO format YYYY-MM-DD).'),
   linkSistemaOrigem: z.string().nullable().optional().describe('Link to the original system.'),
   orgaoEntidadeNome: z.string().nullable().optional().describe('Name of the purchasing body/entity.'),
 });
@@ -28,7 +28,7 @@ export type LicitacaoSummary = z.infer<typeof LicitacaoSummarySchema>;
 const FilterLicitacoesInputSchema = z.object({
   licitacoes: z.array(LicitacaoSummarySchema).describe('An array of licitação summary objects to be filtered.'),
   regiao: z.string().optional().describe('The descriptive region to filter by (e.g., "Oeste do Paraná", "Nordeste", "Sul de Minas Gerais"). The AI will interpret this based on UF and Municipio.'),
-  tipoLicitacao: z.string().optional().describe('The descriptive bid type or object to filter by (e.g., "reforma", "obra", "serviços de limpeza"). The AI will search this in "objetoCompra".'),
+  tipoLicitacao: z.string().optional().describe('The descriptive bid type or object to filter by (e.g., "reforma", "obra", "serviços de limpeza"). The AI will search this in "objetoCompra" and "modalidadeContratacaoNome".'),
 });
 export type FilterLicitacoesInput = z.infer<typeof FilterLicitacoesInputSchema>;
 
@@ -98,10 +98,7 @@ const filterLicitacoesFlow = ai.defineFlow(
     if (input.licitacoes.length === 0) {
         return { filteredLicitacoes: [] };
     }
-    // Only skip AI call if *both* AI-specific filters are absent or empty strings.
-    // An empty string for tipoLicitacao still implies "no specific type filter from AI",
-    // but the prompt logic handles "no filters provided" by returning all.
-    // This check is more about whether the AI's specific filtering logic is needed.
+    
     if ((!input.regiao || input.regiao.trim() === '') && (!input.tipoLicitacao || input.tipoLicitacao.trim() === '')) {
         console.log("No AI-specific filters provided (regiao or tipoLicitacao), returning all input licitacoes.");
         return { filteredLicitacoes: input.licitacoes };
@@ -111,16 +108,14 @@ const filterLicitacoesFlow = ai.defineFlow(
       const { output } = await filterLicitacoesPrompt(input);
       if (!output || !Array.isArray(output.filteredLicitacoes)) {
         console.error('AI output structure error for filterLicitacoesFlow:', output);
-        // Fallback to returning all if AI fails structurally, or an empty list if strict filtering is preferred
         return { filteredLicitacoes: input.licitacoes };
       }
       console.log('AI Filtering Output Count:', output.filteredLicitacoes.length);
       return output;
     } catch (error) {
       console.error("Error during AI prompt execution for filterLicitacoesFlow:", error);
-      // Fallback strategy: return all input licitacoes on error to avoid losing data,
-      // or return empty list if stricter failure handling is needed.
       return { filteredLicitacoes: input.licitacoes };
     }
   }
 );
+
