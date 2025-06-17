@@ -48,7 +48,7 @@ export default function FloatingChatButton() {
       variant="default"
       size="icon"
       className={cn(
-        "fixed bottom-6 right-6 left-auto rounded-full shadow-lg z-50 transition-all duration-300 ease-in-out group relative", // Added left-auto
+        "fixed bottom-6 right-6 rounded-full shadow-lg transition-all duration-300 ease-in-out group relative z-50 left-auto", // Ensure z-50 and left-auto are present
         isFloatingButtonMinimized
           ? "h-10 w-10 bg-secondary hover:bg-secondary/80"
           : "h-14 w-14",
@@ -70,3 +70,5 @@ export default function FloatingChatButton() {
     </Button>
   );
 }
+
+    
