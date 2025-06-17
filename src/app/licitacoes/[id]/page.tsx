@@ -49,6 +49,7 @@ import {
     ShieldQuestion,
     FileQuestion,
     CalendarIcon as CalendarDateIcon, // Renamed to avoid conflict with Calendar component
+    ArrowRightCircle,
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -114,10 +115,8 @@ export default function LicitacaoDetalhesPage() {
   const [isValidating, setIsValidating] = useState(false);
   const [bidCriteria, setBidCriteria] = useState<string>('');
 
-  // Removed valorPrimeiroColocadoInput and isSavingBidResult states
-
   // Habilitação States
-  const [ataHabilitacaoConteudo, setAtaHabilitacaoConteudo] = useState<string>(''); // New state
+  const [ataHabilitacaoConteudo, setAtaHabilitacaoConteudo] = useState<string>('');
   const [dataResultadoHabilitacao, setDataResultadoHabilitacao] = useState<Date | undefined>(undefined);
   const [justificativaInabilitacao, setJustificativaInabilitacao] = useState<string>('');
   const [isEmRecursoHabilitacao, setIsEmRecursoHabilitacao] = useState<boolean>(false);
@@ -151,7 +150,6 @@ export default function LicitacaoDetalhesPage() {
             setLicitacao(data);
             setChecklist(data.checklist || {});
             setCurrentStatus(data.status);
-            // Removed valorPrimeiroColocadoInput initialization
 
              if(data.clienteId) {
                  const clientData = await fetchClientDetails(data.clienteId);
@@ -165,7 +163,7 @@ export default function LicitacaoDetalhesPage() {
             }
 
             // Populate Habilitação state from loaded licitacao data
-            setAtaHabilitacaoConteudo(data.ataHabilitacaoConteudo || ''); // Added
+            setAtaHabilitacaoConteudo(data.ataHabilitacaoConteudo || '');
             setDataResultadoHabilitacao(data.dataResultadoHabilitacao instanceof Date ? data.dataResultadoHabilitacao : undefined);
             setJustificativaInabilitacao(data.justificativaInabilitacao || '');
             setIsEmRecursoHabilitacao(data.isEmRecursoHabilitacao || false);
@@ -376,8 +374,6 @@ export default function LicitacaoDetalhesPage() {
       return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   };
 
-  // Removed parseCurrency, handleSaveBidResult, calculateBidDifference, and bidDifference
-
    const handleDelete = async () => {
        if (!licitacao) return;
        setIsDeleting(true);
@@ -404,7 +400,7 @@ export default function LicitacaoDetalhesPage() {
         setError(null);
         try {
             const dataToUpdate: Partial<LicitacaoDetails> = {
-                ataHabilitacaoConteudo, // Added
+                ataHabilitacaoConteudo,
                 dataResultadoHabilitacao,
                 justificativaInabilitacao,
                 isEmRecursoHabilitacao,
@@ -583,6 +579,17 @@ export default function LicitacaoDetalhesPage() {
                    {licitacao.observacoes && (
                        <div className="sm:col-span-2 mt-2 pt-2 border-t"><span className="font-medium">Observações:</span> <p className="text-muted-foreground whitespace-pre-wrap">{licitacao.observacoes}</p></div>
                    )}
+                   {/* Display Recourse Deadlines */}
+                    { (currentStatus === 'RECURSO_HABILITACAO' || currentStatus === 'EM_RECURSO_GERAL') && licitacao.prazoFinalRecursoHabilitacao && (
+                        <div className="sm:col-span-2 text-orange-600 dark:text-orange-400 font-medium flex items-center gap-1">
+                            <CalendarCheck className="h-3.5 w-3.5"/> Prazo Final Recurso: {formatDate(licitacao.prazoFinalRecursoHabilitacao)}
+                        </div>
+                    )}
+                    { (currentStatus === 'CONTRARRAZOES_HABILITACAO' || currentStatus === 'EM_CONTRARRAZAO_GERAL') && licitacao.prazoFinalContrarrazoesHabilitacao && (
+                        <div className="sm:col-span-2 text-orange-600 dark:text-orange-400 font-medium flex items-center gap-1">
+                            <CalendarCheck className="h-3.5 w-3.5"/> Prazo Final Contrarrazões: {formatDate(licitacao.prazoFinalContrarrazoesHabilitacao)}
+                        </div>
+                    )}
                 </CardContent>
             </Card>
 
@@ -842,4 +849,3 @@ export default function LicitacaoDetalhesPage() {
     </div>
   );
 }
-
