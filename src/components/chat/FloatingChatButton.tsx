@@ -49,7 +49,7 @@ export default function FloatingChatButton() {
       variant="default"
       size="icon"
       className={cn(
-        "fixed bottom-6 right-6 rounded-full shadow-lg z-50 transition-all duration-300 ease-in-out group relative", // Added relative for badge
+        "fixed bottom-6 right-6 rounded-full shadow-lg z-50 transition-all duration-300 ease-in-out group relative", // Ensures bottom-right positioning
         isFloatingButtonMinimized 
           ? "h-10 w-10 bg-secondary hover:bg-secondary/80" 
           : "h-14 w-14",
@@ -71,3 +71,4 @@ export default function FloatingChatButton() {
     </Button>
   );
 }
+
