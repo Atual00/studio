@@ -1,3 +1,4 @@
+
 // src/app/api/documentos/[id]/route.ts
 import { NextResponse, type NextRequest } from 'next/server';
 import { getFirestoreAdmin } from '@/lib/firebaseAdmin';
