@@ -5,12 +5,13 @@ import {Card, CardHeader, CardTitle, CardDescription, CardContent} from '@/compo
 import {Calendar} from '@/components/ui/calendar';
 import {Badge} from '@/components/ui/badge';
 import {Loader2} from 'lucide-react';
-import {format} from 'date-fns';
+import {format, parseISO, isValid} from 'date-fns';
 import {ptBR} from 'date-fns/locale';
 import Link from 'next/link';
-import { cn } from '@/lib/utils'; // Import cn utility function
+import { cn } from '@/lib/utils';
+import { fetchLicitacoes, type LicitacaoListItem } from '@/services/licitacaoService';
 
-// --- Mock Data and Types ---
+// --- Types ---
 interface LicitacaoDisputa {
   id: string; // Licitacao ID
   numero: string;
@@ -18,43 +19,6 @@ interface LicitacaoDisputa {
   dataInicio: Date; // This is the dispute date/time
   plataforma: string;
 }
-
-// Mock fetch function
-const fetchDisputas = async (): Promise<LicitacaoDisputa[]> => {
-  console.log('Fetching disputas...');
-  await new Promise(resolve => setTimeout(resolve, 450));
-  return [
-    {
-      id: 'LIC-001',
-      numero: 'PE 123/2024',
-      clienteNome: 'Empresa Exemplo Ltda',
-      dataInicio: new Date(2024, 6, 25, 9, 0),
-      plataforma: 'ComprasNet',
-    },
-    {
-      id: 'LIC-002',
-      numero: 'TP 005/2024',
-      clienteNome: 'Soluções Inovadoras S.A.',
-      dataInicio: new Date(2024, 7, 1, 14, 30),
-      plataforma: 'Portal da Cidade',
-    },
-    {
-      id: 'LIC-003',
-      numero: 'PE 456/2024',
-      clienteNome: 'Comércio Varejista XYZ EIRELI',
-      dataInicio: new Date(2024, 7, 5, 10, 0),
-      plataforma: 'Licitações-e',
-    },
-     { // Add another one for the same day
-      id: 'LIC-008',
-      numero: 'PE 111/2024',
-      clienteNome: 'Soluções Inovadoras S.A.',
-      dataInicio: new Date(2024, 7, 5, 15, 0),
-       plataforma: 'ComprasNet',
-    },
-  ];
-};
-
 
 export default function CalendarioDisputasPage() {
   const [disputas, setDisputas] = useState<LicitacaoDisputa[]>([]);
@@ -67,8 +31,21 @@ export default function CalendarioDisputasPage() {
     const loadDisputas = async () => {
       setLoading(true);
       try {
-        const data = await fetchDisputas();
-        setDisputas(data);
+        const licitacoes = await fetchLicitacoes();
+        const disputasData = licitacoes.map(lic => {
+            const dataInicioDate = typeof lic.dataInicio === 'string' ? parseISO(lic.dataInicio) : lic.dataInicio;
+            if (isValid(dataInicioDate)) {
+                 return {
+                    id: lic.id,
+                    numero: lic.numeroLicitacao,
+                    clienteNome: lic.clienteNome,
+                    dataInicio: dataInicioDate,
+                    plataforma: lic.plataforma,
+                 }
+            }
+            return null;
+        }).filter((item): item is LicitacaoDisputa => item !== null);
+        setDisputas(disputasData);
       } catch (err) {
         console.error('Erro ao buscar datas de disputa:', err);
         // Add toast notification

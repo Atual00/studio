@@ -71,4 +71,12 @@ export async function POST(request: NextRequest) {
     
     const newLicitacao = await docRef.get();
     
-    return NextResponse.json(mapDocToLicitacao(newLic
+    return NextResponse.json(mapDocToLicitacao(newLic), { status: 201 });
+  } catch (error: any) {
+    console.error('Error adding licitação:', error);
+     if (error.message.includes("Firestore Admin not initialized")) {
+      return NextResponse.json({ message: "Backend database not configured.", error: error.message }, { status: 503 });
+    }
+    return NextResponse.json({ message: 'Erro ao adicionar licitação', error: error.message }, { status: 500 });
+  }
+}

@@ -2,7 +2,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { getFirestoreAdmin } from '@/lib/firebaseAdmin';
 import { addMonths, setDate } from 'date-fns';
-import { fetchConfiguracoes } from '@/services/configuracoesService'; // Needs to be adapted if service uses fetch
 import type { LicitacaoDetails, Debito } from '@/services/licitacaoService';
 
 interface RouteParams {

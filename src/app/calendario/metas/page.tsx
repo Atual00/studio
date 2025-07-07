@@ -5,49 +5,19 @@ import {Card, CardHeader, CardTitle, CardDescription, CardContent} from '@/compo
 import {Calendar} from '@/components/ui/calendar';
 import {Badge} from '@/components/ui/badge';
 import {Loader2} from 'lucide-react';
-import {format} from 'date-fns';
+import {format, parseISO, isValid} from 'date-fns';
 import {ptBR} from 'date-fns/locale';
 import Link from 'next/link';
+import { fetchLicitacoes, type LicitacaoListItem } from '@/services/licitacaoService';
 
-// --- Mock Data and Types ---
+
+// --- Types ---
 interface LicitacaoMeta {
   id: string; // Licitacao ID
   numero: string;
   clienteNome: string;
   dataMetaAnalise: Date;
 }
-
-// Mock fetch function
-const fetchMetas = async (): Promise<LicitacaoMeta[]> => {
-  console.log('Fetching metas...');
-  await new Promise(resolve => setTimeout(resolve, 400));
-  return [
-    {
-      id: 'LIC-001',
-      numero: 'PE 123/2024',
-      clienteNome: 'Empresa Exemplo Ltda',
-      dataMetaAnalise: new Date(2024, 6, 20),
-    },
-    {
-      id: 'LIC-002',
-      numero: 'TP 005/2024',
-      clienteNome: 'Soluções Inovadoras S.A.',
-      dataMetaAnalise: new Date(2024, 6, 28),
-    },
-    {
-      id: 'LIC-003',
-      numero: 'PE 456/2024',
-      clienteNome: 'Comércio Varejista XYZ EIRELI',
-      dataMetaAnalise: new Date(2024, 7, 1),
-    },
-     { // Add another one for the same day
-      id: 'LIC-007',
-      numero: 'PE 999/2024',
-      clienteNome: 'Empresa Exemplo Ltda',
-      dataMetaAnalise: new Date(2024, 7, 1),
-    },
-  ];
-};
 
 
 export default function CalendarioMetasPage() {
@@ -61,8 +31,20 @@ export default function CalendarioMetasPage() {
     const loadMetas = async () => {
       setLoading(true);
       try {
-        const data = await fetchMetas();
-        setMetas(data);
+        const licitacoes = await fetchLicitacoes();
+        const metasData = licitacoes.map(lic => {
+            const dataMetaDate = typeof lic.dataMetaAnalise === 'string' ? parseISO(lic.dataMetaAnalise) : lic.dataMetaAnalise;
+            if(isValid(dataMetaDate)) {
+                return {
+                    id: lic.id,
+                    numero: lic.numeroLicitacao,
+                    clienteNome: lic.clienteNome,
+                    dataMetaAnalise: dataMetaDate,
+                }
+            }
+            return null;
+        }).filter((item): item is LicitacaoMeta => item !== null); // Type guard to filter out nulls
+        setMetas(metasData);
       } catch (err) {
         console.error('Erro ao buscar datas meta:', err);
         // Add toast notification
