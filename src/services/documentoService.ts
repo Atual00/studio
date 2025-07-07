@@ -2,9 +2,6 @@
 'use client';
 
 import { parseISO, isValid } from 'date-fns';
-import { fetchClients } from './clientService'; // To get client names
-
-const LOCAL_STORAGE_KEY = 'licitaxDocumentos';
 
 export interface Documento {
   id: string; // Unique ID for the document instance
@@ -12,55 +9,19 @@ export interface Documento {
   clienteNome: string; // Denormalized for display
   tipoDocumento: string; // e.g., CND Federal, Contrato Social
   dataVencimento: Date | null | string; // Allow string for storage, null if not applicable
-  // Could add file link/reference here later
-  // fileUrl?: string;
 }
 
-type DocumentoFormData = Omit<Documento, 'id' | 'clienteNome'>; // Type for adding/updating
+export type DocumentoFormData = Omit<Documento, 'id' | 'clienteNome'>; // Type for adding/updating
 
-// --- Helper Functions ---
-
-const getDocumentosFromStorage = (): Documento[] => {
-  if (typeof window === 'undefined') return [];
-  const storedData = localStorage.getItem(LOCAL_STORAGE_KEY);
-  try {
-    const items: any[] = storedData ? JSON.parse(storedData) : [];
-    // Ensure dates are parsed (or null) and clienteNome exists
-     return items.map(item => ({
-        ...item,
-        dataVencimento: item.dataVencimento ? parseAndValidateDate(item.dataVencimento) : null,
-        clienteNome: item.clienteNome || 'Cliente Desconhecido', // Fallback
-     })).filter(item => item.clienteId); // Ensure basic validity
-  } catch (e) {
-    console.error("Error parsing documentos from localStorage:", e);
-    localStorage.removeItem(LOCAL_STORAGE_KEY);
-    return [];
-  }
-};
-
-const saveDocumentosToStorage = (documentos: Documento[]): void => {
-  if (typeof window === 'undefined') return;
-  try {
-     // Store dates as ISO strings or null
-     const itemsToStore = documentos.map(doc => ({
-        ...doc,
-        dataVencimento: doc.dataVencimento instanceof Date && isValid(doc.dataVencimento)
-                         ? doc.dataVencimento.toISOString()
-                         : null,
-     }));
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(itemsToStore));
-  } catch (e) {
-    console.error("Error saving documentos to localStorage:", e);
-  }
-};
-
-// Helper to parse and validate date strings
-const parseAndValidateDate = (dateStr: string | Date | null): Date | null => {
-   if (!dateStr) return null;
-   if (dateStr instanceof Date && isValid(dateStr)) return dateStr;
-   if (typeof dateStr === 'string') {
+// Helper to parse and validate date strings or Date objects
+const parseAndValidateDate = (dateInput: string | Date | null | undefined): Date | null => {
+   if (!dateInput) return null;
+   if (dateInput instanceof Date) {
+       return isValid(dateInput) ? dateInput : null;
+   }
+   if (typeof dateInput === 'string') {
       try {
-         const parsed = parseISO(dateStr);
+         const parsed = parseISO(dateInput);
          return isValid(parsed) ? parsed : null;
       } catch {
          return null;
@@ -72,116 +33,99 @@ const parseAndValidateDate = (dateStr: string | Date | null): Date | null => {
 // --- Service Functions ---
 
 /**
- * Fetches all stored documents.
+ * Fetches all stored documents from the backend API.
  * @returns A promise that resolves to an array of Documento objects.
  */
 export const fetchDocumentos = async (): Promise<Documento[]> => {
-  console.log('Fetching documentos...');
-  await new Promise(resolve => setTimeout(resolve, 250)); // Simulate API delay
-  return getDocumentosFromStorage();
+  console.log('Fetching documentos from API...');
+  try {
+    const response = await fetch('/api/documentos');
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ message: response.statusText }));
+      throw new Error(`Failed to fetch documents: ${errorData.message || response.status}`);
+    }
+    const documentos: Documento[] = await response.json();
+    // Parse date strings into Date objects for client-side use
+    return documentos.map(doc => ({
+      ...doc,
+      dataVencimento: parseAndValidateDate(doc.dataVencimento)
+    }));
+  } catch (error) {
+    console.error('Error in fetchDocumentos:', error);
+    throw error;
+  }
 };
 
 /**
- * Adds a new document.
+ * Adds a new document via the backend API.
  * @param data The data for the new document (DocumentoFormData).
- * @returns A promise that resolves to the newly created Documento (with ID and client name) or null on failure.
+ * @returns A promise that resolves to the newly created Documento or null on failure.
  */
 export const addDocumento = async (data: DocumentoFormData): Promise<Documento | null> => {
-  console.log("Adding new documento:", data);
-  await new Promise(resolve => setTimeout(resolve, 400)); // Simulate API delay
-
-  if (!data.clienteId || !data.tipoDocumento) {
-    console.error("Document add failed: Missing required fields");
-    throw new Error("Cliente e Tipo de Documento são obrigatórios.");
+  console.log("Adding new documento via API:", data);
+  try {
+    const response = await fetch('/api/documentos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...data,
+        // Ensure date is sent in a format the backend can parse (ISO string)
+        dataVencimento: data.dataVencimento instanceof Date && isValid(data.dataVencimento)
+                         ? data.dataVencimento.toISOString()
+                         : null,
+      }),
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ message: response.statusText }));
+      throw new Error(errorData.message || 'Failed to add document');
+    }
+    const newDoc = await response.json();
+    // Parse date on return for immediate use
+    return { ...newDoc, dataVencimento: parseAndValidateDate(newDoc.dataVencimento) };
+  } catch (error) {
+    console.error('Error in addDocumento:', error);
+    throw error;
   }
-
-  // Fetch client name
-  const clients = await fetchClients(); // Assuming this returns { id: string, name: string }[]
-  const cliente = clients.find(c => c.id === data.clienteId);
-  if (!cliente) {
-      throw new Error(`Cliente com ID ${data.clienteId} não encontrado.`);
-  }
-
-  const documentos = getDocumentosFromStorage();
-
-  const newDocumento: Documento = {
-    ...data,
-    id: `DOC-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-    clienteNome: cliente.name, // Use fetched client name
-    dataVencimento: parseAndValidateDate(data.dataVencimento), // Ensure date is valid Date or null
-  };
-
-  const updatedDocumentos = [newDocumento, ...documentos]; // Add to the beginning
-  saveDocumentosToStorage(updatedDocumentos);
-  return newDocumento;
 };
 
 /**
- * Updates an existing document.
+ * Updates an existing document via the backend API.
  * @param id The ID of the document to update.
  * @param data The partial data to update (Partial<DocumentoFormData>).
  * @returns A promise that resolves to true on success, false on failure.
  */
 export const updateDocumento = async (id: string, data: Partial<DocumentoFormData>): Promise<boolean> => {
-  console.log(`Updating documento ID: ${id} with data:`, data);
-  await new Promise(resolve => setTimeout(resolve, 300)); // Simulate API delay
-
-  const documentos = getDocumentosFromStorage();
-  const docIndex = documentos.findIndex(d => d.id === id);
-
-  if (docIndex === -1) {
-    console.error(`Document update failed: Document with ID ${id} not found.`);
-    return false;
+  console.log(`Updating documento ID via API: ${id}`);
+  try {
+    const response = await fetch(`/api/documentos/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...data,
+        dataVencimento: data.dataVencimento instanceof Date && isValid(data.dataVencimento)
+                         ? data.dataVencimento.toISOString()
+                         : (data.dataVencimento === null ? null : undefined), // Handle explicit null or ignore
+      }),
+    });
+    return response.ok;
+  } catch (error) {
+    console.error('Error in updateDocumento:', error);
+    throw error;
   }
-
-   const existingDoc = documentos[docIndex];
-   let clienteNome = existingDoc.clienteNome;
-
-   // If client ID is changing, fetch the new client name
-   if (data.clienteId && data.clienteId !== existingDoc.clienteId) {
-      const clients = await fetchClients();
-      const newCliente = clients.find(c => c.id === data.clienteId);
-       if (!newCliente) {
-           throw new Error(`Novo Cliente com ID ${data.clienteId} não encontrado.`);
-       }
-       clienteNome = newCliente.name;
-   }
-
-
-  const updatedDocumento: Documento = {
-    ...existingDoc,
-    ...data,
-     clienteNome: clienteNome, // Update client name if needed
-    // Ensure date is valid Date or null
-    dataVencimento: data.dataVencimento !== undefined
-                     ? parseAndValidateDate(data.dataVencimento)
-                     : existingDoc.dataVencimento, // Keep existing if not provided
-  };
-
-  const updatedDocumentos = [...documentos];
-  updatedDocumentos[docIndex] = updatedDocumento;
-
-  saveDocumentosToStorage(updatedDocumentos);
-  return true;
 };
 
 /**
- * Deletes a document by ID.
+ * Deletes a document by ID via the backend API.
  * @param id The ID of the document to delete.
  * @returns A promise that resolves to true on success, false on failure.
  */
 export const deleteDocumento = async (id: string): Promise<boolean> => {
-  console.log(`Deleting documento ID: ${id}`);
-  await new Promise(resolve => setTimeout(resolve, 500)); // Simulate API delay
-
-  const documentos = getDocumentosFromStorage();
-  const updatedDocumentos = documentos.filter(d => d.id !== id);
-
-  if (documentos.length === updatedDocumentos.length) {
-    console.error(`Document delete failed: Document with ID ${id} not found.`);
-    return false; // Not found
+  console.log(`Deleting documento ID via API: ${id}`);
+  try {
+    const response = await fetch(`/api/documentos/${id}`, { method: 'DELETE' });
+    return response.ok;
+  } catch (error) {
+    console.error('Error in deleteDocumento:', error);
+    throw error;
   }
-
-  saveDocumentosToStorage(updatedDocumentos);
-  return true;
 };

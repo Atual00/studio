@@ -2,7 +2,7 @@
 // src/app/documentos/page.tsx
 'use client'; // For state and effects
 
-import React, {useState, useEffect} from 'react'; // Import React
+import React, {useState, useEffect, useCallback} from 'react'; // Import React
 import {Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter} from '@/components/ui/card';
 import {Table, TableHeader, TableRow, TableHead, TableBody, TableCell} from '@/components/ui/table';
 import {Input} from '@/components/ui/input';
@@ -31,7 +31,7 @@ import {format, differenceInDays, isBefore, addDays, parseISO, startOfDay, endOf
 import {ptBR} from 'date-fns/locale';
 import {Button} from '@/components/ui/button';
 import Link from 'next/link'; // For linking to client
-import { fetchDocumentos, addDocumento, updateDocumento, deleteDocumento, type Documento } from '@/services/documentoService'; // Import document service
+import { fetchDocumentos, addDocumento, updateDocumento, deleteDocumento, type Documento, type DocumentoFormData } from '@/services/documentoService'; // Import document service
 import { fetchClients, type ClientListItem } from '@/services/clientService'; // Import client service
 import { useForm, Controller } from 'react-hook-form'; // Import react-hook-form
 import { z } from 'zod'; // Import zod
@@ -46,6 +46,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { useToast } from '@/hooks/use-toast';
 
 
 // --- Zod Schema for Form ---
@@ -54,8 +55,6 @@ const documentoSchema = z.object({
   tipoDocumento: z.string().min(1, "Tipo de documento é obrigatório"),
   dataVencimento: z.date().nullable().optional(), // Allow null or undefined
 });
-
-type DocumentoFormData = z.infer<typeof documentoSchema>;
 
 
 // --- Helper Function for Status ---
@@ -88,7 +87,7 @@ const getDocumentStatus = (vencimento: Date | null | string): { label: string; c
      if (daysDiff <= 0) { // Expires today
         return { label: `Vence Hoje`, color: 'destructive', icon: AlertCircle };
      } else if (daysDiff <= 15) {
-        return { label: `Vence em ${daysDiff}d`, color: 'destructive', icon: AlertCircle }; // Urgent (within 15 days) - Changed color
+        return { label: `Vence em ${daysDiff}d`, color: 'destructive', icon: CalendarClock }; // Urgent (within 15 days) - Changed color and icon
      } else if (daysDiff <= 30) {
         return { label: `Vence em ${daysDiff}d`, color: 'warning', icon: CalendarClock }; // Warning (within 30 days)
      } else {
@@ -139,6 +138,7 @@ export default function DocumentosPage() {
   const [isSubmitting, setIsSubmitting] = useState(false); // State for form submission
   const [editingDocumento, setEditingDocumento] = useState<Documento | null>(null); // State for editing
   const [isDialogOpen, setIsDialogOpen] = useState(false); // State for dialog visibility
+  const { toast } = useToast();
 
   // Initialize form using useForm hook
   const form = useForm<DocumentoFormData>({
@@ -149,31 +149,34 @@ export default function DocumentosPage() {
           dataVencimento: null,
       }
   });
+  
+  const loadInitialData = useCallback(async () => {
+    // Set loading states at the beginning
+    setLoading(true);
+    setLoadingClients(true);
+    setError(null);
+    try {
+      const [docData, clientData] = await Promise.all([
+        fetchDocumentos(),
+        fetchClients()
+      ]);
+      setDocumentos(docData);
+      setFilteredDocumentos(docData);
+      setClientes(clientData);
+    } catch (err) {
+      const errorMessage = `Falha ao carregar dados. ${err instanceof Error ? err.message : ''}`;
+      console.error('Erro ao buscar documentos ou clientes:', err);
+      setError(errorMessage);
+      toast({ title: "Erro de Carregamento", description: errorMessage, variant: "destructive" });
+    } finally {
+      setLoading(false);
+      setLoadingClients(false);
+    }
+  }, [toast]);
 
-   // Fetch data on mount
   useEffect(() => {
-    const loadInitialData = async () => {
-      setLoading(true);
-      setLoadingClients(true);
-      setError(null);
-      try {
-        const [docData, clientData] = await Promise.all([
-          fetchDocumentos(),
-          fetchClients() // Use correct import name
-        ]);
-        setDocumentos(docData);
-        setFilteredDocumentos(docData); // Initialize filtered list
-        setClientes(clientData);
-      } catch (err) {
-        console.error('Erro ao buscar documentos ou clientes:', err);
-        setError('Falha ao carregar dados.');
-      } finally {
-        setLoading(false);
-        setLoadingClients(false);
-      }
-    };
     loadInitialData();
-  }, []);
+  }, [loadInitialData]);
 
 
    // Filter logic
@@ -228,8 +231,8 @@ export default function DocumentosPage() {
          let dateA: Date | null = null;
          let dateB: Date | null = null;
 
-         try { dateA = a.dataVencimento ? (a.dataVencimento instanceof Date ? a.dataVencimento : parseISO(a.dataVencimento)) : null; if (dateA && !isValid(dateA)) dateA = null; } catch { dateA = null; }
-         try { dateB = b.dataVencimento ? (b.dataVencimento instanceof Date ? b.dataVencimento : parseISO(b.dataVencimento)) : null; if (dateB && !isValid(dateB)) dateB = null; } catch { dateB = null; }
+         try { dateA = a.dataVencimento ? (a.dataVencimento instanceof Date ? a.dataVencimento : parseISO(a.dataVencimento as string)) : null; if (dateA && !isValid(dateA)) dateA = null; } catch { dateA = null; }
+         try { dateB = b.dataVencimento ? (b.dataVencimento instanceof Date ? b.dataVencimento : parseISO(b.dataVencimento as string)) : null; if (dateB && !isValid(dateB)) dateB = null; } catch { dateB = null; }
 
          const today = startOfDay(new Date());
          const isAExpired = dateA ? isBefore(startOfDay(dateA), today) : false;
@@ -251,25 +254,20 @@ export default function DocumentosPage() {
     setFilteredDocumentos(result);
   }, [documentos, filterCliente, filterTipo, filterStatus]);
 
-
-   // Get unique document types for filtering
-   const uniqueTipos = Array.from(new Set(documentos.map(d => d.tipoDocumento)));
-
    // --- CRUD Handlers ---
 
     const handleOpenDialog = (doc: Documento | null = null) => {
         setEditingDocumento(doc);
-        // Reset form values based on whether editing or adding
         form.reset(doc ? {
              clienteId: doc.clienteId,
              tipoDocumento: doc.tipoDocumento,
-             dataVencimento: parseAndValidateDate(doc.dataVencimento), // Ensure it's Date or null
+             dataVencimento: parseAndValidateDate(doc.dataVencimento),
          } : {
-            clienteId: '', // Reset to empty string or suitable default
+            clienteId: '',
             tipoDocumento: '',
             dataVencimento: null,
         });
-        setError(null); // Clear previous errors
+        setError(null);
         setIsDialogOpen(true);
     };
 
@@ -278,70 +276,36 @@ export default function DocumentosPage() {
         setError(null);
         try {
             if (editingDocumento) {
-                // Update
-                const success = await updateDocumento(editingDocumento.id, data);
-                if (success) {
-                    // Update the document list with potentially new client name and parsed date
-                    setDocumentos(prev => prev.map(d => {
-                        if (d.id === editingDocumento.id) {
-                             // Find the new client name if client ID changed
-                            const newClientName = data.clienteId === d.clienteId
-                                ? d.clienteNome
-                                : clientes.find(c => c.id === data.clienteId)?.name || 'N/A';
-                            return {
-                                ...d,
-                                ...data,
-                                clienteNome: newClientName,
-                                dataVencimento: parseAndValidateDate(data.dataVencimento) // Ensure date is correct type
-                            };
-                        }
-                        return d;
-                    }));
-                    // toast({ title: "Sucesso", description: "Documento atualizado." });
-                } else {
-                    throw new Error("Falha ao atualizar documento.");
-                }
+                await updateDocumento(editingDocumento.id, data);
+                toast({ title: "Sucesso", description: "Documento atualizado." });
             } else {
-                // Add
-                const newDoc = await addDocumento(data);
-                if (newDoc) {
-                    // Ensure date is parsed correctly when adding to list
-                    const docWithParsedDate = {...newDoc, dataVencimento: parseAndValidateDate(newDoc.dataVencimento)};
-                    setDocumentos(prev => [docWithParsedDate, ...prev]);
-                    // toast({ title: "Sucesso", description: "Documento adicionado." });
-                } else {
-                    throw new Error("Falha ao adicionar documento.");
-                }
+                await addDocumento(data);
+                toast({ title: "Sucesso", description: "Documento adicionado." });
             }
-            setIsDialogOpen(false); // Close dialog on success
+            setIsDialogOpen(false);
+            await loadInitialData(); // Reload data to show changes
         } catch (err) {
+            const errorMessage = `Erro ao salvar: ${err instanceof Error ? err.message : 'Erro desconhecido'}`;
             console.error("Erro ao salvar documento:", err);
-            setError(`Erro ao salvar: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
-            // Keep dialog open on error
+            setError(errorMessage);
+            toast({ title: "Erro", description: errorMessage, variant: "destructive" });
         } finally {
             setIsSubmitting(false);
         }
     };
 
-     const handleDelete = async (id: string) => {
+    const handleDelete = async (id: string) => {
         const confirmed = confirm("Tem certeza que deseja excluir este documento?");
         if (!confirmed) return;
-
-        // Find the document to potentially show its name in the toast
-        const docToDelete = documentos.find(d => d.id === id);
-
         try {
-            const success = await deleteDocumento(id);
-            if (success) {
-                setDocumentos(prev => prev.filter(d => d.id !== id));
-                // toast({ title: "Sucesso", description: `Documento "${docToDelete?.tipoDocumento || id}" excluído.` });
-            } else {
-                throw new Error("Falha ao excluir documento no backend.");
-            }
+            await deleteDocumento(id);
+            toast({ title: "Sucesso", description: `Documento excluído.` });
+            await loadInitialData(); // Reload data
         } catch (err) {
+            const errorMessage = `Erro ao excluir: ${err instanceof Error ? err.message : 'Erro desconhecido'}`;
             console.error("Erro ao excluir documento:", err);
-            setError(`Erro ao excluir: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
-            // toast({ title: "Erro", description: `Não foi possível excluir o documento. ${err instanceof Error ? err.message : ''}`, variant: "destructive" });
+            setError(errorMessage);
+            toast({ title: "Erro", description: errorMessage, variant: "destructive" });
         }
     };
 
@@ -386,7 +350,6 @@ export default function DocumentosPage() {
                  )}
               </SelectContent>
             </Select>
-             {/* Changed Select to Input for Tipo filter */}
              <Input
                  placeholder="Filtrar por Tipo..."
                  value={filterTipo}
@@ -421,7 +384,7 @@ export default function DocumentosPage() {
              <CardDescription>Acompanhe a validade dos documentos dos seus clientes.</CardDescription>
          </CardHeader>
           <CardContent>
-             {error && (
+             {error && !loading && ( // Show error only if not loading
                  <Alert variant="destructive" className="mb-4">
                      <AlertCircle className="h-4 w-4" />
                      <AlertTitle>Erro</AlertTitle>
@@ -448,7 +411,6 @@ export default function DocumentosPage() {
                     ) : filteredDocumentos.length > 0 ? (
                        filteredDocumentos.map(doc => {
                             const statusInfo = getDocumentStatus(doc.dataVencimento);
-                             // Use parsed and validated date for formatting
                              const parsedDate = parseAndValidateDate(doc.dataVencimento);
                              const formattedDate = parsedDate
                                  ? format(parsedDate, "dd/MM/yyyy", { locale: ptBR })
@@ -475,10 +437,6 @@ export default function DocumentosPage() {
                                        <Button variant="ghost" size="icon" title="Excluir" onClick={() => handleDelete(doc.id)}>
                                            <Trash2 className="h-4 w-4 text-destructive" />
                                        </Button>
-                                       {/* Add button for uploading file later */}
-                                        {/* <Button variant="outline" size="sm" title="Anexar Arquivo">
-                                           <FileText className="h-4 w-4" />
-                                        </Button> */}
                                     </TableCell>
                                 </TableRow>
                             );
@@ -486,13 +444,12 @@ export default function DocumentosPage() {
                     ) : (
                         <TableRow>
                             <TableCell colSpan={5} className="text-center text-muted-foreground h-24">
-                                Nenhum documento encontrado com os filtros aplicados.
+                                {error ? 'Não foi possível carregar os documentos.' : 'Nenhum documento encontrado com os filtros aplicados.'}
                             </TableCell>
                         </TableRow>
                     )}
                 </TableBody>
              </Table>
-              {/* Add Pagination */}
           </CardContent>
       </Card>
 
@@ -505,10 +462,9 @@ export default function DocumentosPage() {
                         Preencha as informações do documento e sua data de vencimento (se aplicável).
                     </DialogDescription>
                 </DialogHeader>
-                {/* Wrap form elements in the Form component */}
                 <Form {...form}>
                   <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4 py-4">
-                     {error && (
+                     {error && ( // Display submission-specific error
                          <Alert variant="destructive">
                              <AlertCircle className="h-4 w-4" />
                              <AlertTitle>Erro ao Salvar</AlertTitle>
@@ -583,8 +539,8 @@ export default function DocumentosPage() {
                                     <PopoverContent className="w-auto p-0" align="start">
                                         <Calendar
                                             mode="single"
-                                            selected={field.value ?? undefined} // Pass undefined if null
-                                            onSelect={(date) => field.onChange(date || null)} // Set to null if date is cleared
+                                            selected={field.value ?? undefined}
+                                            onSelect={(date) => field.onChange(date || null)}
                                             initialFocus
                                             disabled={isSubmitting}
                                         />
@@ -595,8 +551,6 @@ export default function DocumentosPage() {
                             </FormItem>
                         )}
                         />
-
-
                     <DialogFooter>
                         <DialogClose asChild>
                             <Button type="button" variant="outline" disabled={isSubmitting}>Cancelar</Button>
@@ -607,13 +561,9 @@ export default function DocumentosPage() {
                         </Button>
                     </DialogFooter>
                   </form>
-                </Form> {/* Close Form component */}
+                </Form>
             </DialogContent>
         </Dialog>
-
-
     </div>
   );
 }
-
-    
