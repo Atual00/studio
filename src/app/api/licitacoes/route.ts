@@ -4,8 +4,14 @@ import { getFirestoreAdmin } from '@/lib/firebaseAdmin';
 import type { LicitacaoDetails } from '@/services/licitacaoService'; // Reuse type from service
 
 // Helper to convert Firestore data (with Timestamps) to our LicitacaoDetails type (with ISO strings)
-const mapDocToLicitacao = (doc: admin.firestore.DocumentSnapshot): LicitacaoDetails => {
-  const data = doc.data()!;
+const mapDocToLicitacao = (doc: admin.firestore.DocumentSnapshot): LicitacaoDetails | null => {
+  const data = doc.data();
+  // Basic validation: ensure required date fields exist and are valid timestamps before converting
+  if (!data || !data.dataInicio?.toDate || !data.dataMetaAnalise?.toDate) {
+    console.warn(`[API] Skipping malformed licitacao document (missing or invalid dates): ${doc.id}`);
+    return null; // Return null for invalid documents
+  }
+
   return {
     ...data,
     id: doc.id,
@@ -23,9 +29,14 @@ export async function GET(request: NextRequest) {
     const db = getFirestoreAdmin();
     const licitacoesSnapshot = await db.collection('licitacoes').orderBy('dataInicio', 'desc').get();
     const licitacoes: LicitacaoDetails[] = [];
+    
     licitacoesSnapshot.forEach(doc => {
-      licitacoes.push(mapDocToLicitacao(doc));
+      const mappedDoc = mapDocToLicitacao(doc);
+      if (mappedDoc) { // Only push valid, successfully mapped documents
+        licitacoes.push(mappedDoc);
+      }
     });
+
     return NextResponse.json(licitacoes, { status: 200 });
   } catch (error: any) {
     console.error('Error fetching licitacoes:', error);
@@ -71,7 +82,14 @@ export async function POST(request: NextRequest) {
     
     const newLicitacao = await docRef.get();
     
-    return NextResponse.json(mapDocToLicitacao(newLic), { status: 201 });
+    const mappedNewLicitacao = mapDocToLicitacao(newLicitacao);
+
+    if (!mappedNewLicitacao) {
+        // This case should be rare as we just created it, but it's a good safeguard
+        throw new Error("Failed to map the newly created licitação.");
+    }
+    
+    return NextResponse.json(mappedNewLicitacao, { status: 201 });
   } catch (error: any) {
     console.error('Error adding licitação:', error);
      if (error.message.includes("Firestore Admin not initialized")) {

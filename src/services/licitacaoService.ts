@@ -170,7 +170,10 @@ export interface AcordoDetalhes {
 export const fetchLicitacoes = async (): Promise<LicitacaoListItem[]> => {
   console.log('Fetching all licitações from API...');
   const response = await fetch('/api/licitacoes');
-  if (!response.ok) throw new Error('Failed to fetch licitações');
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: response.statusText }));
+    throw new Error(`Failed to fetch licitações: ${errorData.message || response.status}`);
+  }
   const licitacoes: LicitacaoDetails[] = await response.json();
   return licitacoes.map(({ id, clienteNome, modalidade, numeroLicitacao, plataforma, dataInicio, dataMetaAnalise, status, orgaoComprador }) => ({
     id, clienteNome, modalidade, numeroLicitacao, plataforma, dataInicio, dataMetaAnalise, status, orgaoComprador
@@ -188,7 +191,8 @@ export const fetchLicitacaoDetails = async (id: string): Promise<LicitacaoDetail
   const response = await fetch(`/api/licitacoes/${id}`);
   if (!response.ok) {
     if (response.status === 404) return null;
-    throw new Error('Failed to fetch licitação details');
+    const errorData = await response.json().catch(() => ({ message: response.statusText }));
+    throw new Error(`Failed to fetch licitação details: ${errorData.message || response.status}`);
   }
   return response.json();
 };
@@ -235,12 +239,20 @@ export const updateLicitacao = async (id: string, data: Partial<LicitacaoDetails
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: response.statusText }));
+    throw new Error(`Failed to update licitação: ${errorData.message || response.status}`);
+  }
   return response.ok;
 };
 
 export const deleteLicitacao = async (id: string): Promise<boolean> => {
   console.log(`Deleting licitação ID via API: ${id}`);
   const response = await fetch(`/api/licitacoes/${id}`, { method: 'DELETE' });
+   if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: response.statusText }));
+    throw new Error(`Failed to delete licitação: ${errorData.message || response.status}`);
+  }
   return response.ok;
 };
 
@@ -250,7 +262,10 @@ export const deleteLicitacao = async (id: string): Promise<boolean> => {
 export const fetchDebitos = async (): Promise<Debito[]> => {
   console.log('Fetching all debitos from API...');
   const response = await fetch('/api/debitos');
-  if (!response.ok) throw new Error('Failed to fetch debitos');
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: response.statusText }));
+    throw new Error(`Failed to fetch debitos: ${errorData.message || response.status}`);
+  }
   return response.json();
 };
 
@@ -261,6 +276,10 @@ export const updateDebitoStatus = async (id: string, newStatus: 'PAGO' | 'ENVIAD
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ status: newStatus }),
   });
+   if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: response.statusText }));
+    throw new Error(`Failed to update debit status: ${errorData.message || response.status}`);
+  }
   return response.ok;
 };
 
