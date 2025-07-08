@@ -29,19 +29,26 @@ export async function GET(request: NextRequest) {
     const db = getFirestoreAdmin();
     const documentosSnapshot = await db.collection('documentos').get();
     const documentos: Documento[] = [];
+    
     documentosSnapshot.forEach(doc => {
-      const mappedDoc = mapDocToDocumento(doc);
-      if (mappedDoc) { // Only push valid, successfully mapped documents
-        documentos.push(mappedDoc);
+      try { // Add a try-catch block for each document to prevent one bad record from failing the whole request
+        const mappedDoc = mapDocToDocumento(doc);
+        if (mappedDoc) { 
+          documentos.push(mappedDoc);
+        }
+      } catch (e: any) {
+        console.error(`[API] Failed to process 'documento' with ID: ${doc.id}. Error: ${e.message}`);
+        // This will skip the problematic document and continue with the others.
       }
     });
+
     return NextResponse.json(documentos, { status: 200 });
   } catch (error: any) {
-    console.error('Error fetching documentos:', error);
+    console.error('Error fetching documentos collection:', error);
     if (error.message.includes("Firestore Admin not initialized")) {
       return NextResponse.json({ message: "Backend database not configured.", error: error.message }, { status: 503 });
     }
-    return NextResponse.json({ message: 'Error fetching documentos', error: error.message }, { status: 500 });
+    return NextResponse.json({ message: 'Error fetching documentos collection', error: error.message }, { status: 500 });
   }
 }
 
