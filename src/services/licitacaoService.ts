@@ -172,7 +172,7 @@ export const fetchLicitacoes = async (): Promise<LicitacaoListItem[]> => {
   const response = await fetch('/api/licitacoes');
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ message: response.statusText }));
-    const serverErrorMessage = errorData.error || errorData.message || `Status: ${response.status}`;
+    const serverErrorMessage = errorData.message || errorData.error || `Status: ${response.status}`;
     throw new Error(`Error fetching licitações: ${serverErrorMessage}`);
   }
   const licitacoes: LicitacaoDetails[] = await response.json();
@@ -193,7 +193,7 @@ export const fetchLicitacaoDetails = async (id: string): Promise<LicitacaoDetail
   if (!response.ok) {
     if (response.status === 404) return null;
     const errorData = await response.json().catch(() => ({ message: response.statusText }));
-    const serverErrorMessage = errorData.error || errorData.message || `Status: ${response.status}`;
+    const serverErrorMessage = errorData.message || errorData.error || `Status: ${response.status}`;
     throw new Error(`Error fetching licitação details: ${serverErrorMessage}`);
   }
   return response.json();
@@ -243,7 +243,8 @@ export const updateLicitacao = async (id: string, data: Partial<LicitacaoDetails
   });
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ message: response.statusText }));
-    throw new Error(`Failed to update licitação: ${errorData.message || response.status}`);
+    const serverErrorMessage = errorData.message || errorData.error || 'Failed to update licitação';
+    throw new Error(serverErrorMessage);
   }
   return response.ok;
 };
@@ -253,7 +254,8 @@ export const deleteLicitacao = async (id: string): Promise<boolean> => {
   const response = await fetch(`/api/licitacoes/${id}`, { method: 'DELETE' });
    if (!response.ok) {
     const errorData = await response.json().catch(() => ({ message: response.statusText }));
-    throw new Error(`Failed to delete licitação: ${errorData.message || response.status}`);
+    const serverErrorMessage = errorData.message || errorData.error || 'Failed to delete licitação';
+    throw new Error(serverErrorMessage);
   }
   return response.ok;
 };
@@ -266,7 +268,8 @@ export const fetchDebitos = async (): Promise<Debito[]> => {
   const response = await fetch('/api/debitos');
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ message: response.statusText }));
-    throw new Error(`Failed to fetch debitos: ${errorData.message || response.status}`);
+    const serverErrorMessage = errorData.message || errorData.error || `Status: ${response.status}`;
+    throw new Error(`Failed to fetch debitos: ${serverErrorMessage}`);
   }
   return response.json();
 };
@@ -280,7 +283,8 @@ export const updateDebitoStatus = async (id: string, newStatus: 'PAGO' | 'ENVIAD
   });
    if (!response.ok) {
     const errorData = await response.json().catch(() => ({ message: response.statusText }));
-    throw new Error(`Failed to update debit status: ${errorData.message || response.status}`);
+    const serverErrorMessage = errorData.message || errorData.error || `Status: ${response.status}`;
+    throw new Error(`Failed to update debit status: ${serverErrorMessage}`);
   }
   return response.ok;
 };
@@ -296,7 +300,8 @@ export const addDebitoAvulso = async (data: DebitoAvulsoFormData): Promise<Debit
   });
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ message: response.statusText }));
-    throw new Error(errorData.message || 'Failed to add avulso debit');
+    const serverErrorMessage = errorData.message || errorData.error || 'Failed to add avulso debit';
+    throw new Error(serverErrorMessage);
   }
   return response.json();
 };

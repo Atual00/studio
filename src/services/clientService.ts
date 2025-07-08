@@ -18,7 +18,8 @@ export const fetchClients = async (): Promise<ClientListItem[]> => {
     const response = await fetch('/api/clients');
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ message: response.statusText }));
-      throw new Error(`Failed to fetch clients: ${errorData.message || response.status}`);
+      const serverErrorMessage = errorData.message || errorData.error || `Status: ${response.status}`;
+      throw new Error(`Failed to fetch clients: ${serverErrorMessage}`);
     }
     const clients: ClientDetails[] = await response.json();
     return clients.map(({ id, razaoSocial, nomeFantasia, cnpj, enderecoCidade }) => ({
@@ -49,7 +50,8 @@ export const fetchClientDetails = async (id: string): Promise<ClientDetails | nu
         return null; // Client not found
       }
       const errorData = await response.json().catch(() => ({ message: response.statusText }));
-      throw new Error(`Failed to fetch client details: ${errorData.message || response.status}`);
+      const serverErrorMessage = errorData.message || errorData.error || `Status: ${response.status}`;
+      throw new Error(`Failed to fetch client details: ${serverErrorMessage}`);
     }
     return await response.json();
   } catch (error) {
@@ -75,11 +77,8 @@ export const addClient = async (data: ClientFormValues): Promise<ClientDetails |
     });
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ message: response.statusText }));
-      // Specific error for duplicate CNPJ, assuming API returns a specific message or status
-      if (response.status === 409 && errorData.message && errorData.message.includes('CNPJ')) {
-           throw new Error(errorData.message);
-      }
-      throw new Error(`Failed to add client: ${errorData.message || response.status}`);
+      const serverErrorMessage = errorData.message || errorData.error || `Status: ${response.status}`;
+      throw new Error(`Failed to add client: ${serverErrorMessage}`);
     }
     return await response.json();
   } catch (error) {
@@ -106,13 +105,9 @@ export const updateClient = async (id: string, data: Partial<ClientFormValues>):
     });
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ message: response.statusText }));
-       if (response.status === 409 && errorData.message && errorData.message.includes('CNPJ')) {
-           throw new Error(errorData.message);
-      }
-      throw new Error(`Failed to update client: ${errorData.message || response.status}`);
+      const serverErrorMessage = errorData.message || errorData.error || `Status: ${response.status}`;
+      throw new Error(`Failed to update client: ${serverErrorMessage}`);
     }
-    // Assuming the API returns a success status or the updated client
-    // For boolean, just checking response.ok might be sufficient if API returns 200/204 on success.
     return response.ok;
   } catch (error) {
     console.error('Error in updateClient:', error);
@@ -133,9 +128,10 @@ export const deleteClient = async (id: string): Promise<boolean> => {
     });
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ message: response.statusText }));
-      throw new Error(`Failed to delete client: ${errorData.message || response.status}`);
+      const serverErrorMessage = errorData.message || errorData.error || `Status: ${response.status}`;
+      throw new Error(`Failed to delete client: ${serverErrorMessage}`);
     }
-    return response.ok; // Or true if API returns 204 No Content
+    return response.ok;
   } catch (error) {
     console.error('Error in deleteClient:', error);
     throw error;

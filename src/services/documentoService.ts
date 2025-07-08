@@ -42,7 +42,7 @@ export const fetchDocumentos = async (): Promise<Documento[]> => {
     const response = await fetch('/api/documentos');
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ message: response.statusText }));
-      const serverErrorMessage = errorData.error || errorData.message || response.statusText;
+      const serverErrorMessage = errorData.message || errorData.error || response.statusText;
       throw new Error(`Error fetching documents: ${serverErrorMessage}`);
     }
     const documentos: Documento[] = await response.json();
@@ -78,7 +78,8 @@ export const addDocumento = async (data: DocumentoFormData): Promise<Documento |
     });
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ message: response.statusText }));
-      throw new Error(errorData.message || 'Failed to add document');
+      const serverErrorMessage = errorData.message || errorData.error || 'Failed to add document';
+      throw new Error(serverErrorMessage);
     }
     const newDoc = await response.json();
     // Parse date on return for immediate use
@@ -108,6 +109,11 @@ export const updateDocumento = async (id: string, data: Partial<DocumentoFormDat
                          : (data.dataVencimento === null ? null : undefined), // Handle explicit null or ignore
       }),
     });
+     if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: response.statusText }));
+        const serverErrorMessage = errorData.message || errorData.error || 'Failed to update document';
+        throw new Error(serverErrorMessage);
+    }
     return response.ok;
   } catch (error) {
     console.error('Error in updateDocumento:', error);
@@ -124,6 +130,11 @@ export const deleteDocumento = async (id: string): Promise<boolean> => {
   console.log(`Deleting documento ID via API: ${id}`);
   try {
     const response = await fetch(`/api/documentos/${id}`, { method: 'DELETE' });
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: response.statusText }));
+        const serverErrorMessage = errorData.message || errorData.error || 'Failed to delete document';
+        throw new Error(serverErrorMessage);
+    }
     return response.ok;
   } catch (error) {
     console.error('Error in deleteDocumento:', error);
