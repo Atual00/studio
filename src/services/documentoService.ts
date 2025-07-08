@@ -42,7 +42,7 @@ export const fetchDocumentos = async (): Promise<Documento[]> => {
     const response = await fetch('/api/documentos');
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ message: response.statusText }));
-      throw new Error(`Failed to fetch documents: ${errorData.message || response.status}`);
+      throw new Error(`Error fetching documents: ${errorData.message || response.status}`);
     }
     const documentos: Documento[] = await response.json();
     // Parse date strings into Date objects for client-side use

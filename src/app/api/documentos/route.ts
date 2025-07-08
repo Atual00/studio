@@ -5,15 +5,22 @@ import { getFirestoreAdmin } from '@/lib/firebaseAdmin';
 import type { Documento } from '@/services/documentoService';
 
 // Helper to convert Firestore data (with Timestamps) to our Documento type (with ISO strings)
-const mapDocToDocumento = (doc: admin.firestore.DocumentSnapshot): Documento => {
-  const data = doc.data()!;
+const mapDocToDocumento = (doc: admin.firestore.DocumentSnapshot): Documento | null => {
+  const data = doc.data();
+
+  // Basic validation: if data is missing or missing required fields, skip this document
+  if (!data || !data.clienteId || !data.tipoDocumento) {
+    console.warn(`[API] Skipping malformed documento document (missing required fields): ${doc.id}`);
+    return null;
+  }
+  
   return {
     id: doc.id,
     clienteId: data.clienteId,
-    clienteNome: data.clienteNome,
+    clienteNome: data.clienteNome || 'Cliente Desconhecido', // Add fallback
     tipoDocumento: data.tipoDocumento,
-    // Ensure date is converted from Firestore Timestamp to ISO string for JSON serialization
-    dataVencimento: data.dataVencimento ? data.dataVencimento.toDate().toISOString() : null,
+    // Safely convert date from Firestore Timestamp to ISO string for JSON serialization
+    dataVencimento: data.dataVencimento?.toDate ? data.dataVencimento.toDate().toISOString() : null,
   } as Documento;
 };
 
@@ -23,7 +30,10 @@ export async function GET(request: NextRequest) {
     const documentosSnapshot = await db.collection('documentos').get();
     const documentos: Documento[] = [];
     documentosSnapshot.forEach(doc => {
-      documentos.push(mapDocToDocumento(doc));
+      const mappedDoc = mapDocToDocumento(doc);
+      if (mappedDoc) { // Only push valid, successfully mapped documents
+        documentos.push(mappedDoc);
+      }
     });
     return NextResponse.json(documentos, { status: 200 });
   } catch (error: any) {
@@ -63,7 +73,12 @@ export async function POST(request: NextRequest) {
     const docRef = await db.collection('documentos').add(newDocumentoData);
     const newDoc = await docRef.get();
     
-    return NextResponse.json(mapDocToDocumento(newDoc), { status: 201 });
+    const mappedNewDoc = mapDocToDocumento(newDoc);
+    if (!mappedNewDoc) {
+      throw new Error("Failed to map the newly created document.");
+    }
+
+    return NextResponse.json(mappedNewDoc, { status: 201 });
   } catch (error: any)
   {
     console.error('Error adding documento:', error);
