@@ -172,7 +172,8 @@ export const fetchLicitacoes = async (): Promise<LicitacaoListItem[]> => {
   const response = await fetch('/api/licitacoes');
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ message: response.statusText }));
-    throw new Error(`Failed to fetch licitações: ${errorData.message || response.status}`);
+    const serverErrorMessage = errorData.error || errorData.message || `Status: ${response.status}`;
+    throw new Error(`Error fetching licitações: ${serverErrorMessage}`);
   }
   const licitacoes: LicitacaoDetails[] = await response.json();
   return licitacoes.map(({ id, clienteNome, modalidade, numeroLicitacao, plataforma, dataInicio, dataMetaAnalise, status, orgaoComprador }) => ({
@@ -192,7 +193,8 @@ export const fetchLicitacaoDetails = async (id: string): Promise<LicitacaoDetail
   if (!response.ok) {
     if (response.status === 404) return null;
     const errorData = await response.json().catch(() => ({ message: response.statusText }));
-    throw new Error(`Failed to fetch licitação details: ${errorData.message || response.status}`);
+    const serverErrorMessage = errorData.error || errorData.message || `Status: ${response.status}`;
+    throw new Error(`Error fetching licitação details: ${serverErrorMessage}`);
   }
   return response.json();
 };

@@ -31,19 +31,24 @@ export async function GET(request: NextRequest) {
     const licitacoes: LicitacaoDetails[] = [];
     
     licitacoesSnapshot.forEach(doc => {
-      const mappedDoc = mapDocToLicitacao(doc);
-      if (mappedDoc) { // Only push valid, successfully mapped documents
-        licitacoes.push(mappedDoc);
+      try { // Add a try-catch for each document to prevent one bad record from failing the whole request
+        const mappedDoc = mapDocToLicitacao(doc);
+        if (mappedDoc) { // Only push valid, successfully mapped documents
+          licitacoes.push(mappedDoc);
+        }
+      } catch (e: any) {
+        console.error(`[API] Failed to process 'licitacao' with ID: ${doc.id}. Error: ${e.message}`);
+        // This will skip the problematic document and continue with the others.
       }
     });
 
     return NextResponse.json(licitacoes, { status: 200 });
   } catch (error: any) {
-    console.error('Error fetching licitacoes:', error);
+    console.error('Error fetching licitacoes collection:', error);
     if (error.message.includes("Firestore Admin not initialized")) {
       return NextResponse.json({ message: "Backend database not configured.", error: error.message }, { status: 503 });
     }
-    return NextResponse.json({ message: 'Error fetching licitacoes', error: error.message }, { status: 500 });
+    return NextResponse.json({ message: 'Error fetching licitacoes collection', error: error.message }, { status: 500 });
   }
 }
 
