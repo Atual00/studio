@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/alert-dialog"; // Import AlertDialog components
 import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {Separator} from '@/components/ui/separator';
-import {Loader2, Edit, ArrowLeft, Building, User, Banknote, MapPin, Mail, Phone, FileText, Trash2, XCircle} from 'lucide-react';
+import {Loader2, Edit, ArrowLeft, Building, User, Banknote, MapPin, Mail, Phone, FileText, Trash2, XCircle, Gavel, KeyRound} from 'lucide-react';
 import Link from 'next/link';
 import { type ClientFormValues, type ClientDetails } from '@/components/clientes/client-form'; // Import types from form
 import { Badge } from '@/components/ui/badge'; // Import Badge component
@@ -138,22 +138,26 @@ export default function ClienteDetalhesPage() {
   return (
     <div className="space-y-6">
       {/* Header with Back, Edit, and Delete buttons */}
-      <div className="flex flex-wrap justify-between items-center gap-2">
-         <Button variant="outline" onClick={() => router.push('/clientes')}>
-          <ArrowLeft className="mr-2 h-4 w-4" /> Voltar para Lista
-        </Button>
-        <div className="flex gap-2">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+         <div>
+            <Button variant="outline" onClick={() => router.push('/clientes')}>
+              <ArrowLeft className="mr-2 h-4 w-4" /> Voltar para Lista
+            </Button>
+         </div>
+        <div className="flex gap-2 flex-wrap justify-end">
+            <Link href={`/licitacoes?cliente=${client.id}`} passHref><Button variant="outline" size="sm"><Gavel className="mr-2 h-4 w-4"/>Ver Licitações</Button></Link>
+            <Link href={`/senhas?clienteId=${client.id}`} passHref><Button variant="outline" size="sm"><KeyRound className="mr-2 h-4 w-4"/>Ver Senhas</Button></Link>
             <Link href={`/clientes/${id}/editar`} passHref>
-                <Button disabled={isDeleting}>
-                    <Edit className="mr-2 h-4 w-4" /> Editar Cliente
+                <Button disabled={isDeleting} variant="default" size="sm">
+                    <Edit className="mr-2 h-4 w-4" /> Editar
                 </Button>
             </Link>
             {/* Delete Button with Confirmation Dialog */}
              <AlertDialog>
                 <AlertDialogTrigger asChild>
-                    <Button variant="destructive" disabled={isDeleting}>
+                    <Button variant="destructive" size="sm" disabled={isDeleting}>
                         {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-                        Excluir Cliente
+                        Excluir
                     </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
@@ -263,11 +267,6 @@ export default function ClienteDetalhesPage() {
           )}
 
         </CardContent>
-         {/* Footer could contain quick links related to the client */}
-         <CardFooter className="flex justify-end gap-2">
-             <Link href={`/licitacoes?cliente=${client.id}`} passHref><Button variant="outline">Ver Licitações</Button></Link>
-             <Link href={`/senhas?cliente=${client.id}`} passHref><Button variant="outline">Ver Senhas</Button></Link>
-         </CardFooter>
       </Card>
     </div>
   );

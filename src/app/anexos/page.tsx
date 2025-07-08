@@ -1,4 +1,3 @@
-
 // src/app/anexos/page.tsx
 'use client';
 
@@ -151,11 +150,22 @@ export default function AnexosPage() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl">Gerador de Anexos e Declarações</CardTitle>
-          <CardDescription>
-            Selecione um cliente, cole seu modelo de declaração (com placeholders como {'{{razaoSocial}}'}, {'{{cnpj}}'}, {'{{diaAtual}}'}, etc.)
-            e use a IA para preenchê-lo. Em seguida, gere o PDF.
-          </CardDescription>
+          <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-4">
+              <div>
+                <CardTitle className="text-2xl">Gerador de Anexos e Declarações</CardTitle>
+                <CardDescription className="mt-1">
+                  Selecione um cliente, cole seu modelo de declaração (com placeholders) e use a IA para preenchê-lo.
+                </CardDescription>
+              </div>
+              <Button
+                onClick={handleFillDeclaration}
+                disabled={isProcessingAI || !selectedClientId || !declarationTemplate.trim() || loadingClients}
+                className="w-full sm:w-auto shrink-0"
+              >
+                {isProcessingAI ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Bot className="mr-2 h-4 w-4" />}
+                {isProcessingAI ? 'Processando...' : 'Preencher com IA'}
+              </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           {error && (
@@ -212,33 +222,26 @@ export default function AnexosPage() {
             </p>
           </div>
 
-          <Button
-            onClick={handleFillDeclaration}
-            disabled={isProcessingAI || !selectedClientId || !declarationTemplate.trim() || loadingClients}
-            className="w-full sm:w-auto"
-          >
-            {isProcessingAI ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Bot className="mr-2 h-4 w-4" />}
-            {isProcessingAI ? 'Processando com IA...' : 'Preencher com IA'}
-          </Button>
-
           {filledDeclaration && (
             <div className="space-y-2 pt-4 border-t">
-              <Label htmlFor="filled-declaration">Declaração Preenchida pela IA</Label>
+               <div className="flex justify-between items-center">
+                  <Label htmlFor="filled-declaration">Declaração Preenchida pela IA</Label>
+                  <Button
+                    onClick={handleGeneratePdf}
+                    disabled={!filledDeclaration.trim()}
+                    variant="outline"
+                    size="sm"
+                  >
+                    <FileText className="mr-2 h-4 w-4" />
+                    Gerar PDF
+                  </Button>
+               </div>
               <Textarea
                 id="filled-declaration"
                 value={filledDeclaration}
                 readOnly
                 className="min-h-[200px] font-mono text-sm bg-muted/30"
               />
-              <Button
-                onClick={handleGeneratePdf}
-                disabled={!filledDeclaration.trim()}
-                variant="outline"
-                className="w-full sm:w-auto"
-              >
-                <FileText className="mr-2 h-4 w-4" />
-                Gerar PDF
-              </Button>
             </div>
           )}
         </CardContent>

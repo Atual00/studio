@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge'; 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger, DialogClose } from '@/components/ui/dialog';
-import { Loader2, Play, StopCircle, AlertCircle, Check, X, Percent, FileText, Info, MessageSquare, Send, PlusCircle, Trash2, Edit as EditIcon, ArrowRightCircle } from 'lucide-react'; // Added ArrowRightCircle
+import { Loader2, Play, StopCircle, AlertCircle, Check, X, Percent, FileText, Info, MessageSquare, Send, PlusCircle, Trash2, Edit as EditIcon, ArrowRightCircle, ArrowLeft } from 'lucide-react'; // Added ArrowRightCircle
 import { useToast } from '@/hooks/use-toast';
 import { fetchLicitacaoDetails, updateLicitacao, type LicitacaoDetails, type DisputaConfig, type DisputaLog, formatElapsedTime, statusMap, generateAtaSessaoPDF, type DisputaMensagem, type PropostaItem, generatePropostaFinalPDF } from '@/services/licitacaoService';
 import { fetchConfiguracoes, type ConfiguracoesFormValues } from '@/services/configuracoesService';
@@ -464,16 +464,44 @@ export default function DisputaIndividualPage() {
 
   return (
     <div className="space-y-6">
+      <Button variant="outline" size="sm" onClick={() => router.push('/sala-disputa')} disabled={isSubmitting}>
+        <ArrowLeft className="mr-2 h-4 w-4" />
+        Voltar para Lista de Disputas
+      </Button>
+
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <span>{licitacao.numeroLicitacao} - {licitacao.clienteNome}</span>
-            <Badge variant={statusMap[licitacao.status]?.color as any || 'outline'}>
-                {statusMap[licitacao.status]?.icon && React.createElement(statusMap[licitacao.status].icon, {className: "h-3 w-3 mr-1 inline"})}
-                {statusMap[licitacao.status]?.label || licitacao.status}
-            </Badge>
-          </CardTitle>
-          <CardDescription>{licitacao.orgaoComprador} | Plataforma: {licitacao.plataforma} | Início: {displayDataInicio}</CardDescription>
+          <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-4">
+            <div>
+              <CardTitle className="flex items-center gap-3">
+                <span>{licitacao.numeroLicitacao} - {licitacao.clienteNome}</span>
+                <Badge variant={statusMap[licitacao.status]?.color as any || 'outline'}>
+                    {statusMap[licitacao.status]?.icon && React.createElement(statusMap[licitacao.status].icon, {className: "h-3 w-3 mr-1 inline"})}
+                    {statusMap[licitacao.status]?.label || licitacao.status}
+                </Badge>
+              </CardTitle>
+              <CardDescription>{licitacao.orgaoComprador} | Plataforma: {licitacao.plataforma} | Início: {displayDataInicio}</CardDescription>
+            </div>
+            <div className="flex gap-2 flex-shrink-0">
+               {isDisputaConfiguravel && (
+                  <Button onClick={handleIniciarDisputa} disabled={isSubmitting || valorCalculadoLimite === undefined || parseCurrency(valorReferenciaEditalInput) === undefined || (licitacao.itensProposta || []).length === 0}>
+                    {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
+                    Iniciar Disputa
+                  </Button>
+                )}
+                {isDisputaAtiva && (
+                  <Button variant="destructive" onClick={handleFinalizarDisputa} disabled={isSubmitting}>
+                    {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <StopCircle className="mr-2 h-4 w-4" />}
+                    Encerrar Disputa
+                  </Button>
+                )}
+                {isDisputaFinalizada && (
+                  <Button onClick={handleFinalizarDisputa} disabled={isSubmitting}> {/* Re-opens the outcome dialog */}
+                      <EditIcon className="mr-2 h-4 w-4" /> Ver/Refazer Finalização
+                  </Button>
+                )}
+            </div>
+          </div>
         </CardHeader>
 
         {isDisputaConfiguravel && (
@@ -657,29 +685,6 @@ export default function DisputaIndividualPage() {
                  </div>
             </CardContent>
         )}
-
-        <CardFooter className="flex justify-between">
-          <Button variant="outline" onClick={() => router.push('/sala-disputa')} disabled={isSubmitting}>
-            Voltar para Lista
-          </Button>
-          {isDisputaConfiguravel && (
-            <Button onClick={handleIniciarDisputa} disabled={isSubmitting || valorCalculadoLimite === undefined || parseCurrency(valorReferenciaEditalInput) === undefined || (licitacao.itensProposta || []).length === 0}>
-              {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
-              Iniciar Disputa
-            </Button>
-          )}
-          {isDisputaAtiva && (
-            <Button variant="destructive" onClick={handleFinalizarDisputa} disabled={isSubmitting}>
-              {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <StopCircle className="mr-2 h-4 w-4" />}
-              Encerrar Disputa
-            </Button>
-          )}
-           {isDisputaFinalizada && (
-             <Button onClick={handleFinalizarDisputa} disabled={isSubmitting}> {/* Re-opens the outcome dialog */}
-                 <EditIcon className="mr-2 h-4 w-4" /> Ver/Refazer Finalização
-             </Button>
-           )}
-        </CardFooter>
       </Card>
 
       {/* Item Modal */}

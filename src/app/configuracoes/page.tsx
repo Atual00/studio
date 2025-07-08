@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
-import { Loader2, AlertCircle, Users, Image as ImageIcon, Upload, Trash2, PlusCircle, User } from 'lucide-react'; // Added icons
+import { Loader2, AlertCircle, Users, Image as ImageIcon, Upload, Trash2, PlusCircle, User, Save } from 'lucide-react'; // Added icons
 import { useToast } from '@/hooks/use-toast';
 import ConfiguracoesForm, { type ConfiguracoesFormValues } from '@/components/configuracoes/configuracoes-form';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
@@ -278,7 +278,7 @@ export default function ConfiguracoesPage() {
   // --- Render ---
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-semibold">Configurações da Assessoria</h2>
+      <h2 className="text-2xl font-semibold">Configurações Gerais</h2>
 
       {/* Configurações Form Card */}
       <Card>
@@ -322,8 +322,24 @@ export default function ConfiguracoesPage() {
       {/* Logo Upload Card */}
       <Card>
          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><ImageIcon className="h-5 w-5" /> Logo da Assessoria</CardTitle>
-             <CardDescription>Faça upload do logo que aparecerá nos cabeçalhos dos relatórios (PNG, JPG).</CardDescription>
+            <div className="flex justify-between items-start gap-4">
+                <div>
+                    <CardTitle className="flex items-center gap-2"><ImageIcon className="h-5 w-5" /> Logo da Assessoria</CardTitle>
+                    <CardDescription className="mt-1">Faça upload do logo que aparecerá nos relatórios (PNG, JPG).</CardDescription>
+                </div>
+                <div className="flex flex-wrap gap-2 shrink-0">
+                    <Button onClick={handleUploadLogo} disabled={!selectedLogoFile || isUploadingLogo || isDeletingLogo}>
+                        {isUploadingLogo ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                        {isUploadingLogo ? 'Enviando...' : 'Salvar Logo'}
+                    </Button>
+                    {logoPreview && ( // Show delete button only if a logo exists
+                    <Button variant="destructive" onClick={handleDeleteLogo} disabled={isDeletingLogo || isUploadingLogo}>
+                        {isDeletingLogo ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                        {isDeletingLogo ? 'Removendo...' : 'Remover Logo'}
+                    </Button>
+                    )}
+                </div>
+            </div>
          </CardHeader>
           <CardContent className="space-y-4">
              {configError && (isUploadingLogo || isDeletingLogo) && ( // Show logo specific errors here too
@@ -345,18 +361,6 @@ export default function ConfiguracoesPage() {
                  <div className="flex-1 space-y-2">
                     <Label htmlFor="logo-upload">Selecionar Arquivo</Label>
                     <Input id="logo-upload" type="file" accept="image/png, image/jpeg, image/gif" onChange={handleLogoFileChange} disabled={isUploadingLogo || isDeletingLogo} />
-                    <div className="flex flex-wrap gap-2 mt-2">
-                         <Button onClick={handleUploadLogo} disabled={!selectedLogoFile || isUploadingLogo || isDeletingLogo}>
-                             {isUploadingLogo ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-                             {isUploadingLogo ? 'Enviando...' : 'Salvar Logo'}
-                         </Button>
-                         {logoPreview && ( // Show delete button only if a logo exists
-                            <Button variant="destructive" onClick={handleDeleteLogo} disabled={isDeletingLogo || isUploadingLogo}>
-                                {isDeletingLogo ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-                                {isDeletingLogo ? 'Removendo...' : 'Remover Logo'}
-                            </Button>
-                         )}
-                    </div>
                  </div>
             </div>
          </CardContent>
@@ -367,8 +371,125 @@ export default function ConfiguracoesPage() {
       {user?.role === 'admin' && (
            <Card>
              <CardHeader>
-               <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5"/> Gerenciamento de Usuários</CardTitle>
-               <CardDescription>Adicione ou remova usuários do sistema.</CardDescription>
+               <div className="flex justify-between items-start gap-4">
+                    <div>
+                        <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5"/> Gerenciamento de Usuários</CardTitle>
+                        <CardDescription className="mt-1">Adicione ou remova usuários do sistema.</CardDescription>
+                    </div>
+                    <Dialog open={isUserDialogOpen} onOpenChange={setIsUserDialogOpen}>
+                        <DialogTrigger asChild>
+                            <Button className="shrink-0">
+                                <PlusCircle className="mr-2 h-4 w-4"/> Adicionar Usuário
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-[425px]">
+                            <DialogHeader>
+                                <DialogTitle>Novo Usuário</DialogTitle>
+                                <DialogDescription>Preencha os dados para criar um novo acesso.</DialogDescription>
+                            </DialogHeader>
+                            {/* User Form using react-hook-form */}
+                            <Form {...userForm}>
+                            <form onSubmit={userForm.handleSubmit(handleAddUserSubmit)} className="space-y-4 py-4">
+                                {userError && ( // Show add user error inside dialog
+                                <Alert variant="destructive">
+                                    <AlertCircle className="h-4 w-4" />
+                                    <AlertTitle>Erro ao Adicionar</AlertTitle>
+                                    <AlertDescription>{userError}</AlertDescription>
+                                </Alert>
+                                )}
+                                <FormField
+                                    control={userForm.control}
+                                    name="fullName"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Nome Completo</FormLabel>
+                                            <FormControl>
+                                                <Input placeholder="Nome e Sobrenome" {...field} disabled={isAddingUser} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={userForm.control}
+                                    name="cpf"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>CPF</FormLabel>
+                                            <FormControl>
+                                                <Input
+                                                    placeholder="XXX.XXX.XXX-XX"
+                                                    {...field}
+                                                    onChange={(e) => field.onChange(formatCpf(e.target.value))}
+                                                    disabled={isAddingUser}
+                                                />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={userForm.control}
+                                    name="username"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Usuário (login)</FormLabel>
+                                            <FormControl>
+                                                <Input placeholder="Nome de usuário para login" {...field} disabled={isAddingUser} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={userForm.control}
+                                    name="password"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Senha</FormLabel>
+                                            <FormControl>
+                                                <Input type="password" placeholder="Senha de acesso" {...field} disabled={isAddingUser} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={userForm.control}
+                                    name="role"
+                                    render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Permissão</FormLabel>
+                                        <Select onValueChange={field.onChange} value={field.value} disabled={isAddingUser}>
+                                        <FormControl>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Selecione a permissão" />
+                                            </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent>
+                                            <SelectItem value="user">Usuário Padrão</SelectItem>
+                                            <SelectItem value="admin">Administrador</SelectItem>
+                                        </SelectContent>
+                                        </Select>
+                                        <FormMessage />
+                                    </FormItem>
+                                    )}
+                                />
+
+                                <DialogFooter>
+                                    <DialogClose asChild>
+                                        <Button type="button" variant="outline" disabled={isAddingUser}>Cancelar</Button>
+                                    </DialogClose>
+                                    <Button type="submit" disabled={isAddingUser}>
+                                        {isAddingUser ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+                                        {isAddingUser ? 'Adicionando...' : 'Adicionar Usuário'}
+                                    </Button>
+                                </DialogFooter>
+                            </form>
+                            </Form>
+                        </DialogContent>
+                    </Dialog>
+               </div>
              </CardHeader>
              <CardContent className="space-y-4">
                  {loadingUsers ? (
@@ -435,121 +556,6 @@ export default function ConfiguracoesPage() {
                     </>
                   )}
              </CardContent>
-               <CardFooter className="flex justify-end">
-                  <Dialog open={isUserDialogOpen} onOpenChange={setIsUserDialogOpen}>
-                     <DialogTrigger asChild>
-                         <Button>
-                            <PlusCircle className="mr-2 h-4 w-4"/> Adicionar Usuário
-                         </Button>
-                     </DialogTrigger>
-                     <DialogContent className="sm:max-w-[425px]">
-                         <DialogHeader>
-                            <DialogTitle>Novo Usuário</DialogTitle>
-                            <DialogDescription>Preencha os dados para criar um novo acesso.</DialogDescription>
-                         </DialogHeader>
-                         {/* User Form using react-hook-form */}
-                         <Form {...userForm}>
-                           <form onSubmit={userForm.handleSubmit(handleAddUserSubmit)} className="space-y-4 py-4">
-                                {userError && ( // Show add user error inside dialog
-                                  <Alert variant="destructive">
-                                      <AlertCircle className="h-4 w-4" />
-                                      <AlertTitle>Erro ao Adicionar</AlertTitle>
-                                      <AlertDescription>{userError}</AlertDescription>
-                                  </Alert>
-                                )}
-                                <FormField
-                                    control={userForm.control}
-                                    name="fullName"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Nome Completo</FormLabel>
-                                            <FormControl>
-                                                <Input placeholder="Nome e Sobrenome" {...field} disabled={isAddingUser} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                                <FormField
-                                    control={userForm.control}
-                                    name="cpf"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>CPF</FormLabel>
-                                            <FormControl>
-                                                <Input
-                                                    placeholder="XXX.XXX.XXX-XX"
-                                                    {...field}
-                                                    onChange={(e) => field.onChange(formatCpf(e.target.value))}
-                                                    disabled={isAddingUser}
-                                                />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                                <FormField
-                                    control={userForm.control}
-                                    name="username"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Usuário (login)</FormLabel>
-                                            <FormControl>
-                                                <Input placeholder="Nome de usuário para login" {...field} disabled={isAddingUser} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                                <FormField
-                                    control={userForm.control}
-                                    name="password"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Senha</FormLabel>
-                                            <FormControl>
-                                                <Input type="password" placeholder="Senha de acesso" {...field} disabled={isAddingUser} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                               <FormField
-                                  control={userForm.control}
-                                  name="role"
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>Permissão</FormLabel>
-                                        <Select onValueChange={field.onChange} value={field.value} disabled={isAddingUser}>
-                                          <FormControl>
-                                            <SelectTrigger>
-                                              <SelectValue placeholder="Selecione a permissão" />
-                                            </SelectTrigger>
-                                          </FormControl>
-                                          <SelectContent>
-                                            <SelectItem value="user">Usuário Padrão</SelectItem>
-                                            <SelectItem value="admin">Administrador</SelectItem>
-                                          </SelectContent>
-                                        </Select>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-
-                               <DialogFooter>
-                                  <DialogClose asChild>
-                                      <Button type="button" variant="outline" disabled={isAddingUser}>Cancelar</Button>
-                                  </DialogClose>
-                                  <Button type="submit" disabled={isAddingUser}>
-                                      {isAddingUser ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
-                                      {isAddingUser ? 'Adicionando...' : 'Adicionar Usuário'}
-                                  </Button>
-                               </DialogFooter>
-                           </form>
-                        </Form>
-                     </DialogContent>
-                  </Dialog>
-               </CardFooter>
            </Card>
       )}
     </div>

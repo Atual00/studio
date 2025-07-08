@@ -50,6 +50,7 @@ import {
     FileQuestion,
     CalendarIcon as CalendarDateIcon, // Renamed to avoid conflict with Calendar component
     ArrowRightCircle,
+    Save,
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -516,38 +517,40 @@ export default function LicitacaoDetalhesPage() {
                         </SelectContent>
                     </Select>
                  </div>
-                 <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10">
-                            <Trash2 className="h-4 w-4 mr-1"/> Excluir Licitação
+                 <div className="flex flex-wrap gap-2 justify-end">
+                    <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10">
+                                <Trash2 className="h-4 w-4 mr-1"/> Excluir Licitação
+                            </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                            <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                Tem certeza que deseja excluir a licitação "{licitacao.numeroLicitacao}"? Esta ação não pode ser desfeita e removerá todos os dados associados.
+                            </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleDelete} disabled={isDeleting} className="bg-destructive hover:bg-destructive/90">
+                                {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                {isDeleting ? 'Excluindo...' : 'Confirmar Exclusão'}
+                            </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                    {licitacao.disputaLog?.finalizadaEm && (
+                        <Button variant="outline" size="sm" onClick={() => generateAtaSessaoPDF(licitacao, configuracoes, currentUser)} disabled={!configuracoes}>
+                            <FileText className="mr-2 h-4 w-4"/> Gerar Ata da Disputa
                         </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                        <AlertDialogHeader>
-                        <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            Tem certeza que deseja excluir a licitação "{licitacao.numeroLicitacao}"? Esta ação não pode ser desfeita e removerá todos os dados associados.
-                        </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                        <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleDelete} disabled={isDeleting} className="bg-destructive hover:bg-destructive/90">
-                             {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                            {isDeleting ? 'Excluindo...' : 'Confirmar Exclusão'}
-                        </AlertDialogAction>
-                        </AlertDialogFooter>
-                    </AlertDialogContent>
-                </AlertDialog>
-                {licitacao.disputaLog?.finalizadaEm && (
-                     <Button variant="outline" size="sm" onClick={() => generateAtaSessaoPDF(licitacao, configuracoes, currentUser)} disabled={!configuracoes}>
-                         <FileText className="mr-2 h-4 w-4"/> Gerar Ata da Disputa
-                     </Button>
-                 )}
-                 {licitacao.disputaLog?.itensPropostaFinalCliente && licitacao.disputaLog.itensPropostaFinalCliente.length > 0 && (
-                     <Button variant="outline" size="sm" onClick={async () => await generatePropostaFinalPDF(licitacao, configuracoes, currentUser)} disabled={!configuracoes}>
-                         <FileText className="mr-2 h-4 w-4"/> Gerar Proposta Final
-                     </Button>
-                 )}
+                    )}
+                    {licitacao.disputaLog?.itensPropostaFinalCliente && licitacao.disputaLog.itensPropostaFinalCliente.length > 0 && (
+                        <Button variant="outline" size="sm" onClick={async () => await generatePropostaFinalPDF(licitacao, configuracoes, currentUser)} disabled={!configuracoes}>
+                            <FileText className="mr-2 h-4 w-4"/> Gerar Proposta Final
+                        </Button>
+                    )}
+                 </div>
              </div>
        </div>
 
@@ -627,15 +630,19 @@ export default function LicitacaoDetalhesPage() {
                         );
                     })}
                 </CardContent>
-                 <CardFooter>
-                    {isSavingChecklist && <p className="text-xs text-muted-foreground flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin"/> Salvando checklist...</p>}
-                 </CardFooter>
             </Card>
 
              <Card>
                 <CardHeader>
-                    <CardTitle className="flex items-center gap-2"><Bot className="h-5 w-5" /> Validador de Documentos (IA)</CardTitle>
-                    <CardDescription>Faça upload dos documentos e defina os critérios do edital para validação automática.</CardDescription>
+                    <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-4">
+                        <div>
+                            <CardTitle className="flex items-center gap-2"><Bot className="h-5 w-5" /> Validador de Documentos (IA)</CardTitle>
+                            <CardDescription className="mt-1">Faça upload dos documentos e defina os critérios do edital para validação.</CardDescription>
+                        </div>
+                        <Button onClick={handleValidateDocuments} disabled={isValidating || uploadedFiles.length === 0 || !bidCriteria.trim()} className="shrink-0">
+                            {isValidating ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Validando...</> : <><Bot className="mr-2 h-4 w-4" /> Validar com IA</>}
+                        </Button>
+                    </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <div>
@@ -693,20 +700,22 @@ export default function LicitacaoDetalhesPage() {
                         </Alert>
                     )}
                 </CardContent>
-                <CardFooter className="flex justify-between items-center">
-                    <Button onClick={handleValidateDocuments} disabled={isValidating || uploadedFiles.length === 0 || !bidCriteria.trim()}>
-                       {isValidating ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Validando...</> : <><Bot className="mr-2 h-4 w-4" /> Validar com IA</>}
-                    </Button>
-                     {isValidating && <p className="text-sm text-muted-foreground">Aguarde, validando documentos...</p>}
-                </CardFooter>
             </Card>
 
             {/* Fase de Habilitação e Recursos Card */}
             {['DISPUTA_CONCLUIDA', 'EM_HABILITACAO', 'HABILITADO', 'INABILITADO', 'RECURSO_HABILITACAO', 'CONTRARRAZOES_HABILITACAO','AGUARDANDO_RECURSO', 'EM_PRAZO_CONTRARRAZAO', 'EM_HOMOLOGACAO', 'PROCESSO_HOMOLOGADO', 'EM_RECURSO_GERAL', 'EM_CONTRARRAZAO_GERAL'].includes(currentStatus) && (
                 <Card>
                     <CardHeader>
-                        <CardTitle>Fase de Habilitação e Recursos</CardTitle>
-                        <CardDescription>Gerencie o resultado da habilitação e os processos de recurso.</CardDescription>
+                        <div className="flex justify-between items-start gap-4">
+                            <div>
+                                <CardTitle>Fase de Habilitação e Recursos</CardTitle>
+                                <CardDescription className="mt-1">Gerencie o resultado da habilitação e os processos de recurso.</CardDescription>
+                            </div>
+                            <Button onClick={handleSaveHabilitacaoDetails} disabled={isSavingHabilitacao} className="shrink-0">
+                                {isSavingHabilitacao ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                                Salvar Dados
+                            </Button>
+                        </div>
                     </CardHeader>
                     <CardContent className="space-y-4">
                         {/* Ata de Habilitação */}
@@ -800,12 +809,6 @@ export default function LicitacaoDetalhesPage() {
                         )}
 
                     </CardContent>
-                    <CardFooter>
-                        <Button onClick={handleSaveHabilitacaoDetails} disabled={isSavingHabilitacao}>
-                            {isSavingHabilitacao ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                            Salvar Dados Habilitação/Recurso
-                        </Button>
-                    </CardFooter>
                 </Card>
             )}
          </div>
@@ -817,6 +820,21 @@ export default function LicitacaoDetalhesPage() {
                      <CardDescription>Adicione notas e atualizações sobre o processo.</CardDescription>
                  </CardHeader>
                  <CardContent className="space-y-4 max-h-[calc(100vh-18rem)] overflow-y-auto p-4 border-t border-b">
+                    <div className="flex flex-col items-stretch gap-2 pb-4 border-b">
+                        <Label htmlFor="new-comment" className="sr-only">Adicionar Comentário</Label>
+                        <Textarea
+                            id="new-comment"
+                            placeholder="Digite seu comentário..."
+                            value={newComment}
+                            onChange={(e) => setNewComment(e.target.value)}
+                            disabled={isAddingComment}
+                            className="min-h-[70px]"
+                        />
+                        <Button onClick={handleAddComment} disabled={!newComment.trim() || isAddingComment} size="sm">
+                            {isAddingComment ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+                            Adicionar Comentário
+                        </Button>
+                    </div>
                     {licitacao.comentarios && licitacao.comentarios.length > 0 ? (
                         [...licitacao.comentarios].reverse().map(comment => (
                             <div key={comment.id} className="text-sm border rounded-md p-3 bg-muted/50">
@@ -828,21 +846,6 @@ export default function LicitacaoDetalhesPage() {
                         <p className="text-sm text-muted-foreground text-center py-4">Nenhum comentário adicionado ainda.</p>
                     )}
                  </CardContent>
-                 <CardFooter className="flex flex-col items-stretch gap-2 pt-4">
-                    <Label htmlFor="new-comment">Adicionar Comentário</Label>
-                    <Textarea
-                        id="new-comment"
-                        placeholder="Digite seu comentário..."
-                        value={newComment}
-                        onChange={(e) => setNewComment(e.target.value)}
-                        disabled={isAddingComment}
-                        className="min-h-[70px]"
-                    />
-                    <Button onClick={handleAddComment} disabled={!newComment.trim() || isAddingComment}>
-                        {isAddingComment ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-                        Adicionar Comentário
-                    </Button>
-                 </CardFooter>
               </Card>
          </div>
        </div>
