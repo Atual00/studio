@@ -48,6 +48,13 @@ export async function GET(request: NextRequest) {
     if (error.message.includes("Firestore Admin not initialized")) {
       return NextResponse.json({ message: "Backend database not configured.", error: error.message }, { status: 503 });
     }
+     // Check for authentication token errors
+    if (error.message.includes("Could not refresh access token")) {
+        return NextResponse.json({
+            message: "Authentication with Google Cloud failed. Your service account credentials (FIREBASE_SERVICE_ACCOUNT_JSON) may be invalid, expired, or lack permissions.",
+            error: error.message
+        }, { status: 500 });
+    }
     return NextResponse.json({ message: 'Error fetching documentos collection', error: error.message }, { status: 500 });
   }
 }
