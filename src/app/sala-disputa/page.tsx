@@ -46,8 +46,8 @@ export default function SalaDisputaPage() {
             if (a.status === 'AGUARDANDO_DISPUTA' && b.status !== 'AGUARDANDO_DISPUTA') return -1;
             if (a.status !== 'AGUARDANDO_DISPUTA' && b.status === 'AGUARDANDO_DISPUTA') return 1;
             try {
-                const dateA = a.dataInicio instanceof Date ? a.dataInicio : parseISO(a.dataInicio);
-                const dateB = b.dataInicio instanceof Date ? b.dataInicio : parseISO(b.dataInicio);
+                const dateA = a.dataInicio instanceof Date ? a.dataInicio : parseISO(a.dataInicio as string);
+                const dateB = b.dataInicio instanceof Date ? b.dataInicio : parseISO(b.dataInicio as string);
                 if (!isValid(dateA)) return 1;
                 if (!isValid(dateB)) return -1;
                 return dateA.getTime() - dateB.getTime(); // Soonest first
@@ -55,8 +55,9 @@ export default function SalaDisputaPage() {
         });
         setLicitacoes(paraDisputa);
       } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Ocorreu um erro desconhecido.';
         console.error('Erro ao buscar licitações para disputa:', err);
-        setError(`Falha ao carregar licitações. ${err instanceof Error ? err.message : ''}`);
+        setError(errorMessage);
       } finally {
         setLoading(false);
       }
@@ -81,14 +82,6 @@ export default function SalaDisputaPage() {
         {/* Potentially add a refresh button or other controls here */}
       </div>
 
-      {error && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Erro</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
       <Card>
         <CardHeader>
           <CardTitle>Licitações Aguardando ou em Disputa</CardTitle>
@@ -101,7 +94,13 @@ export default function SalaDisputaPage() {
             <div className="flex justify-center items-center h-40">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
-          ) : licitacoes.length === 0 && !error ? (
+          ) : error ? (
+             <Alert variant="destructive">
+               <AlertCircle className="h-4 w-4" />
+               <AlertTitle>Erro ao Carregar Dados</AlertTitle>
+               <AlertDescription>{error}</AlertDescription>
+             </Alert>
+          ) : licitacoes.length === 0 ? (
             <Alert>
               <Info className="h-4 w-4" />
               <AlertTitle>Nenhuma Licitação</AlertTitle>
