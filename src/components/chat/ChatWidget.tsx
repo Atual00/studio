@@ -55,6 +55,7 @@ export default function ChatWidget() {
   const [mentionPopoverTargetWidget, setMentionPopoverTargetWidget] = useState<HTMLTextAreaElement | null>(null);
   const [loadingMentionsWidget, setLoadingMentionsWidget] = useState(false);
   const [atPositionWidget, setAtPositionWidget] = useState<number | null>(null);
+  const [mentionError, setMentionError] = useState<string | null>(null); // State for mention-specific errors
 
 
   const scrollToBottom = useCallback(() => {
@@ -168,13 +169,17 @@ export default function ChatWidget() {
       setLicitacaoMentionQueryWidget(query);
       setShowLicitacaoMentionPopoverWidget(true);
       setMentionPopoverTargetWidget(e.target); // Anchor to textarea
+      setMentionError(null); // Clear previous errors
       if (!loadingMentionsWidget && activeLicitacoesForMentionWidget.length === 0) {
         setLoadingMentionsWidget(true);
         try {
             const licitacoes = await fetchActiveLicitacoes();
             setActiveLicitacoesForMentionWidget(licitacoes);
         } catch (mentionError) {
-            console.error("Error fetching licitacoes for mention (widget):", mentionError);
+            const errorMessage = mentionError instanceof Error ? mentionError.message : "Erro desconhecido";
+            console.error("Error fetching licitacoes for mention (widget):", errorMessage);
+            setMentionError("Não foi possível carregar as licitações."); // Set user-friendly error
+            setActiveLicitacoesForMentionWidget([]); // Ensure list is empty on error
         } finally {
             setLoadingMentionsWidget(false);
         }
@@ -401,6 +406,8 @@ export default function ChatWidget() {
                     >
                         {loadingMentionsWidget ? (
                             <div className="p-4 text-center"><Loader2 className="h-5 w-5 animate-spin mx-auto" /></div>
+                        ) : mentionError ? (
+                           <p className="p-4 text-sm text-destructive text-center">{mentionError}</p>
                         ) : filteredLicitacoesForPopoverWidget.length > 0 ? (
                             <ScrollArea className="max-h-40"> {/* Max height for popover list */}
                                 <div className="p-1">
