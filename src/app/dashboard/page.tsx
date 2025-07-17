@@ -3,12 +3,13 @@
 
 import { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { CalendarDays, DollarSign, FileWarning, Target, Loader2, Briefcase, CheckCircle, Clock } from 'lucide-react';
+import { CalendarDays, DollarSign, FileWarning, Target, Loader2, Briefcase, CheckCircle, Clock, AlertCircle as AlertCircleIcon } from 'lucide-react';
 import Link from 'next/link';
 import { fetchLicitacoes } from '@/services/licitacaoService';
 import { fetchDebitos } from '@/services/licitacaoService'; // Assuming fetchDebitos is here
 import { fetchDocumentos, Documento } from '@/services/documentoService';
 import { differenceInDays, isBefore, startOfDay, parseISO, isValid } from 'date-fns';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
 // Helper to check if document is expiring soon
 const isDocumentExpiringSoon = (doc: Documento, daysThreshold: number = 30): boolean => {
@@ -50,6 +51,7 @@ const isLicitacaoDeadlineNear = (lic: { dataInicio: Date | string, dataMetaAnali
 
 export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState({
     upcomingDeadlines: 0,
     pendingPayments: 0,
@@ -63,6 +65,7 @@ export default function DashboardPage() {
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
+      setError(null);
       try {
         const [licitacoes, debitos, documentos] = await Promise.all([
           fetchLicitacoes(),
@@ -111,7 +114,7 @@ export default function DashboardPage() {
 
       } catch (error) {
         console.error("Erro ao carregar dados do dashboard:", error);
-        // Handle error state if needed
+        setError(error instanceof Error ? error.message : "Ocorreu um erro desconhecido.");
       } finally {
         setLoading(false);
       }
@@ -123,6 +126,22 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
         <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+
+        {error && (
+            <Alert variant="destructive">
+                <AlertCircleIcon className="h-4 w-4"/>
+                <AlertTitle>Erro ao Carregar Dados do Dashboard</AlertTitle>
+                <AlertDescription>
+                    {error}
+                    {error.includes("Authentication with Google Cloud failed") && (
+                        <p className="mt-2">
+                            <b>Ação Necessária:</b> Verifique se a variável de ambiente `FIREBASE_SERVICE_ACCOUNT_JSON` está configurada corretamente no seu arquivo `.env.local`. Consulte as instruções no `README.md`.
+                        </p>
+                    )}
+                </AlertDescription>
+            </Alert>
+        )}
+
         {loading ? (
              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
                 {[...Array(4)].map((_, i) => (
@@ -138,112 +157,110 @@ export default function DashboardPage() {
                     </Card>
                 ))}
             </div>
-        ) : (
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-3"> {/* Adjusted grid for 3 main cards */}
-                <Link href="/calendario/metas" className="block hover:shadow-lg transition-shadow rounded-lg">
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Prazos Próximos (7d)</CardTitle>
-                        <CalendarDays className="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                        <div className="text-2xl font-bold">{stats.upcomingDeadlines}</div>
-                        <p className="text-xs text-muted-foreground">Metas de análise ou início de disputa.</p>
-                        </CardContent>
-                    </Card>
-                </Link>
-                <Link href="/financeiro?tab=pendentes" className="block hover:shadow-lg transition-shadow rounded-lg">
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Pagamentos Pendentes</CardTitle>
-                        <DollarSign className="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                        <div className="text-2xl font-bold">{stats.pendingPayments}</div>
-                        <p className="text-xs text-muted-foreground">Faturas aguardando ação financeira.</p>
-                        </CardContent>
-                    </Card>
-                </Link>
-                <Link href="/documentos?status=vence_30d" className="block hover:shadow-lg transition-shadow rounded-lg">
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Documentos Vencendo (30d)</CardTitle>
-                        <FileWarning className="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                        <div className="text-2xl font-bold">{stats.expiringDocuments}</div>
-                        <p className="text-xs text-muted-foreground">Certidões e documentos próximos do vencimento.</p>
-                        </CardContent>
-                    </Card>
-                 </Link>
-            </div>
-        )}
-
-       {/* Second row for other stats */}
-        {!loading && (
-             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                 <Link href="/licitacoes?status=AGUARDANDO_ANALISE,EM_ANALISE" className="block hover:shadow-lg transition-shadow rounded-lg">
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Em Análise</CardTitle>
-                        <Clock className="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                        <div className="text-2xl font-bold">{stats.analysisBids}</div>
-                        <p className="text-xs text-muted-foreground">Licitações aguardando ou em análise.</p>
-                        </CardContent>
-                    </Card>
-                </Link>
-                <Link href="/licitacoes" className="block hover:shadow-lg transition-shadow rounded-lg">
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Licitações Ativas</CardTitle>
-                        <Target className="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                        <div className="text-2xl font-bold">{stats.activeBids}</div>
-                        <p className="text-xs text-muted-foreground">Processos em andamento (não encerrados).</p>
-                        </CardContent>
-                    </Card>
-                </Link>
-                 <Link href="/licitacoes?status=PROCESSO_HOMOLOGADO" className="block hover:shadow-lg transition-shadow rounded-lg">
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Homologadas</CardTitle>
-                        <CheckCircle className="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                        <div className="text-2xl font-bold">{stats.homologatedBids}</div>
-                        <p className="text-xs text-muted-foreground">Licitações com resultado homologado.</p>
-                        </CardContent>
-                    </Card>
-                </Link>
-            </div>
-        )}
-
-
-      {/* Add more dashboard components here, like charts or recent activity */}
-      <Card className="col-span-1 md:col-span-2 lg:col-span-3"> {/* Adjust span to fit layout */}
-        <CardHeader>
-          <CardTitle>Atividade Recente</CardTitle>
-          <CardDescription>Últimas licitações adicionadas.</CardDescription>
-        </CardHeader>
-        <CardContent>
-           {loading ? (
-                <div className="space-y-2">
-                    {[...Array(3)].map((_, i) => <div key={i} className="h-6 bg-muted rounded animate-pulse"></div>)}
+        ) : !error ? (
+            <>
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-3"> {/* Adjusted grid for 3 main cards */}
+                    <Link href="/calendario/metas" className="block hover:shadow-lg transition-shadow rounded-lg">
+                        <Card>
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium">Prazos Próximos (7d)</CardTitle>
+                            <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                            </CardHeader>
+                            <CardContent>
+                            <div className="text-2xl font-bold">{stats.upcomingDeadlines}</div>
+                            <p className="text-xs text-muted-foreground">Metas de análise ou início de disputa.</p>
+                            </CardContent>
+                        </Card>
+                    </Link>
+                    <Link href="/financeiro?tab=pendentes" className="block hover:shadow-lg transition-shadow rounded-lg">
+                        <Card>
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium">Pagamentos Pendentes</CardTitle>
+                            <DollarSign className="h-4 w-4 text-muted-foreground" />
+                            </CardHeader>
+                            <CardContent>
+                            <div className="text-2xl font-bold">{stats.pendingPayments}</div>
+                            <p className="text-xs text-muted-foreground">Faturas aguardando ação financeira.</p>
+                            </CardContent>
+                        </Card>
+                    </Link>
+                    <Link href="/documentos?status=vence_30d" className="block hover:shadow-lg transition-shadow rounded-lg">
+                        <Card>
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium">Documentos Vencendo (30d)</CardTitle>
+                            <FileWarning className="h-4 w-4 text-muted-foreground" />
+                            </CardHeader>
+                            <CardContent>
+                            <div className="text-2xl font-bold">{stats.expiringDocuments}</div>
+                            <p className="text-xs text-muted-foreground">Certidões e documentos próximos do vencimento.</p>
+                            </CardContent>
+                        </Card>
+                     </Link>
                 </div>
-            ) : recentActivity.length > 0 ? (
-                <ul className="space-y-2 text-sm text-muted-foreground">
-                    {recentActivity.map((activity, index) => (
-                        <li key={index}>{activity}</li>
-                    ))}
-                </ul>
-             ) : (
-                <p className="text-sm text-muted-foreground">Nenhuma atividade recente registrada.</p>
-             )}
-        </CardContent>
-      </Card>
+
+                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                     <Link href="/licitacoes?status=AGUARDANDO_ANALISE,EM_ANALISE" className="block hover:shadow-lg transition-shadow rounded-lg">
+                        <Card>
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium">Em Análise</CardTitle>
+                            <Clock className="h-4 w-4 text-muted-foreground" />
+                            </CardHeader>
+                            <CardContent>
+                            <div className="text-2xl font-bold">{stats.analysisBids}</div>
+                            <p className="text-xs text-muted-foreground">Licitações aguardando ou em análise.</p>
+                            </CardContent>
+                        </Card>
+                    </Link>
+                    <Link href="/licitacoes" className="block hover:shadow-lg transition-shadow rounded-lg">
+                        <Card>
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium">Licitações Ativas</CardTitle>
+                            <Target className="h-4 w-4 text-muted-foreground" />
+                            </CardHeader>
+                            <CardContent>
+                            <div className="text-2xl font-bold">{stats.activeBids}</div>
+                            <p className="text-xs text-muted-foreground">Processos em andamento (não encerrados).</p>
+                            </CardContent>
+                        </Card>
+                    </Link>
+                     <Link href="/licitacoes?status=PROCESSO_HOMOLOGADO" className="block hover:shadow-lg transition-shadow rounded-lg">
+                        <Card>
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium">Homologadas</CardTitle>
+                            <CheckCircle className="h-4 w-4 text-muted-foreground" />
+                            </CardHeader>
+                            <CardContent>
+                            <div className="text-2xl font-bold">{stats.homologatedBids}</div>
+                            <p className="text-xs text-muted-foreground">Licitações com resultado homologado.</p>
+                            </CardContent>
+                        </Card>
+                    </Link>
+                </div>
+
+
+              <Card className="col-span-1 md:col-span-2 lg:col-span-3"> {/* Adjust span to fit layout */}
+                <CardHeader>
+                  <CardTitle>Atividade Recente</CardTitle>
+                  <CardDescription>Últimas licitações adicionadas.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                   {loading ? (
+                        <div className="space-y-2">
+                            {[...Array(3)].map((_, i) => <div key={i} className="h-6 bg-muted rounded animate-pulse"></div>)}
+                        </div>
+                    ) : recentActivity.length > 0 ? (
+                        <ul className="space-y-2 text-sm text-muted-foreground">
+                            {recentActivity.map((activity, index) => (
+                                <li key={index}>{activity}</li>
+                            ))}
+                        </ul>
+                     ) : (
+                        <p className="text-sm text-muted-foreground">Nenhuma atividade recente registrada.</p>
+                     )}
+                </CardContent>
+              </Card>
+            </>
+        ) : null}
     </div>
   );
 }
