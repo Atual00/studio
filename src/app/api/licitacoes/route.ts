@@ -61,7 +61,8 @@ export async function GET(request: NextRequest) {
             error: error.message
         }, { status: 500 });
     }
-    return NextResponse.json({ message: 'Error fetching licitacoes collection', error: error.message }, { status: 500 });
+    // For other errors (like collection not existing before fix), return an empty array to prevent crashes.
+    return NextResponse.json([], { status: 200 });
   }
 }
 
