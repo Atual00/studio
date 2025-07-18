@@ -28,6 +28,12 @@ export async function GET(request: NextRequest) {
   try {
     const db = getFirestoreAdmin();
     const documentosSnapshot = await db.collection('documentos').get();
+    
+    // Handle case where the collection might not exist yet
+    if (documentosSnapshot.empty) {
+        return NextResponse.json([], { status: 200 });
+    }
+    
     const documentos: Documento[] = [];
     
     documentosSnapshot.forEach(doc => {
