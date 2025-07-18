@@ -28,6 +28,12 @@ export async function GET(request: NextRequest) {
   try {
     const db = getFirestoreAdmin();
     const licitacoesSnapshot = await db.collection('licitacoes').orderBy('dataInicio', 'desc').get();
+    
+    // Handle case where the collection might not exist yet
+    if (licitacoesSnapshot.empty) {
+        return NextResponse.json([], { status: 200 });
+    }
+
     const licitacoes: LicitacaoDetails[] = [];
     
     licitacoesSnapshot.forEach(doc => {
@@ -46,7 +52,7 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('Error fetching licitacoes collection:', error);
     if (error.message.includes("Firestore Admin not initialized")) {
-      return NextResponse.json({ message: "Backend database not configured.", error: error.message }, { status: 503 });
+      return NextResponse.json({ message: "Backend database not configured. Please check server logs for Firebase Admin SDK setup.", error: error.message }, { status: 503 });
     }
      // Check for authentication token errors
     if (error.message.includes("Could not refresh access token")) {
