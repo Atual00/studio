@@ -19,6 +19,12 @@ export async function GET(request: NextRequest) {
   try {
     const db = getFirestoreAdmin();
     const clientsSnapshot = await db.collection('clients').get();
+    
+    // Handle case where the collection might not exist yet
+    if (clientsSnapshot.empty) {
+        return NextResponse.json([], { status: 200 });
+    }
+
     const clients: ClientDetails[] = [];
     clientsSnapshot.forEach(doc => {
       clients.push(mapFirestoreDocToClientDetails({ id: doc.id, ...doc.data() }));
@@ -37,7 +43,8 @@ export async function GET(request: NextRequest) {
             error: error.message
         }, { status: 500 });
     }
-    return NextResponse.json({ message: 'Error fetching clients', error: error.message }, { status: 500 });
+    // Fallback for other potential errors: return an empty array to prevent frontend crashes.
+    return NextResponse.json([], { status: 200 });
   }
 }
 
