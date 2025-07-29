@@ -13,6 +13,8 @@ export interface Documento {
 
 export type DocumentoFormData = Omit<Documento, 'id' | 'clienteNome'>; // Type for adding/updating
 
+const LOCAL_STORAGE_KEY = 'licitaxDocumentos';
+
 // Helper to parse and validate date strings or Date objects
 const parseAndValidateDate = (dateInput: string | Date | null | undefined): Date | null => {
    if (!dateInput) return null;
@@ -30,114 +32,109 @@ const parseAndValidateDate = (dateInput: string | Date | null | undefined): Date
    return null;
 }
 
+// --- LocalStorage Helper Functions ---
+
+const getDocsFromStorage = (): Documento[] => {
+    if (typeof window === 'undefined') return [];
+    const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
+    try {
+        return stored ? JSON.parse(stored) : [];
+    } catch (e) {
+        console.error("Error parsing documents from localStorage:", e);
+        return [];
+    }
+};
+
+const saveDocsToStorage = (documentos: Documento[]): void => {
+    if (typeof window === 'undefined') return;
+    try {
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(documentos));
+    } catch (e) {
+        console.error("Error saving documents to localStorage:", e);
+    }
+};
+
+const getClientsFromStorage = (): { id: string, razaoSocial: string }[] => {
+    if (typeof window === 'undefined') return [];
+    const stored = localStorage.getItem('licitaxClients');
+    try {
+        return stored ? JSON.parse(stored) : [];
+    } catch (e) {
+        return [];
+    }
+}
+
+
 // --- Service Functions ---
 
-/**
- * Fetches all stored documents from the backend API.
- * @returns A promise that resolves to an array of Documento objects.
- */
 export const fetchDocumentos = async (): Promise<Documento[]> => {
-  console.log('Fetching documentos from API...');
-  try {
-    const response = await fetch('/api/documentos');
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ message: response.statusText }));
-      const serverErrorMessage = errorData.message || errorData.error || response.statusText;
-      throw new Error(`Error fetching documents: ${serverErrorMessage}`);
-    }
-    const documentos: Documento[] = await response.json();
-    // Parse date strings into Date objects for client-side use
-    return documentos.map(doc => ({
-      ...doc,
-      dataVencimento: parseAndValidateDate(doc.dataVencimento)
-    }));
-  } catch (error) {
-    console.error('Error in fetchDocumentos:', error);
-    throw error;
-  }
+  console.log('Fetching documentos from localStorage...');
+  await new Promise(resolve => setTimeout(resolve, 100));
+  const documentos = getDocsFromStorage();
+  // Parse date strings into Date objects for client-side use
+  return documentos.map(doc => ({
+    ...doc,
+    dataVencimento: parseAndValidateDate(doc.dataVencimento)
+  }));
 };
 
-/**
- * Adds a new document via the backend API.
- * @param data The data for the new document (DocumentoFormData).
- * @returns A promise that resolves to the newly created Documento or null on failure.
- */
 export const addDocumento = async (data: DocumentoFormData): Promise<Documento | null> => {
-  console.log("Adding new documento via API:", data);
-  try {
-    const response = await fetch('/api/documentos', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...data,
-        // Ensure date is sent in a format the backend can parse (ISO string)
-        dataVencimento: data.dataVencimento instanceof Date && isValid(data.dataVencimento)
-                         ? data.dataVencimento.toISOString()
-                         : null,
-      }),
-    });
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ message: response.statusText }));
-      const serverErrorMessage = errorData.message || errorData.error || 'Failed to add document';
-      throw new Error(serverErrorMessage);
-    }
-    const newDoc = await response.json();
-    // Parse date on return for immediate use
-    return { ...newDoc, dataVencimento: parseAndValidateDate(newDoc.dataVencimento) };
-  } catch (error) {
-    console.error('Error in addDocumento:', error);
-    throw error;
+  console.log("Adding new documento to localStorage:", data);
+  await new Promise(resolve => setTimeout(resolve, 200));
+  const allDocs = getDocsFromStorage();
+  const clients = getClientsFromStorage();
+  const client = clients.find(c => c.id === data.clienteId);
+  if (!client) {
+      throw new Error("Cliente não encontrado.");
   }
+
+  const newDoc: Documento = {
+    ...data,
+    id: `DOC-${Date.now()}`,
+    clienteNome: client.razaoSocial,
+    dataVencimento: data.dataVencimento instanceof Date ? data.dataVencimento.toISOString() : null,
+  };
+  
+  saveDocsToStorage([...allDocs, newDoc]);
+  return { ...newDoc, dataVencimento: parseAndValidateDate(newDoc.dataVencimento) };
 };
 
-/**
- * Updates an existing document via the backend API.
- * @param id The ID of the document to update.
- * @param data The partial data to update (Partial<DocumentoFormData>).
- * @returns A promise that resolves to true on success, false on failure.
- */
 export const updateDocumento = async (id: string, data: Partial<DocumentoFormData>): Promise<boolean> => {
-  console.log(`Updating documento ID via API: ${id}`);
-  try {
-    const response = await fetch(`/api/documentos/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...data,
-        dataVencimento: data.dataVencimento instanceof Date && isValid(data.dataVencimento)
-                         ? data.dataVencimento.toISOString()
-                         : (data.dataVencimento === null ? null : undefined), // Handle explicit null or ignore
-      }),
-    });
-     if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: response.statusText }));
-        const serverErrorMessage = errorData.message || errorData.error || 'Failed to update document';
-        throw new Error(serverErrorMessage);
-    }
-    return response.ok;
-  } catch (error) {
-    console.error('Error in updateDocumento:', error);
-    throw error;
+  console.log(`Updating documento ID in localStorage: ${id}`);
+  await new Promise(resolve => setTimeout(resolve, 150));
+  const allDocs = getDocsFromStorage();
+  const index = allDocs.findIndex(d => d.id === id);
+
+  if (index === -1) return false;
+
+  const clients = getClientsFromStorage();
+  let clientName = allDocs[index].clienteNome;
+  if (data.clienteId && data.clienteId !== allDocs[index].clienteId) {
+      const newClient = clients.find(c => c.id === data.clienteId);
+      if (newClient) {
+          clientName = newClient.razaoSocial;
+      }
   }
+
+  allDocs[index] = { 
+      ...allDocs[index], 
+      ...data,
+      clienteNome: clientName,
+      dataVencimento: data.dataVencimento instanceof Date ? data.dataVencimento.toISOString() : (data.dataVencimento === null ? null : allDocs[index].dataVencimento),
+   };
+  
+  saveDocsToStorage(allDocs);
+  return true;
 };
 
-/**
- * Deletes a document by ID via the backend API.
- * @param id The ID of the document to delete.
- * @returns A promise that resolves to true on success, false on failure.
- */
 export const deleteDocumento = async (id: string): Promise<boolean> => {
-  console.log(`Deleting documento ID via API: ${id}`);
-  try {
-    const response = await fetch(`/api/documentos/${id}`, { method: 'DELETE' });
-    if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: response.statusText }));
-        const serverErrorMessage = errorData.message || errorData.error || 'Failed to delete document';
-        throw new Error(serverErrorMessage);
-    }
-    return response.ok;
-  } catch (error) {
-    console.error('Error in deleteDocumento:', error);
-    throw error;
-  }
+  console.log(`Deleting documento ID from localStorage: ${id}`);
+  await new Promise(resolve => setTimeout(resolve, 300));
+  const allDocs = getDocsFromStorage();
+  const filtered = allDocs.filter(d => d.id !== id);
+  
+  if (allDocs.length === filtered.length) return false;
+
+  saveDocsToStorage(filtered);
+  return true;
 };

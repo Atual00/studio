@@ -11,6 +11,10 @@ import { fetchClientDetails as fetchServiceClientDetails, type ClientDetails } f
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
+// --- LOCAL STORAGE KEYS ---
+const LICITACOES_KEY = 'licitaxLicitacoes';
+const DEBITOS_KEY = 'licitaxDebitos';
+
 // --- Types and Constants ---
 export interface PropostaItem {
   id: string;
@@ -164,18 +168,35 @@ export interface AcordoDetalhes {
     parcelasGeradasIds: string[];
 }
 
+// --- LocalStorage Helper Functions ---
+
+const getFromStorage = <T>(key: string, defaultValue: T): T => {
+    if (typeof window === 'undefined') return defaultValue;
+    const stored = localStorage.getItem(key);
+    try {
+        return stored ? JSON.parse(stored) : defaultValue;
+    } catch (e) {
+        console.error(`Error parsing localStorage key ${key}:`, e);
+        return defaultValue;
+    }
+};
+
+const saveToStorage = <T>(key: string, data: T): void => {
+    if (typeof window === 'undefined') return;
+    try {
+        localStorage.setItem(key, JSON.stringify(data));
+    } catch (e) {
+        console.error(`Error saving to localStorage key ${key}:`, e);
+    }
+};
+
 
 // --- Licitacao Service Functions ---
 
 export const fetchLicitacoes = async (): Promise<LicitacaoListItem[]> => {
-  console.log('Fetching all licitações from API...');
-  const response = await fetch('/api/licitacoes');
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ message: response.statusText }));
-    const serverErrorMessage = errorData.message || errorData.error || `Status: ${response.status}`;
-    throw new Error(`Error fetching licitações: ${serverErrorMessage}`);
-  }
-  const licitacoes: LicitacaoDetails[] = await response.json();
+  console.log('Fetching all licitações from localStorage...');
+  await new Promise(resolve => setTimeout(resolve, 100));
+  const licitacoes = getFromStorage<LicitacaoDetails[]>(LICITACOES_KEY, []);
   return licitacoes.map(({ id, clienteNome, modalidade, numeroLicitacao, plataforma, dataInicio, dataMetaAnalise, status, orgaoComprador }) => ({
     id, clienteNome, modalidade, numeroLicitacao, plataforma, dataInicio, dataMetaAnalise, status, orgaoComprador
   }));
@@ -188,127 +209,150 @@ export const fetchActiveLicitacoes = async (): Promise<LicitacaoListItem[]> => {
 };
 
 export const fetchLicitacaoDetails = async (id: string): Promise<LicitacaoDetails | null> => {
-  console.log(`Fetching details for licitação ID from API: ${id}`);
-  const response = await fetch(`/api/licitacoes/${id}`);
-  if (!response.ok) {
-    if (response.status === 404) return null;
-    const errorData = await response.json().catch(() => ({ message: response.statusText }));
-    const serverErrorMessage = errorData.message || errorData.error || `Status: ${response.status}`;
-    throw new Error(`Error fetching licitação details: ${serverErrorMessage}`);
-  }
-  return response.json();
+  console.log(`Fetching details for licitação ID from localStorage: ${id}`);
+  await new Promise(resolve => setTimeout(resolve, 50));
+  const licitacoes = getFromStorage<LicitacaoDetails[]>(LICITACOES_KEY, []);
+  return licitacoes.find(l => l.id === id) || null;
 };
 
 export const addLicitacao = async (data: LicitacaoFormValues, currentUser?: User | null): Promise<LicitacaoDetails | null> => {
-  console.log("Adding new licitação via API:", data);
+  console.log("Adding new licitação to localStorage:", data);
+  await new Promise(resolve => setTimeout(resolve, 200));
+  const allLicitacoes = getFromStorage<LicitacaoDetails[]>(LICITACOES_KEY, []);
   
-  // Create a copy of the data to avoid modifying the original form data
-  const payload: any = { ...data };
+  const clients = JSON.parse(localStorage.getItem('licitaxClients') || '[]');
+  const client = clients.find((c: any) => c.id === data.clienteId);
+  if (!client) throw new Error("Cliente não encontrado.");
+
+  const newLicitacao: LicitacaoDetails = {
+    ...data,
+    id: `LIC-${Date.now()}`,
+    clienteNome: client.razaoSocial,
+    status: 'AGUARDANDO_ANALISE',
+    checklist: {},
+    comentarios: [],
+    itensProposta: [],
+    propostaItensPdfNome: data.propostaItensPdf?.name,
+    createdBy: currentUser ? {
+        username: currentUser.username,
+        fullName: currentUser.fullName,
+        cpf: currentUser.cpf,
+    } : undefined
+  };
   
-  // Remove the file object as it cannot be serialized to JSON
-  if (data.propostaItensPdf instanceof File) {
-    payload.propostaItensPdfNome = data.propostaItensPdf.name;
-    delete payload.propostaItensPdf; 
-  }
-
-  // Add user info to the payload
-  if (currentUser) {
-    payload.createdBy = {
-      username: currentUser.username,
-      fullName: currentUser.fullName,
-      cpf: currentUser.cpf,
-    };
-  }
-
-  const response = await fetch('/api/licitacoes', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ message: response.statusText }));
-    throw new Error(errorData.message || 'Failed to add licitação');
-  }
-  return response.json();
+  saveToStorage(LICITACOES_KEY, [...allLicitacoes, newLicitacao]);
+  return newLicitacao;
 };
 
-
 export const updateLicitacao = async (id: string, data: Partial<LicitacaoDetails>): Promise<boolean> => {
-  console.log(`Updating licitação ID via API: ${id}`);
-  const response = await fetch(`/api/licitacoes/${id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ message: response.statusText }));
-    const serverErrorMessage = errorData.message || errorData.error || 'Failed to update licitação';
-    throw new Error(serverErrorMessage);
+  console.log(`Updating licitação ID in localStorage: ${id}`);
+  await new Promise(resolve => setTimeout(resolve, 150));
+  const allLicitacoes = getFromStorage<LicitacaoDetails[]>(LICITACOES_KEY, []);
+  const index = allLicitacoes.findIndex(l => l.id === id);
+
+  if (index === -1) return false;
+
+  const wasHomologado = allLicitacoes[index].status === 'PROCESSO_HOMOLOGADO';
+  
+  allLicitacoes[index] = { ...allLicitacoes[index], ...data };
+  
+  // Debit creation logic on homologation
+  if (data.status === 'PROCESSO_HOMOLOGADO' && !wasHomologado) {
+    allLicitacoes[index].dataHomologacao = new Date(); // Set homologation date
+    const licitacaoData = allLicitacoes[index];
+    const config = getFromStorage<ConfiguracoesFormValues>('licitaxConfiguracoesEmpresa', getDefaultConfig());
+    const clients = getFromStorage<ClientDetails[]>('licitaxClients', []);
+    const clientData = clients.find(c => c.id === licitacaoData.clienteId);
+
+    const dueDate = addMonths(new Date(licitacaoData.dataHomologacao), 1);
+    const finalDueDate = setDate(dueDate, config?.diaVencimentoPadrao || 15);
+
+    const debitData: Debito = {
+        id: id, // Use licitacao ID as debit ID for 1-to-1 relationship
+        tipoDebito: 'LICITACAO',
+        clienteNome: licitacaoData.clienteNome,
+        clienteCnpj: clientData?.cnpj || undefined,
+        descricao: `Serviços Licitação ${licitacaoData.numeroLicitacao}`,
+        valor: licitacaoData.valorCobrado,
+        dataVencimento: finalDueDate,
+        dataReferencia: new Date(licitacaoData.dataHomologacao),
+        status: 'PENDENTE',
+        licitacaoNumero: licitacaoData.numeroLicitacao,
+    };
+    
+    const allDebitos = getFromStorage<Debito[]>(DEBITOS_KEY, []);
+    // Remove existing debit with same ID to avoid duplicates
+    const filteredDebitos = allDebitos.filter(d => d.id !== id);
+    saveToStorage(DEBITOS_KEY, [...filteredDebitos, debitData]);
   }
-  return response.ok;
+  
+  saveToStorage(LICITACOES_KEY, allLicitacoes);
+  return true;
 };
 
 export const deleteLicitacao = async (id: string): Promise<boolean> => {
-  console.log(`Deleting licitação ID via API: ${id}`);
-  const response = await fetch(`/api/licitacoes/${id}`, { method: 'DELETE' });
-   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ message: response.statusText }));
-    const serverErrorMessage = errorData.message || errorData.error || 'Failed to delete licitação';
-    throw new Error(serverErrorMessage);
-  }
-  return response.ok;
-};
+  console.log(`Deleting licitação ID from localStorage: ${id}`);
+  await new Promise(resolve => setTimeout(resolve, 300));
+  const allLicitacoes = getFromStorage<LicitacaoDetails[]>(LICITACOES_KEY, []);
+  const filtered = allLicitacoes.filter(l => l.id !== id);
+  if (allLicitacoes.length === filtered.length) return false;
 
+  saveToStorage(LICITACOES_KEY, filtered);
+  // Also delete associated debit
+  const allDebitos = getFromStorage<Debito[]>(DEBITOS_KEY, []);
+  const filteredDebitos = allDebitos.filter(d => d.id !== id);
+  saveToStorage(DEBITOS_KEY, filteredDebitos);
+
+  return true;
+};
 
 // --- Debito Service Functions ---
 
+const getDefaultConfig = (): ConfiguracoesFormValues => ({
+    razaoSocial: '', cnpj: '', email: '', telefone: '', enderecoCep: '',
+    enderecoRua: '', enderecoNumero: '', enderecoBairro: '', enderecoCidade: '',
+    diaVencimentoPadrao: 15, taxaJurosDiaria: 0, logoUrl: ''
+});
+
 export const fetchDebitos = async (): Promise<Debito[]> => {
-  console.log('Fetching all debitos from API...');
-  const response = await fetch('/api/debitos');
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ message: response.statusText }));
-    const serverErrorMessage = errorData.message || errorData.error || `Status: ${response.status}`;
-    throw new Error(`Failed to fetch debitos: ${serverErrorMessage}`);
-  }
-  return response.json();
+  console.log('Fetching all debitos from localStorage...');
+  await new Promise(resolve => setTimeout(resolve, 100));
+  return getFromStorage<Debito[]>(DEBITOS_KEY, []);
 };
 
 export const updateDebitoStatus = async (id: string, newStatus: 'PAGO' | 'ENVIADO_FINANCEIRO' | 'PAGO_VIA_ACORDO'): Promise<boolean> => {
-  console.log(`Updating debit status for ID via API: ${id}`);
-  const response = await fetch(`/api/debitos/${id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status: newStatus }),
-  });
-   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ message: response.statusText }));
-    const serverErrorMessage = errorData.message || errorData.error || `Status: ${response.status}`;
-    throw new Error(`Failed to update debit status: ${serverErrorMessage}`);
-  }
-  return response.ok;
+  console.log(`Updating debit status for ID in localStorage: ${id}`);
+  await new Promise(resolve => setTimeout(resolve, 150));
+  const allDebitos = getFromStorage<Debito[]>(DEBITOS_KEY, []);
+  const index = allDebitos.findIndex(d => d.id === id);
+  if (index === -1) return false;
+  
+  allDebitos[index].status = newStatus;
+  saveToStorage(DEBITOS_KEY, allDebitos);
+  return true;
 };
 
 export type DebitoAvulsoFormData = Omit<Debito, 'id' | 'tipoDebito' | 'dataReferencia' | 'status' | 'licitacaoNumero' | 'acordoId' | 'originalDebitoIds' | 'jurosCalculado'>;
 
 export const addDebitoAvulso = async (data: DebitoAvulsoFormData): Promise<Debito | null> => {
-  console.log("Adding new debito avulso via API:", data);
-  const response = await fetch('/api/debitos', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  });
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ message: response.statusText }));
-    const serverErrorMessage = errorData.message || errorData.error || 'Failed to add avulso debit';
-    throw new Error(serverErrorMessage);
-  }
-  return response.json();
+  console.log("Adding new debito avulso to localStorage:", data);
+  await new Promise(resolve => setTimeout(resolve, 200));
+  const allDebitos = getFromStorage<Debito[]>(DEBITOS_KEY, []);
+  const newDebito: Debito = {
+    ...data,
+    id: `AV-${Date.now()}`,
+    tipoDebito: 'AVULSO',
+    dataReferencia: new Date(),
+    status: 'PENDENTE',
+  };
+  saveToStorage(DEBITOS_KEY, [...allDebitos, newDebito]);
+  return newDebito;
 };
 
 export const saveDebitosToStorage = async (debitos: Debito[]): Promise<void> => {
-  // This function is now deprecated in favor of API calls, but can be kept for temporary mock logic if needed.
-  console.warn("saveDebitosToStorage is deprecated; data should be managed via API calls.");
+  console.log("Saving all debitos to localStorage...");
+  await new Promise(resolve => setTimeout(resolve, 50));
+  saveToStorage(DEBITOS_KEY, debitos);
 };
 
 // --- PDF Generation and Other Helpers ---
