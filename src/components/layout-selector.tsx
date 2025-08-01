@@ -8,6 +8,7 @@ import AppSidebar from '@/components/app-sidebar';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { LogOut } from 'lucide-react';
+import NotificationBell from '@/components/notifications/NotificationBell'; // Import NotificationBell
 
 // Define AppLayout component here or import from its own file if preferred
 function AppLayout({ children }: { children: React.ReactNode }) {
@@ -30,6 +31,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
              <h1 className="text-xl font-semibold">Licitax Advisor</h1>
           </div>
           <div className="flex items-center gap-2">
+             <NotificationBell /> {/* Add NotificationBell here */}
              <span className="text-sm text-muted-foreground hidden sm:inline">
                  Olá, {user?.username} ({user?.role})
              </span>

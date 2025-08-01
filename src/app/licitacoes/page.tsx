@@ -18,6 +18,7 @@ import { fetchLicitacoes, type LicitacaoListItem, statusMap } from '@/services/l
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils'; // Import cn utility
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'; // Import Tabs
+import NotificationBadge from '@/components/notifications/NotificationBadge'; // Import NotificationBadge
 
 // Helper to get badge variant based on custom color mapping from service
 const getBadgeVariant = (color: string | undefined): 'default' | 'secondary' | 'destructive' | 'outline' | 'success' | 'warning' | 'info' | 'accent' => {
@@ -176,7 +177,10 @@ export default function LicitacoesPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
-        <h2 className="text-2xl font-semibold">Gerenciamento de Licitações</h2>
+        <div className="flex items-center gap-3">
+          <h2 className="text-2xl font-semibold">Gerenciamento de Licitações</h2>
+          <NotificationBadge entityType="licitacao" />
+        </div>
          <Link href="/licitacoes/nova" passHref>
           <Button>
             <PlusCircle className="mr-2 h-4 w-4" />

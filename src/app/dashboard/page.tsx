@@ -10,6 +10,7 @@ import { fetchDebitos } from '@/services/licitacaoService'; // Assuming fetchDeb
 import { fetchDocumentos, Documento } from '@/services/documentoService';
 import { differenceInDays, isBefore, startOfDay, parseISO, isValid } from 'date-fns';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { useNotifications } from '@/context/NotificationContext'; // Import useNotifications
 
 // Helper to check if document is expiring soon
 const isDocumentExpiringSoon = (doc: Documento, daysThreshold: number = 30): boolean => {
@@ -52,6 +53,7 @@ const isLicitacaoDeadlineNear = (lic: { dataInicio: Date | string, dataMetaAnali
 export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { notifications, unreadCount } = useNotifications(); // Get notifications
   const [stats, setStats] = useState({
     upcomingDeadlines: 0,
     pendingPayments: 0,
@@ -160,6 +162,18 @@ export default function DashboardPage() {
         ) : !error ? (
             <>
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-3"> {/* Adjusted grid for 3 main cards */}
+                    <Link href="/notificacoes" className="block hover:shadow-lg transition-shadow rounded-lg">
+                        <Card>
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium">Notificações Ativas</CardTitle>
+                            <AlertCircleIcon className="h-4 w-4 text-muted-foreground" />
+                            </CardHeader>
+                            <CardContent>
+                            <div className="text-2xl font-bold">{unreadCount}</div>
+                            <p className="text-xs text-muted-foreground">Alertas não lidos de prazos importantes.</p>
+                            </CardContent>
+                        </Card>
+                    </Link>
                     <Link href="/calendario/metas" className="block hover:shadow-lg transition-shadow rounded-lg">
                         <Card>
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

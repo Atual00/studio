@@ -47,6 +47,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { useToast } from '@/hooks/use-toast';
+import NotificationBadge from '@/components/notifications/NotificationBadge'; // Import NotificationBadge
 
 
 // --- Zod Schema for Form ---
@@ -319,7 +320,10 @@ export default function DocumentosPage() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center flex-wrap gap-2">
-        <h2 className="text-2xl font-semibold">Controle de Vencimento de Documentos</h2>
+        <div className="flex items-center gap-3">
+          <h2 className="text-2xl font-semibold">Controle de Vencimento de Documentos</h2>
+          <NotificationBadge entityType="documento" />
+        </div>
          <Button onClick={() => handleOpenDialog()}>
            <PlusCircle className="mr-2 h-4 w-4" />
            Adicionar Documento

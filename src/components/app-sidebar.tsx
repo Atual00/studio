@@ -18,6 +18,7 @@ import {
   Paperclip, // Icon for Anexos
   MessageSquare, // Icon for Chat
   FileArchive, // Icon for Habilitação
+  Bell, // Icon for Notificações
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
@@ -32,6 +33,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/context/AuthContext'; // Import useAuth
 import { useChatWidget } from '@/context/ChatWidgetContext'; // Import for unread count
+import { useNotifications } from '@/context/NotificationContext'; // Import for notification count
 
 const baseMenuItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -44,6 +46,7 @@ const baseMenuItems = [
   { href: '/anexos', label: 'Anexos', icon: Paperclip },
   { href: '/senhas', label: 'Senhas', icon: KeyRound },
   { href: '/chat', label: 'Chat Interno', icon: MessageSquare, notificationType: 'chat' as const }, // Added notificationType
+  { href: '/notificacoes', label: 'Notificações', icon: Bell, notificationType: 'notifications' as const }, // Added notifications
   { href: '/calendario/metas', label: 'Calendário Metas', icon: CalendarDays },
   { href: '/calendario/disputas', label: 'Calendário Disputas', icon: CalendarDays },
   { href: '/consulta-pncp', label: 'Consultas PNCP', icon: DatabaseZap },
@@ -57,6 +60,7 @@ export default function AppSidebar() {
   const pathname = usePathname();
   const { user } = useAuth(); // Get user info
   const { unreadRoomIds } = useChatWidget(); // Get unread room IDs
+  const { unreadCount: notificationUnreadCount } = useNotifications(); // Get notification unread count
 
   const isActive = (href: string) => {
     if (href === '/') {
@@ -93,7 +97,8 @@ export default function AppSidebar() {
         <SidebarMenu>
           {menuItems.map(item => {
             const isChat = item.notificationType === 'chat';
-            const notificationCount = isChat ? unreadRoomIds.size : 0;
+            const isNotifications = item.notificationType === 'notifications';
+            const notificationCount = isChat ? unreadRoomIds.size : isNotifications ? notificationUnreadCount : 0;
             return (
                 <SidebarMenuItem key={item.href}>
                 <Link href={item.href} passHref legacyBehavior>
