@@ -18,6 +18,16 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  webpack: (config, { isServer }) => {
+    // Ignore handlebars require.extensions warning
+    config.ignoreWarnings = [
+      {
+        module: /handlebars/,
+        message: /require\.extensions/,
+      },
+    ];
+    return config;
+  },
 };
 
 export default nextConfig;
