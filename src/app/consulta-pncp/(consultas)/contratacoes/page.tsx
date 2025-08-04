@@ -17,31 +17,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { CalendarIcon, Loader2, Filter, AlertCircle as AlertCircleIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
-// AI functionality disabled for deployment
-interface FilterLicitacoesInput {
-  licitacoes: any[];
-  regiao?: string;
-  tipoLicitacao?: string;
-}
-interface FilterLicitacoesOutput {
-  filteredLicitacoes: any[];
-}
-interface LicitacaoSummary {
-  numeroControlePNCP: string;
-  objetoCompra: string;
-  modalidadeContratacaoNome?: string;
-  uf?: string;
-  municipioNome?: string;
-  valorTotalEstimado?: number;
-  dataPublicacaoPncp?: string;
-  linkSistemaOrigem?: string;
-  orgaoEntidadeNome?: string;
-}
-
-const filterLicitacoesWithAI = async (input: FilterLicitacoesInput): Promise<FilterLicitacoesOutput> => {
-  return { filteredLicitacoes: input.licitacoes };
-};
-
+import { filterLicitacoesWithAI, type FilterLicitacoesInput, type FilterLicitacoesOutput, type LicitacaoSummary } from '@/ai/flows/filter-licitacoes-flow';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 const modalidadesPNCP = [
@@ -120,8 +96,8 @@ export default function ConsultarContratacoesPncpPage() {
   const renderFormFields = (currentForm: ReturnType<typeof useForm<FormValues>>) => (
     <>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <FormField control={currentForm.control} name="dataInicial" render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Data Inicial*</FormLabel><Popover><PopoverTrigger asChild><FormControl><Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>{field.value ? format(field.value, "dd/MM/yyyy") : <span>Escolha uma data</span>}<CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus /></PopoverContent></Popover><FormMessage /></FormItem>)} />
-        <FormField control={currentForm.control} name="dataFinal" render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Data Final*</FormLabel><Popover><PopoverTrigger asChild><FormControl><Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>{field.value ? format(field.value, "dd/MM/yyyy") : <span>Escolha uma data</span>}<CalendarIcon className="ml-auto h-4 w-4 opacity-50" /></Button></FormControl></PopoverTrigger><PopoverContent className="w-auto p-0" align="start"><Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus /></PopoverContent></Popover><FormMessage /></FormItem>)} />
+        <FormField control={currentForm.control} name="dataInicial" render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Data Inicial*</FormLabel><Popover><PopoverTrigger asChild><FormControl><Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>{field.value ? format(field.value, "dd/MM/yyyy") : <span>Escolha uma data</span>}<CalendarIcon className=\"ml-auto h-4 w-4 opacity-50" /></Button></FormControl></PopoverTrigger><PopoverContent className=\"w-auto p-0" align=\"start"><Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus /></PopoverContent></Popover><FormMessage /></FormItem>)} />
+        <FormField control={currentForm.control} name="dataFinal" render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Data Final*</FormLabel><Popover><PopoverTrigger asChild><FormControl><Button variant={"outline"} className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>{field.value ? format(field.value, "dd/MM/yyyy") : <span>Escolha uma data</span>}<CalendarIcon className=\"ml-auto h-4 w-4 opacity-50" /></Button></FormControl></PopoverTrigger><PopoverContent className=\"w-auto p-0" align=\"start"><Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus /></PopoverContent></Popover><FormMessage /></FormItem>)} />
         <FormField control={currentForm.control} name="codigoModalidadeContratacao" render={({ field }) => ( <FormItem> <FormLabel>Modalidade (Base)*</FormLabel> <Select onValueChange={(value) => field.onChange(Number(value))} value={String(field.value)}> <FormControl><SelectTrigger><SelectValue placeholder="Selecione a modalidade" /></SelectTrigger></FormControl> <SelectContent> {modalidadesPNCP.map(modalidade => ( <SelectItem key={modalidade.value} value={String(modalidade.value)}> {modalidade.label} </SelectItem> ))} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
         <FormField control={currentForm.control} name="uf" render={({ field }) => ( <FormItem> <FormLabel>UF (Base)</FormLabel> <Select onValueChange={field.onChange} value={field.value || 'todos'}> <FormControl><SelectTrigger><SelectValue placeholder="Todos os Estados" /></SelectTrigger></FormControl> <SelectContent> <SelectItem value="todos">Todos os Estados</SelectItem> {ufsBrasil.map(uf => ( <SelectItem key={uf.value} value={uf.value}> {uf.label} ({uf.value}) </SelectItem> ))} </SelectContent> </Select> <FormMessage /> </FormItem> )}/>
         <FormField control={currentForm.control} name="termoBusca" render={({ field }) => ( <FormItem> <FormLabel>Termo de Busca (Base)</FormLabel> <FormControl><Input placeholder="Ex: aquisição de computadores" {...field} value={field.value ?? ''} /></FormControl> <FormMessage /> </FormItem> )}/>
