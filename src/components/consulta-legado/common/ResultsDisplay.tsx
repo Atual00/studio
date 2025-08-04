@@ -12,7 +12,18 @@ import { Badge } from '@/components/ui/badge';
 import { format, parseISO, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import type { LicitacaoSummary } from '@/ai/flows/filter-licitacoes-flow'; // Import LicitacaoSummary type
+// AI functionality disabled for deployment
+interface LicitacaoSummary {
+  numeroControlePNCP: string;
+  objetoCompra: string;
+  modalidadeContratacaoNome?: string;
+  uf?: string;
+  municipioNome?: string;
+  valorTotalEstimado?: number;
+  dataPublicacaoPncp?: string;
+  linkSistemaOrigem?: string;
+  orgaoEntidadeNome?: string;
+}
 
 interface ResultsDisplayProps {
   data: any; // Can be raw API response or AI filtered data

@@ -13,7 +13,20 @@ import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import jsPDF from 'jspdf';
 
 import { fetchClients, type ClientListItem, fetchClientDetails, type ClientDetails } from '@/services/clientService';
-import { fillDeclaration, type FillDeclarationInput, type FillDeclarationOutput } from '@/ai/flows/fill-declaration-flow';
+// AI functionality disabled for deployment
+interface FillDeclarationInput {
+  clientData: any;
+  declarationTemplate: string;
+}
+interface FillDeclarationOutput {
+  filledDeclaration: string;
+}
+
+const fillDeclaration = async (input: FillDeclarationInput): Promise<FillDeclarationOutput> => {
+  return {
+    filledDeclaration: `Funcionalidade de IA não está disponível na versão de produção.\n\nModelo original:\n${input.declarationTemplate}`
+  };
+};
 
 export default function AnexosPage() {
   const [clients, setClients] = useState<ClientListItem[]>([]);
@@ -59,6 +72,11 @@ export default function AnexosPage() {
     setFilledDeclaration('');
 
     try {
+      // Check if AI is available
+      if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+        throw new Error('Funcionalidade de IA não está disponível na versão de produção.');
+      }
+
       const clientDetails = await fetchClientDetails(selectedClientId);
       if (!clientDetails) {
         throw new Error('Detalhes do cliente não encontrados.');

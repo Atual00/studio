@@ -1,7 +1,11 @@
 // src/lib/file-utils.ts
 'use client';
 
-import type { ValidateBidDocumentsInput } from '@/ai/flows/document-validator'; // Import the type from the flow file
+// AI functionality disabled for deployment
+interface ValidateBidDocumentsInput {
+  documents: { filename: string; dataUri: string }[];
+  bidCriteria: string;
+}
 
 /**
  * Converts an array of File objects and bid criteria string into the format required by the validateBidDocuments flow.

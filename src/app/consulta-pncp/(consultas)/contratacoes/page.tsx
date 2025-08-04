@@ -17,7 +17,31 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { CalendarIcon, Loader2, Filter, AlertCircle as AlertCircleIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { filterLicitacoesWithAI, type FilterLicitacoesInput, type FilterLicitacoesOutput, type LicitacaoSummary } from '@/ai/flows/filter-licitacoes-flow';
+// AI functionality disabled for deployment
+interface FilterLicitacoesInput {
+  licitacoes: any[];
+  regiao?: string;
+  tipoLicitacao?: string;
+}
+interface FilterLicitacoesOutput {
+  filteredLicitacoes: any[];
+}
+interface LicitacaoSummary {
+  numeroControlePNCP: string;
+  objetoCompra: string;
+  modalidadeContratacaoNome?: string;
+  uf?: string;
+  municipioNome?: string;
+  valorTotalEstimado?: number;
+  dataPublicacaoPncp?: string;
+  linkSistemaOrigem?: string;
+  orgaoEntidadeNome?: string;
+}
+
+const filterLicitacoesWithAI = async (input: FilterLicitacoesInput): Promise<FilterLicitacoesOutput> => {
+  return { filteredLicitacoes: input.licitacoes };
+};
+
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 const modalidadesPNCP = [
@@ -164,6 +188,14 @@ export default function ConsultarContratacoesPncpPage() {
 
      if ((aiRegiao && aiRegiao.trim() !== '') || (aiTipoLicitacao && aiTipoLicitacao.trim() !== '')) {
         if (licitacoesMapeadas.length > 0) {
+            // Check if AI is available
+            if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+                console.warn('AI filtering is disabled in production build');
+                finalDataToDisplay = { ...rawResult, data: licitacoesMapeadas };
+                setProcessedDataForDisplay(finalDataToDisplay);
+                return finalDataToDisplay;
+            }
+
             setIsFilteringWithAI(true);
             setAiFilterError(null);
             try {
