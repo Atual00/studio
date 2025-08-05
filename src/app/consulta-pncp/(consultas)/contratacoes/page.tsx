@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -188,14 +187,6 @@ export default function ConsultarContratacoesPncpPage() {
 
      if ((aiRegiao && aiRegiao.trim() !== '') || (aiTipoLicitacao && aiTipoLicitacao.trim() !== '')) {
         if (licitacoesMapeadas.length > 0) {
-            // Check if AI is available
-            if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
-                console.warn('AI filtering is disabled in production build');
-                finalDataToDisplay = { ...rawResult, data: licitacoesMapeadas };
-                setProcessedDataForDisplay(finalDataToDisplay);
-                return finalDataToDisplay;
-            }
-
             setIsFilteringWithAI(true);
             setAiFilterError(null);
             try {
@@ -273,5 +264,3 @@ export default function ConsultarContratacoesPncpPage() {
     </FormProvider>
   );
 }
-
-    

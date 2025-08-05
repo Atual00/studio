@@ -72,11 +72,6 @@ export default function AnexosPage() {
     setFilledDeclaration('');
 
     try {
-      // Check if AI is available
-      if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
-        throw new Error('Funcionalidade de IA não está disponível na versão de produção.');
-      }
-
       const clientDetails = await fetchClientDetails(selectedClientId);
       if (!clientDetails) {
         throw new Error('Detalhes do cliente não encontrados.');

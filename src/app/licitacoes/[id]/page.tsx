@@ -62,6 +62,9 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'; // Import Tabs
+import NotificationBadge from '@/components/notifications/NotificationBadge'; // Import NotificationBadge
+
 import {validateBidDocuments, type ValidateBidDocumentsOutput } from '@/ai/flows/document-validator';
 import { filesToValidateInput } from '@/lib/file-utils';
 import {useToast} from '@/hooks/use-toast';
